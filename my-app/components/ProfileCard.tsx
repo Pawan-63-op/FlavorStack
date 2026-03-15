@@ -139,7 +139,8 @@ export function ProfileCard() {
           <div className="h-36 bg-gradient-to-r from-primary via-purple-600 to-pink-600 relative">
             <div className="absolute -bottom-16 left-8">
               <Avatar className="h-32 w-32 border-4 border-card shadow-lg">
-                <AvatarImage src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=200" />
+                {/* <AvatarImage src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=200" /> */}
+               <AvatarImage src={`https://api.multiavatar.com/${user?.name || "user"}.svg`} />
                 <AvatarFallback className="text-4xl bg-primary text-primary-foreground">
                   {profile.name.charAt(0).toUpperCase() || "?"}
                 </AvatarFallback>

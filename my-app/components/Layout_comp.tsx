@@ -81,24 +81,6 @@ const handleLogout = async() => {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
-                    variant={pathname.includes("/recipes") ? "default" : "ghost"}
-                  >
-                    Recipes
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                  <DropdownMenuItem asChild>
-                    <Link href="/recipes">Browse Recipes</Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link href="/recipes/suggestions">Recipe Suggestions</Link>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
                     variant={pathname.includes("/reviews") ? "default" : "ghost"}
                   >
                     Reviews
@@ -164,12 +146,6 @@ const handleLogout = async() => {
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem asChild>
                     <Link href="/">Home</Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link href="/recipes">Browse Recipes</Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link href="/recipes/suggestions">Recipe Suggestions</Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
                     <Link href="/reviews">All Reviews</Link>
@@ -293,3 +269,5 @@ const handleLogout = async() => {
     </div>
   );
 }
+
+export default Layout_comp;

@@ -6,8 +6,10 @@ import { Badge } from "./ui/badge";
 import { motion } from "motion/react";
 import { useRouter } from "next/navigation";
 import { Search, MapPin, UtensilsCrossed, Home, User, Receipt, Clock, Star, TrendingUp } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ImageWithFallback } from "@/figma/ImageWithFallback";
+import { useAddressStore } from "@/store/addressStore";
+import Link from "next/link";
 
 interface HomePageProps {
   onNavigate: (page: string, data?: any) => void;
@@ -17,6 +19,9 @@ export function HomePage(){
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const [searchType, setSearchType] = useState<"name" | "city" | "country" | "menu">("name");
+
+  const { addresses, isLoading: addressLoading, fetchAddresses } = useAddressStore();
+  useEffect(() => { fetchAddresses(); }, []);
 
   const handleSearch = () => {
     if (searchQuery.trim()) {
@@ -192,7 +197,92 @@ export function HomePage(){
         </Card>
       </motion.div>
 
-      {/* Popular Cuisines */}
+      {/* Saved Addresses */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.15 }}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h2>Your Addresses</h2>
+          <Link href="/profile/addresses">
+            <Button variant="outline" size="sm" className="gap-2">
+              <MapPin className="h-4 w-4" /> Manage
+            </Button>
+          </Link>
+        </div>
+
+        {addressLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[1, 2].map((i) => (
+              <div key={i} className="h-24 rounded-xl bg-muted animate-pulse" />
+            ))}
+          </div>
+        ) : addresses.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {addresses.slice(0, 3).map((addr, index) => (
+              <motion.div
+                key={addr._id}
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.15 + index * 0.05 }}
+              >
+                <Link href="/checkout">
+                  <Card className={`border-2 shadow-md hover:shadow-lg transition-all cursor-pointer group ${
+                    addr.isDefault ? "border-primary/40 bg-primary/5" : ""
+                  }`}>
+                    <CardContent className="pt-4 pb-4">
+                      <div className="flex items-start gap-3">
+                        <div className="p-2 bg-accent rounded-lg shrink-0 group-hover:scale-110 transition-transform">
+                          <MapPin className="h-4 w-4 text-primary" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-semibold text-sm">{addr.label}</span>
+                            {addr.isDefault && (
+                              <span className="text-xs text-primary font-medium">Default</span>
+                            )}
+                          </div>
+                          <p className="text-sm text-muted-foreground truncate">{addr.address}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">{addr.phone}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </Link>
+              </motion.div>
+            ))}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.15 + addresses.length * 0.05 }}
+            >
+              <Link href="/profile/addresses">
+                <Card className="border-2 border-dashed hover:border-primary/40 transition-all cursor-pointer h-full min-h-[88px]">
+                  <CardContent className="pt-4 pb-4 flex items-center gap-3">
+                    <div className="p-2 bg-accent rounded-lg shrink-0">
+                      <MapPin className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                    <p className="text-sm text-muted-foreground">Add new address</p>
+                  </CardContent>
+                </Card>
+              </Link>
+            </motion.div>
+          </div>
+        ) : (
+          <Link href="/profile/addresses">
+            <Card className="border-2 border-dashed hover:border-primary/40 transition-all cursor-pointer">
+              <CardContent className="py-8 text-center">
+                <MapPin className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">No saved addresses yet</p>
+                <p className="text-xs text-primary mt-1">Tap to add one for faster checkout</p>
+              </CardContent>
+            </Card>
+          </Link>
+        )}
+      </motion.div>
+
+            {/* Popular Cuisines */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -253,7 +343,7 @@ export function HomePage(){
               <Card
                 className="overflow-hidden border-2 shadow-lg hover:shadow-xl transition-all cursor-pointer group"
                 // onClick={() => onNavigate("restaurant", { id: restaurant.id })}
-               onClick={() => router.push(`/restaurants/${restaurant.id}`)}
+               onClick={() => router.push(`/restaurant/${restaurant.id}`)}
               >
                 <div className="relative h-48 overflow-hidden">
                   <ImageWithFallback
@@ -289,3 +379,5 @@ export function HomePage(){
     </div>
   );
 }
+
+export default HomePage

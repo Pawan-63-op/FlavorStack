@@ -46,7 +46,9 @@ import favoriteRoutes from "@/routes/favoriteRoutes";
 import loyaltyRoutes from "@/routes/loyaltyRoutes";
 import recipeRoutes from "@/routes/recipeRoutes";
 import uploadRoutes from "@/routes/uploadRoutes";
+import addressRoutes from "./routes/addressRoutes";
 
+app.use("/api/addresses", addressRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/restaurants', restaurantRoutes);
