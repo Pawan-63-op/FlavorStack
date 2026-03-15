@@ -51,8 +51,13 @@ export default function RestaurantList({ searchData, onNavigate }: RestaurantLis
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const isFavorite = useFavoritesStore((state) => state.isFavorite);
-  const toggleFavorite = useFavoritesStore((state) => state.toggleFavorite);
+ // REMOVE THESE
+
+
+// ADD THESE INSTEAD
+const favorites = useFavoritesStore((state) => state.favorites);
+const toggleFavorite = useFavoritesStore((state) => state.toggleFavorite);
+const isFavorite = (id: string) => favorites.some((f) => f.id === id);
 
   const cuisines = ["All", "Italian", "Japanese", "Mexican", "Chinese", "Indian", "American"];
 
@@ -182,7 +187,7 @@ if (searchData?.query?.trim() && searchData?.type) {
       {/* Header */}
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
         <h2 className="text-3xl font-bold mb-2">
-          {searchData?.query ? `Results for "${searchData.query}"` : "All Restaurants"}
+          {searchData?.query!="undefined" ? `Results for "${searchData?.query}"` : "All Restaurants"}
         </h2>
         <p className="text-muted-foreground">{filteredRestaurants.length} restaurants found</p>
       </motion.div>
@@ -264,29 +269,29 @@ if (searchData?.query?.trim() && searchData?.type) {
                     alt={restaurant.restaurantName}
                     className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                   />
-                  <Button
-                    variant="secondary"
-                    size="icon"
-                    className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleFavorite({
-                        id: Number(restaurant.id),
-                        name: restaurant.restaurantName,
-                        cuisine: restaurant.cuisine,
-                        rating: restaurant.rating,
-                        addedAt: Date.now(),
-                        deliveryTime: restaurant.deliveryTime,
-                        image: restaurant.image,
-                      });
-                    }}
-                  >
-                    <Heart
-                      className={`h-5 w-5 ${
-                        isFavorite(Number(restaurant.id)) ? "fill-red-500 text-red-500" : ""
-                      }`}
-                    /> {restaurant.id}
-                  </Button>
+                <Button
+  variant="secondary"
+  size="icon"
+ className="absolute top-10 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10"
+  onClick={async (e) => {
+    e.stopPropagation();
+    await toggleFavorite({
+      id: restaurant.id,
+      name: restaurant.restaurantName,
+      cuisine: restaurant.cuisine,
+      rating: restaurant.rating,
+      addedAt: Date.now(),
+      deliveryTime: restaurant.deliveryTime,
+      image: restaurant.image,
+    });
+  }}
+>
+  <Heart
+    className={`h-5 w-5 ${
+      isFavorite(restaurant.id) ? "fill-red-500 text-red-500" : ""
+    }`}
+  />
+</Button>
 
                   {!restaurant.isOpen && (
                     <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
