@@ -1,4 +1,5 @@
 "use client";
+import { highlight } from "./highlight";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +27,7 @@ interface RestaurantListProps {
 }
 
 import { useFavoritesStore } from "@/store/favoritesStore";
+import { toast } from "sonner";
 
 // Image component with fallback
 const ImageWithFallback = ({ src, alt, className }: any) => {
@@ -44,7 +46,7 @@ const ImageWithFallback = ({ src, alt, className }: any) => {
 export default function RestaurantList({ searchData, onNavigate }: RestaurantListProps) {
   const router = useRouter();
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
-  const [selectedCuisine, setSelectedCuisine] = useState<string>(searchData?.cuisine || "All");
+  const [selectedCuisine, setSelectedCuisine] = useState<string>("All");
   const [sortBy, setSortBy] = useState<"rating" | "deliveryTime">("rating");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -101,24 +103,35 @@ export default function RestaurantList({ searchData, onNavigate }: RestaurantLis
     let filtered = restaurants;
 
     // Apply search filter
-    if (searchData?.query && searchData?.type) {
-      const query = searchData.query.toLowerCase();
-      filtered = filtered.filter((r) => {
-        switch (searchData.type) {
-          case "name":
-            return r.name.toLowerCase().includes(query);
-          case "city":
-            return r.city.toLowerCase().includes(query);
-          case "country":
-            return r.country.toLowerCase().includes(query);
-          case "menu":
-            return r.cuisine.toLowerCase().includes(query);
-          default:
-            return true;
-        }
-      });
-    }
+   
+// AFTER
+if (searchData?.query?.trim() && searchData?.type) {
+  const words = searchData.query
+    .toLowerCase()
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
 
+  const matchesAnyWord = (...fields: string[]) =>
+    words.some((word) =>
+      fields.some((field) => field.toLowerCase().includes(word))
+    );
+
+  filtered = filtered.filter((r) => {
+    switch (searchData.type) {
+      case "name":
+        return matchesAnyWord(r.restaurantName);
+      case "city":
+        return matchesAnyWord(r.city);
+      case "country":
+        return matchesAnyWord(r.country);
+      case "menu":
+        return matchesAnyWord(r.cuisine);
+      default:
+        return true;
+    }
+  });
+}
     // Apply cuisine filter
     if (selectedCuisine !== "All") {
       filtered = filtered.filter((r) => r.cuisine === selectedCuisine);
@@ -287,19 +300,24 @@ export default function RestaurantList({ searchData, onNavigate }: RestaurantLis
                     <Star className="h-3 w-3 mr-1 fill-yellow-400 text-yellow-400" />
                     {restaurant.rating}
                   </Badge>
-                  <Badge className="absolute top-3 left-3 bg-primary/90 border-0">
-                    {restaurant.cuisine}
-                  </Badge>
+                 <Badge className="absolute top-3 left-3 bg-primary/90 border-0">
+  {highlight(restaurant.cuisine, searchData?.query || "")}
+</Badge>
                 </div>
 
                 <CardContent className="pt-4 space-y-3">
                   <div>
-                    <h3 className="font-semibold text-lg mb-1">{restaurant.restaurantName}</h3>
+
+                    <h3 className="font-semibold text-lg mb-1">
+                {highlight(restaurant.restaurantName, searchData?.query || "")}
+              </h3>
+
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <MapPin className="h-3 w-3" />
-                      <span>
-                        {restaurant.city}, {restaurant.country}
-                      </span>
+                     <span>
+  {highlight(restaurant.city, searchData?.query || "")},{" "}
+  {highlight(restaurant.country, searchData?.query || "")}
+</span>
                     </div>
                   </div>
 
