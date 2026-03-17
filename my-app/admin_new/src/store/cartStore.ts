@@ -56,6 +56,7 @@ export interface CartItem {
   restaurantId?: string;
   restaurantName: string;
   image?: string;
+  deliveryTime?: string;
   
 }
 

@@ -22,7 +22,6 @@ router.route('/:id')
   .get(protect,getRestaurantById)
   .patch(protect, admin, upload.single("imageFile"),updatedRestaurant)
   .delete(protect, admin, deleteRestaurant);
-
 router.get('/:restaurantId/menu', protect, getRestaurantMenu);
 router.get('/:restaurantId/orders', protect, admin, getRestaurantOrders);
 router.get('/:restaurantId/stats', protect, admin, getOrderStats);

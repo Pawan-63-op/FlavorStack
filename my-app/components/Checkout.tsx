@@ -95,6 +95,7 @@ export function Checkout() {
 
   const restaurantName = cart[0]?.restaurantName ?? "";
   const restaurantId = cart[0]?.restaurantId ?? "";
+  const deliveryTime    = cart.length > 0 ? cart[0].deliveryTime || "30-40 min" : "30-40 min";  // ← ADD 
   const subtotal = getCartTotal();
   const deliveryFee = appliedCouponState?.freeShipping ? 0 : 2.99;
   const tax = subtotal * 0.08;
@@ -156,9 +157,12 @@ export function Checkout() {
       if (appliedCouponState) removeCoupon();
 
       toast.success("Order placed successfully!");
+      // router.push(
+      //   `/order-processing?orderId=${createdOrder.orderId}&orderMongoId=${createdOrder._id}&restaurantName=${restaurantName}&total=${total}&pointsEarned=${pointsEarned}`
+      // );
       router.push(
-        `/order-processing?orderId=${createdOrder.orderId}&orderMongoId=${createdOrder._id}&restaurantName=${restaurantName}&total=${total}&pointsEarned=${pointsEarned}`
-      );
+  `/order-processing?orderId=${encodeURIComponent(createdOrder.orderId)}&orderMongoId=${encodeURIComponent(createdOrder._id)}&restaurantName=${encodeURIComponent(restaurantName)}&total=${total}&pointsEarned=${pointsEarned}&deliveryTime=${encodeURIComponent(deliveryTime)}`
+);
     } catch (error: any) {
       toast.error(error.message || "Failed to place order. Please try again.");
     } finally {

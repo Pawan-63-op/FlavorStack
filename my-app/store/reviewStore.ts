@@ -3,147 +3,136 @@ import { toast } from "sonner";
 
 export interface Review {
   id: string;
-  restaurantId: number;
+  restaurantId: string;        // FIX: was number — MongoDB _id is always a string
   restaurantName: string;
   userId: string;
   userName: string;
   rating: number;
   comment: string;
   date: string;
-  orderId:string;
+  orderId: string;
   photos?: string[];
-  timestamp?:any;
+  timestamp?: any;
 }
 
 export interface ReviewState {
   reviews: Review[];
   userReviews: Review[];
-   addReview: (review: Omit<Review, "id" | "timestamp" | "date" | "userId" | "userName">) => void;
-  getRestaurantReviews: (restaurantId: number) => Review[];
-  getAverageRating: (restaurantId: number) => number;
-  canUserReview: (restaurantId: number, userId: string) => boolean;
   reviewedOrders: string[];
+
+  fetchRestaurantReviews: (restaurantId: string) => Promise<void>;
   fetchUserReviews: () => Promise<void>;
-   canReview: (orderId: string) => boolean;
+  getRestaurantReviews: (restaurantId: string) => Review[];  // FIX: string
+  getAverageRating: (restaurantId: string) => number;
+  canUserReview: (restaurantId: string, userId: string) => boolean;
+  canReview: (orderId: string) => boolean;
   addReviewedOrder: (orderId: string) => void;
+  addReview: (review: Omit<Review, "id" | "timestamp" | "date" | "userId" | "userName">) => void;
 }
 
 export const useReviewStore = create<ReviewState>((set, get) => ({
-  reviews: [
-    {
-      id: "1",
-      restaurantId: 1,
-      restaurantName: "La Bella Italia",
-      userId: "user1",
-      userName: "John Doe",
-      rating: 5,
-      comment: "Amazing authentic Italian food! The pasta was perfect.",
-      date: "2 days ago",
-      orderId: "ORD-001",
-      photos: [],
-    },
-    {
-      id: "2",
-      restaurantId: 2,
-      restaurantName: "Tokyo Sushi Bar",
-      userId: "user2",
-      userName: "Jane Smith",
-      rating: 4,
-      comment: "Fresh sushi and great presentation. Slightly pricey but worth it.",
-      date: "5 days ago",
-      orderId: "ORD-002",
-      photos: [],
-    },
-  ],
+  reviews: [],       // no more hardcoded fake reviews
   userReviews: [],
-  reviewedOrders:[],
-fetchUserReviews: async () => {
-  try {
-    const res = await fetch("http://localhost:8000/api/reviews/myreviews", {
-      credentials: "include",
-    });
+  reviewedOrders: [],
 
-    const data = await res.json();
+  // FIX 1: fetch real reviews from backend for a specific restaurant
+  fetchRestaurantReviews: async (restaurantId: string) => {
+    try {
+      const res = await fetch(
+        `http://localhost:8000/api/reviews/restaurant/${restaurantId}`,
+        { credentials: "include" }
+      );
+      if (!res.ok) return;
+      const data = await res.json();
 
-    if (!res.ok) {
-      toast.error(data.message || "Failed to load reviews");
-      return;
+      // backend returns array directly (getRestaurantReviews returns res.json(reviews))
+      const raw: any[] = Array.isArray(data) ? data : data.reviews || [];
+
+      const mapped: Review[] = raw.map((r) => ({
+        id:             r._id,
+        restaurantId:   r.restaurant?._id?.toString() || restaurantId,
+        restaurantName: r.restaurant?.restaurantName || r.restaurant?.name || "",
+        userId:         r.user?._id?.toString() || "",
+        userName:       r.user?.name || "Anonymous",
+        rating:         r.rating,
+        comment:        r.comment || "",
+        date:           new Date(r.createdAt).toLocaleDateString(),
+        orderId:        r.orderId || "",
+        photos:         r.photos || [],
+      }));
+
+      // Replace reviews for this restaurant, keep others
+      set((s) => ({
+        reviews: [
+          ...s.reviews.filter((r) => r.restaurantId !== restaurantId),
+          ...mapped,
+        ],
+      }));
+    } catch (err) {
+      console.error("fetchRestaurantReviews error:", err);
     }
-
-    // Normalize backend → frontend structure
-    const mapped = data.map((r: any) => ({
-      id: r._id, // convert MongoDB _id → id
-      restaurantId: r.restaurant?._id,
-      restaurantName: r.restaurant?.restaurantName || "Restaurant",
-      userId: r.user?._id,
-      userName: r.user?.name,
-      rating: r.rating,
-      comment: r.comment || "",
-      date: new Date(r.createdAt).toLocaleDateString(),
-      orderId: r.orderId || "",
-      photos: r.photos || [],
-    }));
-
-    set({ userReviews: mapped });
-    toast.success("Reviews loaded");
-  } catch (err) {
-    toast.error("Something went wrong while loading reviews");
-  }
-},
-
-  // addReview: (review) => {
-  //   const newReview: Review = {
-  //     ...review,
-  //     id: String(Date.now()),
-  //     date: "Just now",
-  //   };
-   addReview : (reviewData: Omit<Review, "id" | "timestamp" | "date" | "userId" | "userName">) => {
-      const newReview: Review = {
-        ...reviewData,
-        id: `rev-${Date.now()}`,
-        timestamp: Date.now(),
-        date: "Just now",
-        userId: "user-1",
-        userName: "Sarah Johnson"
-      };
-     
-    
-
-    set((state) => ({
-      reviews: [newReview, ...state.reviews],
-      userReviews: [newReview, ...state.userReviews],
-    }));
-
-    toast.success("Review submitted successfully!");
   },
 
-  getRestaurantReviews: (restaurantId) => {
-    const { reviews } = get();
-    return reviews.filter((r) => r.restaurantId === restaurantId);
+  // Fetch logged-in user's own reviews
+  fetchUserReviews: async () => {
+    try {
+      const res = await fetch("http://localhost:8000/api/reviews/myreviews", {
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.message || "Failed to load reviews"); return; }
+
+      const mapped: Review[] = data.map((r: any) => ({
+        id:             r._id,
+        restaurantId:   r.restaurant?._id?.toString() || "",
+        restaurantName: r.restaurant?.restaurantName || "Restaurant",
+        userId:         r.user?._id?.toString() || "",
+        userName:       r.user?.name || "",
+        rating:         r.rating,
+        comment:        r.comment || "",
+        date:           new Date(r.createdAt).toLocaleDateString(),
+        orderId:        r.orderId || "",
+        photos:         r.photos || [],
+      }));
+
+      set({ userReviews: mapped });
+    } catch {
+      toast.error("Something went wrong while loading reviews");
+    }
   },
 
-  getAverageRating: (restaurantId) => {
-    const restaurantReviews = get().getRestaurantReviews(restaurantId);
-    if (restaurantReviews.length === 0) return 0;
+  // FIX 2: compare strings not number vs string
+  getRestaurantReviews: (restaurantId: string) =>
+    get().reviews.filter((r) => r.restaurantId === restaurantId),
 
-    const sum = restaurantReviews.reduce((acc, r) => acc + r.rating, 0);
-    return sum / restaurantReviews.length;
+  getAverageRating: (restaurantId: string) => {
+    const list = get().getRestaurantReviews(restaurantId);
+    if (list.length === 0) return 0;
+    return list.reduce((sum, r) => sum + r.rating, 0) / list.length;
   },
 
-  canUserReview: (restaurantId, userId) => {
-    const { reviews } = get();
-    return !reviews.some(
+  canUserReview: (restaurantId: string, userId: string) =>
+    !get().reviews.some(
       (r) => r.restaurantId === restaurantId && r.userId === userId
-    );
-  },
-      addReviewedOrder: (orderId: string) => {
-    set((state) => ({
-      reviewedOrders: [...state.reviewedOrders, orderId],
+    ),
+
+  canReview: (orderId: string) => !get().reviewedOrders.includes(orderId),
+
+  addReviewedOrder: (orderId: string) =>
+    set((s) => ({ reviewedOrders: [...s.reviewedOrders, orderId] })),
+
+  addReview: (reviewData) => {
+    const newReview: Review = {
+      ...reviewData,
+      id:        `rev-${Date.now()}`,
+      timestamp: Date.now(),
+      date:      "Just now",
+      userId:    "",
+      userName:  "You",
+    };
+    set((s) => ({
+      reviews:     [newReview, ...s.reviews],
+      userReviews: [newReview, ...s.userReviews],
     }));
   },
-     canReview: (orderId: string) => {
-    const { reviewedOrders } = get();
-    return !reviewedOrders.includes(orderId);
-  },
-
 }));

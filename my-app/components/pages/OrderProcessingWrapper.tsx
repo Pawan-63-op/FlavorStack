@@ -1,42 +1,31 @@
-// import { useNavigate, useLocation } from "react-router-dom";
 "use client";
-import { useRouter,useSearchParams } from "next/navigation";
-import { OrderProcessing } from "../OrderProcessing";
+import { useRouter, useSearchParams } from "next/navigation";
+import { OrderTracking } from "../OrderTracking";
 
 export function OrderProcessingWrapper() {
-  // const navigate = useNavigate();
   const router = useRouter();
   const searchParams = useSearchParams();
-  // const location = useLocation();
 
-  // const { orderId, restaurantName, total } = location.state || {};
-const orderId = searchParams.get("orderId");
-const restaurantName = searchParams.get("restaurantName");
-// const total = searchParams.get("total") ? parseFloat(searchParams.get("total")!) : null;
-const total = Number(searchParams.get("total") || 0);  
-const handleComplete = () => {
-    // navigate("/feedback");
-    //  navigate("/feedback", { state: { orderId } });
-    console.log("Navigating to feedback for orderId:", orderId);
-    console.log("Final URL:", `/feedback/${orderId}`);
+  const orderId       = searchParams.get("orderId");        // display ID e.g. ORD-xxx
+  const orderMongoId  = searchParams.get("orderMongoId");   // MongoDB _id for polling
+  const restaurantName = searchParams.get("restaurantName") || "";
+  const total         = Number(searchParams.get("total") || 0);
+  const pointsEarned  = Number(searchParams.get("pointsEarned") || 0);
+  const deliveryTime  = searchParams.get("deliveryTime") || "30-40 min";
 
-    // router.push(`/feedback/${orderId}`, {
-    //   state: { orderId: orderId },
-    // });
-    router.push(`/feedback/${orderId}`);
-  };
-
-  if (!orderId) {
+  if (!orderId || !orderMongoId) {
     router.push("/orders");
     return null;
   }
 
   return (
-    <OrderProcessing
+    <OrderTracking
       orderId={orderId}
-      restaurantName={restaurantName || ""}
-      total={total || 0}
-      onComplete={handleComplete}
+      orderMongoId={orderMongoId}
+      restaurantName={restaurantName}
+      total={total}
+      pointsEarned={pointsEarned}
+      deliveryTime={deliveryTime}
     />
   );
 }

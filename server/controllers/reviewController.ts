@@ -90,7 +90,7 @@ console.log(restaurant,order,rating,comment,photos);
 // @access  Public
 export const getReviews = async (req:AuthRequest, res:Response) => {
   try {
-    const reviews = await Review.find({ isApproved: true })
+    const reviews = await Review.find()
       .populate('user', 'name avatar')
       .populate('restaurant', 'name')
       .sort('-createdAt')

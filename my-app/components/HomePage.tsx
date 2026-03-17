@@ -343,7 +343,7 @@ export function HomePage(){
               <Card
                 className="overflow-hidden border-2 shadow-lg hover:shadow-xl transition-all cursor-pointer group"
                 // onClick={() => onNavigate("restaurant", { id: restaurant.id })}
-               onClick={() => router.push(`/restaurant/${restaurant.id}`)}
+               onClick={() => router.push(`/restaurants/${restaurant.id}`)}
               >
                 <div className="relative h-48 overflow-hidden">
                   <ImageWithFallback

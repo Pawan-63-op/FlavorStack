@@ -9,7 +9,7 @@ import { ImageWithFallback } from "@/figma/ImageWithFallback";
 import { useCartStore } from "@/admin_new/src/store/cartStore";
 import { useReviewStore } from "@/store/reviewStore";
 import { StarRating } from "@/components/StarRating";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 
@@ -56,9 +56,10 @@ export default function RestaurantDetail({ restaurantId, onNavigate }: Restauran
   const [error, setError] = useState<string | null>(null);
 
   const addToCart = useCartStore((state) => state.addToCart);
-  const getRestaurantReviews = useReviewStore((state) => state.getRestaurantReviews);
-  
-  const restaurantReviews = restaurant ? getRestaurantReviews(Number(restaurantId)) : [];
+  const getRestaurantReviews   = useReviewStore((s) => s.getRestaurantReviews);
+  const fetchRestaurantReviews = useReviewStore((s) => s.fetchRestaurantReviews);
+  const getAverageRating       = useReviewStore((s) => s.getAverageRating);
+  const restaurantReviews      = restaurantId ? getRestaurantReviews(restaurantId as string) : [];
 
   // Fetch restaurant details from MongoDB
   useEffect(() => {
@@ -183,6 +184,13 @@ export default function RestaurantDetail({ restaurantId, onNavigate }: Restauran
 
     if (restaurantId) {
       fetchMenuItems();
+    }
+  }, [restaurantId]);
+
+  // Fetch real reviews for this restaurant from MongoDB
+  useEffect(() => {
+    if (restaurantId) {
+      fetchRestaurantReviews(restaurantId as string);
     }
   }, [restaurantId]);
 
@@ -445,8 +453,25 @@ export default function RestaurantDetail({ restaurantId, onNavigate }: Restauran
         </TabsContent>
 
         <TabsContent value="reviews" className="space-y-6 mt-6">
-          <h2 className="text-2xl font-bold">Customer Reviews</h2>
-          
+          {/* Header with average rating */}
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <h2 className="text-2xl font-bold">Customer Reviews</h2>
+              <p className="text-sm text-muted-foreground">
+                {restaurantReviews.length} review{restaurantReviews.length !== 1 ? "s" : ""}
+              </p>
+            </div>
+            {restaurantReviews.length > 0 && (
+              <div className="flex items-center gap-2 p-3 bg-accent rounded-xl">
+                <StarRating rating={getAverageRating(restaurantId as string)} readonly size="sm" />
+                <span className="font-bold text-lg">
+                  {getAverageRating(restaurantId as string).toFixed(1)}
+                </span>
+                <span className="text-sm text-muted-foreground">/ 5</span>
+              </div>
+            )}
+          </div>
+
           {restaurantReviews.length > 0 ? (
             <div className="space-y-4">
               {restaurantReviews.map((review, index) => (
@@ -454,38 +479,40 @@ export default function RestaurantDetail({ restaurantId, onNavigate }: Restauran
                   key={review.id}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.1 }}
+                  transition={{ delay: index * 0.05 }}
                 >
-                  <Card className="border-2 shadow-md">
+                  <Card className="border-2 shadow-md hover:shadow-lg transition-shadow">
                     <CardContent className="pt-6">
                       <div className="flex gap-4">
-                        <Avatar className="h-12 w-12">
-                          <AvatarFallback>{review.userName.charAt(0)}</AvatarFallback>
+                        <Avatar className="h-12 w-12 shrink-0">
+                          <AvatarImage
+                            src={`https://api.multiavatar.com/${encodeURIComponent(review.userName || "user")}.svg`}
+                          />
+                          <AvatarFallback>{review.userName?.charAt(0) || "?"}</AvatarFallback>
                         </Avatar>
-                        
-                        <div className="flex-1 space-y-3">
-                          <div className="flex items-start justify-between gap-4">
+
+                        <div className="flex-1 space-y-2">
+                          <div className="flex items-start justify-between gap-4 flex-wrap">
                             <div>
                               <h4 className="font-semibold">{review.userName}</h4>
-                              <span className="text-sm text-muted-foreground">{review.date}</span>
+                              <span className="text-xs text-muted-foreground">{review.date}</span>
                             </div>
+                            <StarRating rating={review.rating} readonly size="sm" />
                           </div>
 
-                          <StarRating rating={review.rating} readonly size="sm" />
-
-                          <p className="text-muted-foreground leading-relaxed">
+                          <p className="text-muted-foreground leading-relaxed text-sm">
                             {review.comment}
                           </p>
 
                           {review.photos && review.photos.length > 0 && (
-                            <div className="flex gap-2 flex-wrap">
+                            <div className="flex gap-2 flex-wrap mt-2">
                               {review.photos.map((photo, photoIndex) => (
                                 <div
                                   key={photoIndex}
                                   className="relative w-20 h-20 rounded-lg overflow-hidden border-2 border-border"
                                 >
                                   <img
-                                    src={photo}
+                                    src={photo || undefined}
                                     alt={`Review photo ${photoIndex + 1}`}
                                     className="w-full h-full object-cover"
                                   />
@@ -501,7 +528,7 @@ export default function RestaurantDetail({ restaurantId, onNavigate }: Restauran
               ))}
             </div>
           ) : (
-            <Card className="border-2">
+            <Card className="border-2 border-dashed">
               <CardContent className="pt-12 pb-12 text-center">
                 <MessageSquare className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
                 <h3 className="text-xl font-semibold mb-2">No reviews yet</h3>

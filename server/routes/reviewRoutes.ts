@@ -4,7 +4,8 @@ import {
   getReviews,
   getMyReviews,
   getRestaurantReviews,
-  deleteReview
+  deleteReview,
+  // getReviewsByRestaurant
 } from '../controllers/reviewController';
 import { protect, admin } from '../middleware/authMiddleware';
 
@@ -17,5 +18,6 @@ router.route('/')
 router.get('/myreviews', protect, getMyReviews);
 router.get('/restaurant/:id', getRestaurantReviews);
 router.delete('/:id', protect, deleteReview);
+// router.get("/", protect, getReviewsByRestaurant);
 
 export default router;
