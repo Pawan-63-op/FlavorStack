@@ -299,7 +299,7 @@ router.push(`/search?q=${encodeURIComponent(searchQuery)}`);
               <Card
                 className="border-2 shadow-md hover:shadow-lg transition-all cursor-pointer group"
                 onClick={() =>  router.push(
-  `/restaurants?cuisine=${encodeURIComponent(cuisine.name)}`)
+  `/search?cuisine=${encodeURIComponent(cuisine.name)}`)
              
               }
                
@@ -327,7 +327,7 @@ router.push(`/search?q=${encodeURIComponent(searchQuery)}`);
       >
         <div className="flex items-center justify-between mb-4">
           <h2>Featured Restaurants</h2>
-          <Button variant="outline" onClick={() => router.push("/restaurants")}>
+          <Button variant="outline" onClick={() => router.push("/search")}>
             View All
           </Button>
         </div>
