@@ -15,6 +15,7 @@ import { MenuManagement } from "@/admin_new/src/components/admin/MenuManagement"
 import { CouponManagement } from "@/admin_new/src/components/admin/CouponManagement";
 import { OrderManagement } from "@/admin_new/src/components/admin/OrderManagement";
 import { UserManagement } from "@/admin_new/src/components/admin/UserManagement";
+import { AdminChat } from "./admin/AdminChat";
 
 export function AdminDashboard() {
   return (
@@ -38,6 +39,10 @@ export function AdminDashboard() {
           <TabsTrigger value="overview" className="gap-2">
             <LayoutDashboard className="h-4 w-4" />
             <span className="hidden sm:inline">Overview</span>
+          </TabsTrigger>
+          <TabsTrigger value="Chats" className="gap-2">
+            <LayoutDashboard className="h-4 w-4" />
+            <span className="hidden sm:inline">Chats</span>
           </TabsTrigger>
           <TabsTrigger value="restaurants" className="gap-2">
             <Store className="h-4 w-4" />
@@ -64,7 +69,9 @@ export function AdminDashboard() {
         <TabsContent value="overview">
           <OverviewDashboard />
         </TabsContent>
-
+          <TabsContent value="Chats">
+          <AdminChat />
+        </TabsContent>
         <TabsContent value="restaurants">
           <RestaurantManagement />
         </TabsContent>

@@ -22,17 +22,30 @@ function useChart(
   useEffect(() => {
     if (!ref.current) return;
     const canvas = ref.current as any;
-    // Destroy any existing chart on this canvas before creating a new one
+    let cancelled = false;
+
+    // Destroy existing chart synchronously before async import
     if (canvas._chartInstance) {
       canvas._chartInstance.destroy();
       canvas._chartInstance = null;
     }
+
     import("chart.js/auto").then(({ default: Chart }) => {
-      if (!ref.current) return;
+      // If cleanup already ran before import resolved, do nothing
+      if (cancelled || !ref.current) return;
+
+      // Destroy again in case another effect ran while import was loading
+      if ((ref.current as any)._chartInstance) {
+        (ref.current as any)._chartInstance.destroy();
+        (ref.current as any)._chartInstance = null;
+      }
+
       const c = new Chart(ref.current, build());
       (ref.current as any)._chartInstance = c;
     });
+
     return () => {
+      cancelled = true; // prevent async creation after cleanup
       if (canvas._chartInstance) {
         canvas._chartInstance.destroy();
         canvas._chartInstance = null;
@@ -117,7 +130,7 @@ export function OverviewDashboard() {
   const cuisineRef = useRef<HTMLCanvasElement>(null);
   const topRef     = useRef<HTMLCanvasElement>(null);
 
-  useChart(revenueRef, () => ({
+  useChart(revenueRef as any, () => ({
     type: "line",
     data: {
       labels: stats.labels7,
@@ -134,7 +147,7 @@ export function OverviewDashboard() {
     },
   }), [stats.revenue7, isDark]);
 
-  useChart(statusRef, () => ({
+  useChart(statusRef as any, () => ({
     type: "doughnut",
     data: {
       labels: Object.keys(stats.statusCounts),
@@ -147,7 +160,7 @@ export function OverviewDashboard() {
     },
   }), [stats.statusCounts, isDark]);
 
-  useChart(cuisineRef, () => ({
+  useChart(cuisineRef as any, () => ({
     type: "pie",
     data: {
       labels: Object.keys(stats.cuisineMap),
@@ -160,7 +173,7 @@ export function OverviewDashboard() {
     },
   }), [stats.cuisineMap, isDark]);
 
-  useChart(topRef, () => ({
+  useChart(topRef as any, () => ({
     type: "bar",
     data: {
       labels: stats.topRestaurants.map(([n]) => n.length > 14 ? n.slice(0, 14) + "…" : n),
