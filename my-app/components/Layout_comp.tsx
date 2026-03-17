@@ -11,7 +11,7 @@ import { useThemeStore } from "../store/themeStore";
 // import { UseBoundStore } from ""
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
-import { ShoppingCart, UtensilsCrossed, Menu, Moon, Sun, Heart, Trophy, LogOut, User } from "lucide-react";
+import { ShoppingCart, UtensilsCrossed, Menu, Moon, Sun, Heart, Trophy, LogOut, User, Search } from "lucide-react";
 import { CartDrawer } from "./CartDrawer";
 import { ShoppingBag } from "lucide-react";
 import CartPage from "./CartPage";
@@ -81,12 +81,44 @@ const handleLogout = async() => {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
+                    variant={pathname.includes("/recipes") ? "default" : "ghost"}
+                  >
+                    Recipes
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  <DropdownMenuItem asChild>
+                    <Link href="/recipes">Browse Recipes</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/recipes/suggestions">Recipe Suggestions</Link>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              
+              <Button
+                variant={pathname === "/search" ? "default" : "ghost"}
+                className="gap-2"
+                asChild
+              >
+                <Link href="/search">
+                  <Search className="h-4 w-4" />
+                  <span className="hidden lg:inline">Search</span>
+                </Link>
+              </Button>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
                     variant={pathname.includes("/reviews") ? "default" : "ghost"}
                   >
                     Reviews
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
+                  <DropdownMenuItem asChild>
+                    <Link href="/search">Search</Link>
+                  </DropdownMenuItem>
                   <DropdownMenuItem asChild>
                     <Link href="/reviews">All Reviews</Link>
                   </DropdownMenuItem>
@@ -146,6 +178,15 @@ const handleLogout = async() => {
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem asChild>
                     <Link href="/">Home</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/recipes">Browse Recipes</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/recipes/suggestions">Recipe Suggestions</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/search">Search</Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
                     <Link href="/reviews">All Reviews</Link>
@@ -269,5 +310,3 @@ const handleLogout = async() => {
     </div>
   );
 }
-
-export default Layout_comp;

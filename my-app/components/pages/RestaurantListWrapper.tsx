@@ -14,8 +14,8 @@ export function RestaurantListWrapper() {
     // query: searchParams.get("query") ,
     // type: searchParams.get("type") ,
     // cuisine: searchParams.get("cuisine") ,
-        query: searchParams.get("query")  || "undefined" ,
-    type: searchParams.get("type") || "undefined" ,
+        query: searchParams.get("query")  || "" ,
+    type: searchParams.get("type") || "name" ,
     cuisine: searchParams.get("cuisine") || "undefined" ,
   };
   // const location = useLocation();

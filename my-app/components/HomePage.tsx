@@ -26,9 +26,8 @@ export function HomePage(){
   const handleSearch = () => {
     if (searchQuery.trim()) {
       //  onNavigate("restaurants", { query: searchQuery, type: searchType });
-     router.push(
-  `/restaurants?query=${encodeURIComponent(searchQuery)}&type=${encodeURIComponent(searchType)}`
-);
+   // AFTER
+router.push(`/search?q=${encodeURIComponent(searchQuery)}`);
     }
   };
 
