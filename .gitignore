@@ -1,0 +1,63 @@
+# ======================
+# GENERAL
+# ======================
+.DS_Store
+*.log
+*.tmp
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ======================
+# ENV FILES (IMPORTANT ⚠️)
+# ======================
+.env
+.env.*
+!.env.example
+
+# ======================
+# NODE MODULES
+# ======================
+node_modules/
+
+# ======================
+# BUILD / DIST
+# ======================
+dist/
+build/
+coverage/
+
+# ======================
+# NEXT.JS (if using)
+# ======================
+.next/
+out/
+
+# ======================
+# REACT (VITE / CRA)
+# ======================
+vite.svg
+
+# ======================
+# SERVER (Node/Express)
+# ======================
+uploads/
+temp/
+logs/
+
+# ======================
+# DATABASE
+# ======================
+*.sqlite
+*.db
+
+# ======================
+# IDE / EDITOR
+# ======================
+.vscode/
+.idea/
+
+# ======================
+# TYPESCRIPT
+# ======================
+*.tsbuildinfo
