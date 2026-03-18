@@ -1,19 +1,8 @@
-
 import { create } from "zustand";
 import { toast } from "sonner";
-// import axios from "axios";
-// import Iuser from "@/types/allType";
-import { persist,type StateStorage } from 'zustand/middleware'
-// import type {IUser}  from "@/types/allType";
+import { persist } from "zustand/middleware";
 
 interface User {
-  // id: string;
-  // name: string;
-  // email: string;
-  // isAdmin: boolean;
-  // isVerified: boolean;
-  // loyaltyPoints?: number;
-  // loyaltyTier?: string;
   _id: string;
   name: string;
   email: string;
@@ -25,321 +14,279 @@ interface User {
   location?: string;
   bio?: string;
   birthday?: string;
-  occupation: string;
-  avatar?:string;
-  isAdmin?:boolean
+  occupation?: string;
+  avatar?: string;
+  isAdmin?: boolean;
 }
 
 interface AuthState {
-  resendOtp: (email: string) => Promise<void>;
-
   user: User | null;
-  curr_email?:string;
+  curr_email?: string;
   isAuthenticated: boolean;
   isLoading: boolean;
+
   setUser: (user: User | null) => void;
   setLoading: (loading: boolean) => void;
-  login: (email: string, password: string) => Promise<void>;
+  checkAuth: () => Promise<void>;
+  fetchUserProfile: () => Promise<void>;
+  updateProfile: (updates: Partial<User>) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   verifyEmail: (email: string, otp: string) => Promise<void>;
+  resendOtp: (email: string) => Promise<void>;
   forgotPassword: (email: string) => Promise<void>;
   resetPassword: (email: string, otp: string, newPassword: string) => Promise<void>;
-  checkAuth: () => Promise<void>;
-  fetchUserProfile : () => Promise<void>;
- updateProfile:  (updates: Partial<User>) => Promise<void>;
 }
 
+const BASE = "http://localhost:8000/api";
 
-export const useAuthStore = create<AuthState>()(persist((set) => ({
-  user: null,
-  isAuthenticated: false,
-  isLoading: true,
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set, get) => ({
+      user: null,
+      isAuthenticated: false,
+      isLoading: true,
+      curr_email: undefined,
 
-  setUser: (user) => set({ user, isAuthenticated: !!user }),
-  setLoading: (loading) => set({ isLoading: loading }),
+      setUser: (user) => set({ user, isAuthenticated: !!user }),
+      setLoading: (loading) => set({ isLoading: loading }),
 
-  checkAuth: async () => {
-    try {
-     
-
-      set({ isLoading: true });
-      // const response = await fetch("http://localhost:8000/api/auth/check-auth");
-       const response = await fetch("http://localhost:8000/api/auth/check-auth", {
-      credentials: "include", // send cookies automatically
-    });
-
-            //const response = await axios.get(`${API_END_POINT}/check-auth`);
-            //  const response = await axios.get(`${API_END_POINT}/check-auth`);
-          //  console.log(response.data);
-          
-      if (response.ok) {
-        const data = await response.json();
-        set({ user: data.user, isAuthenticated: true, isLoading: false });
-      } else {
-     
-        set({ user: null, isAuthenticated: false ,isLoading: false });
-      }
-      return;
-    } catch (error) {
-      console.error("Auth check failed:", error);
-    
-      set({ user: null, isAuthenticated: false , isLoading:false });
-      return;
-    } finally {
-      set({ isLoading: false });
-      return;
-    }
-  },
-  fetchUserProfile: async () => {
-  set({ isLoading: true });
-  try {
-      const response = await fetch("http://localhost:8000/api/users/profile", {
-      credentials: "include",
-      });
-     if(response.ok) {
-        const data = await response.json();
-        console.log(data.user);
-        set({ user: data.user, isAuthenticated: true, isLoading: false });
-      } else {
-     
-        set({ user: null, isAuthenticated: false ,isLoading: false });
-      }
-      return;
-  } catch (err: any) {
-    console.error(err);
-    set({ user: null, isAuthenticated: false , isLoading:false });
-    return;
-  }
-},
-   updateProfile: async (updates: Partial<User>) => {
+      checkAuth: async () => {
+        set({ isLoading: true });
         try {
-          const response = await fetch('http://localhost:8000/api/auth/update-profile', {
-            method: 'PATCH',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            credentials: 'include',
+          const res = await fetch(`${BASE}/auth/check-auth`, {
+            credentials: "include",
+          });
+          if (res.ok) {
+            const data = await res.json();
+            set({ user: data.user, isAuthenticated: true, isLoading: false });
+          } else {
+            set({ user: null, isAuthenticated: false, isLoading: false });
+          }
+        } catch {
+          set({ user: null, isAuthenticated: false, isLoading: false });
+        }
+      },
+
+      fetchUserProfile: async () => {
+        set({ isLoading: true });
+        try {
+          const res = await fetch(`${BASE}/users/profile`, {
+            credentials: "include",
+          });
+          if (res.ok) {
+            const data = await res.json();
+            set({ user: data.user, isAuthenticated: true, isLoading: false });
+          } else {
+            set({ user: null, isAuthenticated: false, isLoading: false });
+          }
+        } catch (err: any) {
+          set({ user: null, isAuthenticated: false, isLoading: false });
+        }
+      },
+
+      updateProfile: async (updates) => {
+        try {
+          const res = await fetch(`${BASE}/auth/update-profile`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
             body: JSON.stringify(updates),
           });
-
-          const data = await response.json();
-
-          if (!response.ok) {
-            throw new Error(data.message || 'Failed to update profile');
-          }
-
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.message || "Failed to update profile");
           set({ user: data.user });
-          // console.log();
+          toast.success("Profile updated!");
         } catch (error: any) {
+          toast.error(error.message || "Failed to update profile");
           throw error;
         }
       },
-resendOtp: async (email: string) => {
-  try {
-     set({isLoading: true });
-    const response = await fetch("http://localhost:8000/api/auth/resend-otp", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ email }),
-    });
 
-    const data = await response.json();
-
-    if (!response.ok) {
-      toast.error(data.message || "Failed to resend OTP");
-        set({isLoading: false });
-      throw new Error(data.message || "Failed to resend OTP");
-    }else{
-      toast.success("OTP resent successfully! Please check your email.");
-      set({isLoading: false });
-    }
-  } catch (error: any) {
-    console.error("Resend OTP error:", error);
-    toast.error(error.message || "Something went wrong while resending OTP");
-      set({isLoading: false });
-    throw error;
-  }
-},
-
-  register: async (name: string, email: string, password: string) => {
-    try {
-        set({isLoading: true });
-      set({ curr_email: email });
-      const response = await fetch("http://localhost:8000/api/auth/register", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ name, email, password }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        toast.error( "Registration failed");
-        set({isLoading: false });
-        throw new Error( "Registration failed");
-      }else{
-
-        toast.success("Registration successful! Please check your email to verify your account.");
-        set({isLoading: false });
-      }
-
-      return data;
-    } catch (error: any) {
-      set({isLoading: false });
-      throw error;
-    }
-  },
-
-  login: async (email: string, password: string) => {
-   
-  
-    try {
-       set({isLoading: true });
-      const response = await fetch("http://localhost:8000/api/auth/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email, password }),
-        credentials: "include", 
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        toast.error( "Login failed");
-           set({isLoading: false });
-        throw new Error( "Login failed");
-      }
-// console.log(data.op);
-   
-//        localStorage.setItem("token", data.op);
-      set({ user: data.user, isAuthenticated: true, isLoading:false });
-      toast.success(`Welcome back, ${data.user.name}!`);
-    } catch (error1: any) {
-      toast.error("error is there");
-       set({isLoading: false });
-      throw error1;
-    }
-  },
-
-  logout: async () => {
+      register: async (name, email, password) => {
+        set({ isLoading: true });
         try {
-            set({ isLoading: true });
-            const response = await fetch("http://localhost:8000/api/auth/logout", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-       credentials: "include",
-       
-      });
-                const data = await response.json();
-                console.log(data.message);
-                if (response.ok) {
-                toast.success(data.message);
-                set({ isLoading: false, user: null, isAuthenticated: false })
-            }
-        } catch (error:any) {
-            toast.error("error is there ");
+          // FIX: validate email format before sending
+          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            toast.error("Please enter a valid email address");
             set({ isLoading: false });
+            return;
+          }
+          set({ curr_email: email });
+          const res = await fetch(`${BASE}/auth/register`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name, email, password }),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            // FIX: show real server error
+            toast.error(data.message || "Registration failed");
+            set({ isLoading: false });
+            throw new Error(data.message || "Registration failed");
+          }
+          toast.success("Account created! Please check your email for the verification code.");
+          set({ isLoading: false });
+        } catch (error: any) {
+          set({ isLoading: false });
+          throw error;
         }
-    },
+      },
 
-  verifyEmail: async (email: string, otp: string) => {
-    try {
-      set({isLoading: true });
-      const response = await fetch("http://localhost:8000/api/auth/verify-email", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email, otp }),
-      });
+      login: async (email, password) => {
+        set({ isLoading: true });
+        try {
+          const res = await fetch(`${BASE}/auth/login`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password }),
+            credentials: "include",
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            // FIX: show real server error
+            toast.error(data.message || "Login failed");
+            set({ isLoading: false });
+            throw new Error(data.message || "Login failed");
+          }
+          set({ user: data.user, isAuthenticated: true, isLoading: false });
+          toast.success(`Welcome back, ${data.user.name}!`);
+        } catch (error: any) {
+          set({ isLoading: false });
+          throw error;
+        }
+      },
 
-      const data = await response.json();
+      logout: async () => {
+        set({ isLoading: true });
+        try {
+          const res = await fetch(`${BASE}/auth/logout`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+          });
+          const data = await res.json();
+          // FIX: clear persisted storage on logout
+          set({ user: null, isAuthenticated: false, isLoading: false, curr_email: undefined });
+          // Clear zustand persisted storage
+          if (typeof window !== "undefined") {
+            localStorage.removeItem("auth-session-storage");
+          }
+          toast.success(data.message || "Logged out successfully");
+        } catch {
+          // FIX: still clear local state even if server call fails
+          set({ user: null, isAuthenticated: false, isLoading: false, curr_email: undefined });
+          if (typeof window !== "undefined") {
+            localStorage.removeItem("auth-session-storage");
+          }
+          toast.success("Logged out");
+        }
+      },
 
-      if (!response.ok) {
-        toast.error(data.message || "Verification failed");
-        set({isLoading:true});
-        throw new Error(data.message || "Verification failed");
-      }else{
-        set({isLoading:false,user: data.user, isAuthenticated: true });
+      verifyEmail: async (email, otp) => {
+        set({ isLoading: true });
+        try {
+          const res = await fetch(`${BASE}/auth/verify-email`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, otp }),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            toast.error(data.message || "Verification failed");
+            // FIX: was setting isLoading:true on error — now false
+            set({ isLoading: false });
+            throw new Error(data.message || "Verification failed");
+          }
+          set({ isLoading: false, user: data.user, isAuthenticated: true });
+          toast.success("Email verified successfully! Welcome aboard!");
+        } catch (error: any) {
+          set({ isLoading: false });
+          throw error;
+        }
+      },
 
-      }
+      resendOtp: async (email) => {
+        set({ isLoading: true });
+        try {
+          // FIX: validate email before sending — prevents calling with placeholder
+          if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            toast.error("Invalid email address");
+            set({ isLoading: false });
+            return;
+          }
+          const res = await fetch(`${BASE}/auth/resend-otp`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email }),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            toast.error(data.message || "Failed to resend OTP");
+            set({ isLoading: false });
+            throw new Error(data.message || "Failed to resend OTP");
+          }
+          toast.success("Verification code sent! Please check your email.");
+          set({ isLoading: false });
+        } catch (error: any) {
+          set({ isLoading: false });
+          throw error;
+        }
+      },
 
-      // localStorage.setItem("token", data.token);
-      toast.success("Email verified successfully!");
-    } catch (error: any) {
-      throw error;
-    }
-  },
+      forgotPassword: async (email) => {
+        set({ isLoading: true });
+        try {
+          const res = await fetch(`${BASE}/auth/forgot-password`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email }),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            toast.error(data.message || "Failed to send reset email");
+            set({ isLoading: false });
+            throw new Error(data.message || "Failed to send reset email");
+          }
+          set({ isLoading: false });
+          toast.success("Password reset code sent! Check your email.");
+        } catch (error: any) {
+          set({ isLoading: false });
+          throw error;
+        }
+      },
 
-  forgotPassword: async (email: string) => {
-    try {
-      set({isLoading:true});
-      const response = await fetch("http://localhost:8000/api/auth/forgot-password", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        toast.error(data.message || "Failed to send reset email");
-         set({isLoading: false });
-        throw new Error(data.message || "Failed to send reset email");
-      }
- set({isLoading: false });
-      toast.success("Password reset OTP sent to your email!");
-    } catch (error: any) {
-       set({isLoading: false });
-      throw error;
-    }
-  },
-
-  resetPassword: async (email: string, otp: string, newPassword: string) => {
-    try {
-        set({isLoading: true });
-      const response = await fetch("http://localhost:8000/api/auth/reset-password", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email, otp, newPassword }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        toast.error(data.message || "Password reset failed");
-         set({isLoading: false });
-        throw new Error(data.message || "Password reset failed");
-      }
- set({isLoading: false });
-      toast.success("Password reset successfully! You can now login.");
-    } catch (error: any) {
-       set({isLoading: false });
-      throw error;
-    }
-  },
-}),
-{
-      name: "auth-session-storage", // Key in storage
-      // //getStorage: () => sessionStorage, // 🔥 Use sessionStorage instead of localStorage
-     
-      // partialize: (state) => ({
-      //   user: state.user,
-      //   isAuthenticated: state.isAuthenticated,
-      // }),
+      resetPassword: async (email, otp, newPassword) => {
+        set({ isLoading: true });
+        try {
+          const res = await fetch(`${BASE}/auth/reset-password`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, otp, newPassword }),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            // FIX: show real server error
+            toast.error(data.message || "Password reset failed");
+            set({ isLoading: false });
+            throw new Error(data.message || "Password reset failed");
+          }
+          set({ isLoading: false });
+          toast.success("Password reset successfully! You can now sign in.");
+        } catch (error: any) {
+          set({ isLoading: false });
+          throw error;
+        }
+      },
+    }),
+    {
+      name: "auth-session-storage",
+      partialize: (state) => ({
+        user: state.user,
+        isAuthenticated: state.isAuthenticated,
+        curr_email: state.curr_email,
+      }),
     }
   )
 );
