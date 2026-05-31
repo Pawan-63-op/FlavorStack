@@ -1,0 +1,8 @@
+export const DRIVER_STATUS = {
+    PENDING_VERIFICATION: "PENDING_VERIFICATION",
+    ACTIVE: "ACTIVE",
+    SUSPENDED: "SUSPENDED",
+    OFFLINE: "OFFLINE",
+    ON_DELIVERY: "ON_DELIVERY",
+}
+export type DriverStatus = (typeof DRIVER_STATUS)[keyof typeof DRIVER_STATUS];

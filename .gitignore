@@ -1,6 +1,8 @@
 # ======================
 # GENERAL
 # ======================
+artifacts_before_update/
+artifacts_server2
 .DS_Store
 *.log
 *.tmp
