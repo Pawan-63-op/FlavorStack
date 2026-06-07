@@ -1,0 +1,122 @@
+src/modules/user/
+
+├── domain/
+│   │
+│   ├── entities/
+│   │   ├── BaseUser.ts
+│   │   ├── Customer.ts
+│   │   ├── Driver.ts
+│   │   └── Admin.ts
+│   │
+│   ├── value-objects/
+│   │   ├── Address.ts
+│   │   ├── GeoPoint.ts
+│   │   ├── VehicleInfo.ts
+│   │   ├── Permission.ts
+│   │   ├── WalletTransaction.ts
+│   │   └── AuditEntry.ts
+│   │
+│   ├── enums/
+│   │   ├── UserRole.ts
+│   │   ├── AuthProvider.ts
+│   │   ├── DriverStatus.ts
+│   │   ├── LoyaltyTier.ts
+│   │   ├── TokenType.ts
+│   │   ├── PermissionAction.ts
+│   │   └── PermissionResource.ts
+│   │
+│   └── repositories/
+│       └── IUserRepository.ts
+│
+├── application/
+│   │
+│   ├── dtos/
+│   │   ├── RegisterDto.ts
+│   │   ├── LoginDto.ts
+│   │   ├── UpdateProfileDto.ts
+│   │   └── CreateDriverDto.ts
+│   │
+│   ├── services/
+│   │   ├── AuthService.ts
+│   │   ├── UserService.ts
+│   │   ├── DriverService.ts
+│   │   ├── AdminService.ts
+│   │   ├── TokenService.ts
+│   │   └── OtpService.ts
+│   │
+│   └── use-cases/
+│       ├── RegisterUser.ts
+│       ├── LoginUser.ts
+│       ├── VerifyEmail.ts
+│       └── ResetPassword.ts
+│
+├── infrastructure/
+│   │
+│   ├── database/
+│   │   │
+│   │   ├── schemas/
+│   │   │   ├── base-user.schema.ts
+│   │   │   ├── customer.schema.ts
+│   │   │   ├── driver.schema.ts
+│   │   │   └── admin.schema.ts
+│   │   │
+│   │   ├── models/
+│   │   │   ├── UserModel.ts
+│   │   │   ├── CustomerModel.ts
+│   │   │   ├── DriverModel.ts
+│   │   │   └── AdminModel.ts
+│   │   │
+│   │   └── repositories/
+│   │       └── UserRepository.ts
+│   │
+│   ├── auth/
+│   │   ├── JwtProvider.ts
+│   │   ├── PasswordHasher.ts
+│   │   └── OtpGenerator.ts
+│   │
+│   └── notifications/
+│       ├── EmailService.ts
+│       ├── SmsService.ts
+│       └── PushNotificationService.ts
+│
+├── presentation/
+│   │
+│   ├── controllers/
+│   │   ├── AuthController.ts
+│   │   ├── UserController.ts
+│   │   ├── DriverController.ts
+│   │   └── AdminController.ts
+│   │
+│   ├── middlewares/
+│   │   ├── AuthMiddleware.ts
+│   │   ├── RbacGuard.ts
+│   │   └── RateLimitMiddleware.ts
+│   │
+│   └── routes/
+│       ├── auth.routes.ts
+│       ├── user.routes.ts
+│       ├── driver.routes.ts
+│       └── admin.routes.ts
+│
+└── index.ts
+
+------------------
+src/domain/identity/
+├── entities/
+│   ├── BaseUser.ts
+│   ├── Customer.ts
+│   ├── Driver.ts
+│   └── Admin.ts
+├── enums/                     ← already done
+├── value-objects/             ← already done
+├── types/                     ← ADD THIS — CreateAdminInput etc live here
+├── repositories/
+│   └── IUserRepository.ts
+├── services/
+│   └── UserDomainService.ts
+├── events/
+│   └── UserRegisteredEvent.ts
+├── errors/
+│   └── IdentityErrors.ts
+└── interfaces/
+    └── (extra contracts if needed)

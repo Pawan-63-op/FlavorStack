@@ -1,0 +1,1 @@
+// Entity: label, restaurantId, sortOrder

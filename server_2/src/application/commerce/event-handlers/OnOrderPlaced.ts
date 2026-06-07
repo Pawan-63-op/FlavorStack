@@ -1,0 +1,1 @@
+// Handler: write OutboxEvent atomically

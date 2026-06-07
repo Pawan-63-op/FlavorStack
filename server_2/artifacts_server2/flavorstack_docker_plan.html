@@ -1,0 +1,274 @@
+
+<style>
+*{box-sizing:border-box;}
+.sec{margin-bottom:1.5rem;}
+.sec-title{font-size:11px;font-weight:500;color:var(--color-text-tertiary);letter-spacing:.06em;margin:0 0 .6rem;}
+.card{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:.9rem 1.1rem;margin-bottom:.6rem;}
+.card-title{font-size:13px;font-weight:500;color:var(--color-text-primary);margin:0 0 5px;display:flex;align-items:center;gap:7px;}
+.card-desc{font-size:12px;color:var(--color-text-secondary);line-height:1.55;margin:0;}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
+.green{border-left:3px solid #1A9B7B;}
+.amber{border-left:3px solid #D08B2D;}
+.blue{border-left:3px solid #3A86C8;}
+.coral{border-left:3px solid #C85B3A;}
+.purple{border-left:3px solid #7F77DD;}
+.gray{border-left:3px solid #999;}
+.badge{display:inline-block;font-size:10px;padding:2px 7px;border-radius:4px;font-weight:500;}
+.b-green{background:#E1F5EE;color:#085041;}
+.b-amber{background:#FAEEDA;color:#633806;}
+.b-coral{background:#FAECE7;color:#712B13;}
+.b-blue{background:#E6F1FB;color:#0C447C;}
+.b-gray{background:#F1EFE8;color:#444;}
+.b-purple{background:#EEEDFE;color:#3C3489;}
+.file-row{display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:0.5px solid var(--color-border-tertiary);}
+.file-row:last-child{border-bottom:none;}
+.file-name{font-size:12px;font-weight:600;color:var(--color-text-primary);font-family:monospace;min-width:220px;flex-shrink:0;}
+.file-desc{font-size:12px;color:var(--color-text-secondary);line-height:1.45;}
+.service-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;}
+.service{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:.7rem .85rem;text-align:center;}
+.service-name{font-size:13px;font-weight:600;color:var(--color-text-primary);margin-bottom:3px;}
+.service-desc{font-size:11px;color:var(--color-text-secondary);line-height:1.4;}
+.week-block{margin-bottom:1.5rem;}
+.week-header{display:flex;align-items:center;gap:10px;margin-bottom:.75rem;}
+.week-badge{font-size:11px;font-weight:600;padding:4px 12px;border-radius:6px;}
+.week-title{font-size:14px;font-weight:600;color:var(--color-text-primary);}
+.week-sub{font-size:12px;color:var(--color-text-tertiary);margin-left:auto;}
+.days{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:8px;}
+.day{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:.75rem .85rem;}
+.day-label{font-size:10px;font-weight:600;color:var(--color-text-tertiary);letter-spacing:.05em;margin-bottom:4px;}
+.day-title{font-size:12px;font-weight:600;color:var(--color-text-primary);margin-bottom:4px;}
+.day-tasks{list-style:none;padding:0;margin:0;}
+.day-tasks li{font-size:11px;color:var(--color-text-secondary);padding:2px 0;display:flex;align-items:flex-start;gap:5px;line-height:1.4;}
+.day-tasks li::before{content:"·";flex-shrink:0;}
+.divider{border:none;border-top:0.5px solid var(--color-border-tertiary);margin:1.25rem 0;}
+</style>
+
+<!-- WHY DOCKER IS ESSENTIAL -->
+<div class="sec">
+  <div class="sec-title">WHY DOCKER IS NON-OPTIONAL FOR THIS STACK</div>
+  <div class="card amber">
+    <div class="card-title">⚡ The problem without Docker</div>
+    <div class="card-desc">After Week 3, FlavorStack has: Express API + Next.js frontend + Redis + MongoDB + BullMQ email worker + BullMQ image worker + BullMQ notification worker + BullMQ loyalty worker + outbox poller. That's <strong>9 processes</strong> you need running simultaneously. Without Docker you manually start each one, manage ports, deal with "works on my machine" bugs, and can't deploy cleanly. With Docker Compose — <strong>one command</strong>: <code>docker compose up</code>.</div>
+  </div>
+</div>
+
+<!-- THE COMPLETE FILE STRUCTURE -->
+<div class="sec">
+  <div class="sec-title">EVERY DOCKER FILE YOU NEED — WHAT & WHERE</div>
+  <div class="card">
+    <div class="file-row">
+      <span class="file-name">📄 server/Dockerfile</span>
+      <span class="file-desc">Builds the Express API image. Multi-stage: build stage compiles TypeScript → production stage runs compiled JS only. No dev dependencies in prod image.</span>
+    </div>
+    <div class="file-row">
+      <span class="file-name">📄 server/Dockerfile.worker</span>
+      <span class="file-desc">Separate image for BullMQ workers. Same codebase as API but different entrypoint (worker/index.ts not server/index.ts). Lets you scale workers independently from API.</span>
+    </div>
+    <div class="file-row">
+      <span class="file-name">📄 my-app/Dockerfile</span>
+      <span class="file-desc">Builds Next.js frontend. Multi-stage: install → build → standalone output. Uses Next.js standalone output mode for minimal image size.</span>
+    </div>
+    <div class="file-row">
+      <span class="file-name">📄 docker-compose.yml</span>
+      <span class="file-desc">The main file. Defines all services, networks, volumes, env vars, health checks, and dependencies. This is what you run in production.</span>
+    </div>
+    <div class="file-row">
+      <span class="file-name">📄 docker-compose.dev.yml</span>
+      <span class="file-desc">Development override. Mounts source code as volumes (hot reload), skips build steps, exposes debug ports, uses dev env vars. Run with: <code>docker compose -f docker-compose.yml -f docker-compose.dev.yml up</code></span>
+    </div>
+    <div class="file-row">
+      <span class="file-name">📄 .dockerignore (×3)</span>
+      <span class="file-desc">One per app (server/, my-app/, root). Excludes: node_modules, .env files, .git, dist/, .next/, test files. Keeps images small and secure.</span>
+    </div>
+    <div class="file-row">
+      <span class="file-name">📄 .github/workflows/deploy.yml</span>
+      <span class="file-desc">GitHub Actions CI/CD pipeline. Triggers on push to main: lint → TypeScript check → build Docker images → push to registry → deploy. Simple but production-grade.</span>
+    </div>
+    <div class="file-row">
+      <span class="file-name">📄 nginx/nginx.conf</span>
+      <span class="file-desc">Nginx config as a file (not inline in compose). Handles upstream API routing, WebSocket proxy for Socket.io, static asset caching, SSL termination config.</span>
+    </div>
+    <div class="file-row">
+      <span class="file-name">📄 .env.example</span>
+      <span class="file-desc">Template for all required env vars. Committed to git. Actual .env files never committed. Docker Compose reads from .env automatically.</span>
+    </div>
+  </div>
+</div>
+
+<!-- ALL SERVICES IN COMPOSE -->
+<div class="sec">
+  <div class="sec-title">ALL SERVICES IN docker-compose.yml</div>
+  <div class="service-grid">
+    <div class="service" style="border-left:2px solid #C85B3A;">
+      <div class="service-name">nginx</div>
+      <div class="service-desc">Reverse proxy, SSL, load balance, WebSocket proxy</div>
+      <div style="margin-top:5px;"><span class="badge b-coral">port 80/443</span></div>
+    </div>
+    <div class="service" style="border-left:2px solid #1A9B7B;">
+      <div class="service-name">api</div>
+      <div class="service-desc">Express.js server, internal only behind Nginx</div>
+      <div style="margin-top:5px;"><span class="badge b-green">port 8000</span></div>
+    </div>
+    <div class="service" style="border-left:2px solid #7F77DD;">
+      <div class="service-name">client</div>
+      <div class="service-desc">Next.js standalone, served via Nginx</div>
+      <div style="margin-top:5px;"><span class="badge b-purple">port 3000</span></div>
+    </div>
+    <div class="service" style="border-left:2px solid #D08B2D;">
+      <div class="service-name">redis</div>
+      <div class="service-desc">Redis 7 Alpine. Persistent volume. All cache, queues, sessions.</div>
+      <div style="margin-top:5px;"><span class="badge b-amber">port 6379</span></div>
+    </div>
+    <div class="service" style="border-left:2px solid #3A86C8;">
+      <div class="service-name">worker-email</div>
+      <div class="service-desc">BullMQ email worker. Separate container, scales independently.</div>
+      <div style="margin-top:5px;"><span class="badge b-blue">no port</span></div>
+    </div>
+    <div class="service" style="border-left:2px solid #3A86C8;">
+      <div class="service-name">worker-notify</div>
+      <div class="service-desc">BullMQ FCM push notification worker.</div>
+      <div style="margin-top:5px;"><span class="badge b-blue">no port</span></div>
+    </div>
+    <div class="service" style="border-left:2px solid #3A86C8;">
+      <div class="service-name">worker-image</div>
+      <div class="service-desc">BullMQ Cloudinary image processing worker.</div>
+      <div style="margin-top:5px;"><span class="badge b-blue">no port</span></div>
+    </div>
+    <div class="service" style="border-left:2px solid #3A86C8;">
+      <div class="service-name">worker-loyalty</div>
+      <div class="service-desc">BullMQ loyalty + referral async recalculation.</div>
+      <div style="margin-top:5px;"><span class="badge b-blue">no port</span></div>
+    </div>
+    <div class="service" style="border-left:2px solid #3A86C8;">
+      <div class="service-name">outbox-poller</div>
+      <div class="service-desc">Reads Mongo outbox collection → publishes to BullMQ.</div>
+      <div style="margin-top:5px;"><span class="badge b-blue">no port</span></div>
+    </div>
+  </div>
+</div>
+
+<hr class="divider"/>
+
+<!-- UPDATED WEEK 4 WITH DOCKER -->
+<div class="sec">
+  <div class="sec-title">UPDATED WEEK 4 — WITH DOCKER ADDED ON DAY 27–28</div>
+  <div class="week-block">
+    <div class="days">
+      <div class="day" style="border-left:2px solid #3A86C8;">
+        <div class="day-label">DAY 22 — MON</div>
+        <div class="day-title">In-App Wallet</div>
+        <ul class="day-tasks">
+          <li>Wallet balance on User model</li>
+          <li>Stripe top-up → credit wallet</li>
+          <li>Deduct wallet on checkout</li>
+          <li>Transaction history collection</li>
+        </ul>
+        <span class="badge b-blue">revenue</span>
+      </div>
+      <div class="day" style="border-left:2px solid #3A86C8;">
+        <div class="day-label">DAY 23 — TUE</div>
+        <div class="day-title">Tiered Loyalty</div>
+        <ul class="day-tasks">
+          <li>Bronze/Silver/Gold by spend</li>
+          <li>Tier perks per level</li>
+          <li>Loyalty worker via BullMQ</li>
+          <li>Tier badge in profile UI</li>
+        </ul>
+        <span class="badge b-blue">retention</span>
+      </div>
+      <div class="day" style="border-left:2px solid #3A86C8;">
+        <div class="day-label">DAY 24 — WED</div>
+        <div class="day-title">Referral + Scheduled Orders</div>
+        <ul class="day-tasks">
+          <li>Referral code per user</li>
+          <li>Credit on referee's first order</li>
+          <li>Scheduled order (BullMQ delay)</li>
+          <li>Reorder in one tap</li>
+        </ul>
+        <span class="badge b-blue">growth</span>
+      </div>
+      <div class="day" style="border-left:2px solid #3A86C8;">
+        <div class="day-label">DAY 25 — THU</div>
+        <div class="day-title">RBAC + Circuit Breaker</div>
+        <ul class="day-tasks">
+          <li>Role → permission middleware</li>
+          <li>admin / rider / customer roles</li>
+          <li>opossum on Stripe + Cloudinary</li>
+          <li>Verified reviews + UPI payment</li>
+        </ul>
+        <span class="badge b-blue">security</span>
+      </div>
+      <div class="day" style="border-left:2px solid #1A9B7B;">
+        <div class="day-label">DAY 26 — FRI</div>
+        <div class="day-title">Dockerfiles</div>
+        <ul class="day-tasks">
+          <li>server/Dockerfile (multi-stage)</li>
+          <li>server/Dockerfile.worker</li>
+          <li>my-app/Dockerfile (standalone)</li>
+          <li>.dockerignore for all 3</li>
+          <li>Test each image builds locally</li>
+        </ul>
+        <span class="badge b-green">docker</span>
+      </div>
+      <div class="day" style="border-left:2px solid #1A9B7B;">
+        <div class="day-label">DAY 27 — SAT</div>
+        <div class="day-title">Docker Compose + Nginx</div>
+        <ul class="day-tasks">
+          <li>docker-compose.yml all 9 services</li>
+          <li>docker-compose.dev.yml overrides</li>
+          <li>nginx/nginx.conf (proxy + WS)</li>
+          <li>Health checks + depends_on</li>
+          <li>.env.example template</li>
+          <li><code>docker compose up</code> — everything starts</li>
+        </ul>
+        <span class="badge b-green">compose</span>
+      </div>
+      <div class="day" style="border-left:2px solid #1A9B7B;">
+        <div class="day-label">DAY 28 — SUN</div>
+        <div class="day-title">CI/CD Pipeline</div>
+        <ul class="day-tasks">
+          <li>.github/workflows/deploy.yml</li>
+          <li>lint → tsc check → build images</li>
+          <li>Push to Docker Hub / GHCR</li>
+          <li>Deploy to staging server</li>
+          <li>Smoke test all endpoints</li>
+        </ul>
+        <span class="badge b-green">ship it</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- FINAL FILE TREE -->
+<div class="sec">
+  <div class="sec-title">FINAL PROJECT FILE TREE AFTER DOCKER</div>
+  <div class="card" style="font-family:monospace;font-size:12px;color:var(--color-text-secondary);line-height:2;">
+    food_app_client_and_server/<br>
+    ├── <span style="color:var(--color-text-primary);font-weight:500;">docker-compose.yml</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;← all 9 services<br>
+    ├── <span style="color:var(--color-text-primary);font-weight:500;">docker-compose.dev.yml</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;← dev overrides (hot reload)<br>
+    ├── .env.example &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;← committed, no secrets<br>
+    ├── .env &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;← never committed<br>
+    ├── <span style="color:var(--color-text-primary);font-weight:500;">nginx/</span><br>
+    │&nbsp;&nbsp;&nbsp;└── nginx.conf &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;← proxy + WS + SSL<br>
+    ├── <span style="color:var(--color-text-primary);font-weight:500;">server/</span><br>
+    │&nbsp;&nbsp;&nbsp;├── Dockerfile &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;← API image (multi-stage)<br>
+    │&nbsp;&nbsp;&nbsp;├── Dockerfile.worker &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;← worker image<br>
+    │&nbsp;&nbsp;&nbsp;├── .dockerignore<br>
+    │&nbsp;&nbsp;&nbsp;└── ...<br>
+    ├── <span style="color:var(--color-text-primary);font-weight:500;">my-app/</span><br>
+    │&nbsp;&nbsp;&nbsp;├── Dockerfile &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;← Next.js standalone<br>
+    │&nbsp;&nbsp;&nbsp;├── .dockerignore<br>
+    │&nbsp;&nbsp;&nbsp;└── ...<br>
+    └── <span style="color:var(--color-text-primary);font-weight:500;">.github/workflows/</span><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;└── deploy.yml &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;← CI/CD pipeline<br>
+  </div>
+</div>
+
+<div style="margin-top:.5rem;display:flex;gap:8px;flex-wrap:wrap;">
+  <button onclick="sendPrompt('Write the complete multi-stage Dockerfile for the FlavorStack Express server with TypeScript')">server/Dockerfile ↗</button>
+  <button onclick="sendPrompt('Write the Dockerfile.worker for FlavorStack BullMQ workers')">Dockerfile.worker ↗</button>
+  <button onclick="sendPrompt('Write the complete docker-compose.yml for FlavorStack with all 9 services including Redis, workers, Nginx')">docker-compose.yml ↗</button>
+  <button onclick="sendPrompt('Write the nginx.conf for FlavorStack with Socket.io WebSocket proxy and API routing')">nginx.conf ↗</button>
+  <button onclick="sendPrompt('Write the GitHub Actions deploy.yml for FlavorStack CI/CD pipeline')">deploy.yml ↗</button>
+</div>

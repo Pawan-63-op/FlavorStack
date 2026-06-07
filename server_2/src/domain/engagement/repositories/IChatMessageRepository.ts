@@ -1,0 +1,1 @@
+// Interface: findByConversation(cursor), save

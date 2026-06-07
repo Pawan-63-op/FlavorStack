@@ -1,8 +1,8 @@
 # ======================
 # GENERAL
 # ======================
-artifacts_before_update/
-artifacts_server2
+server_2/artifacts_before_update/
+# server_2/src
 .DS_Store
 *.log
 *.tmp
@@ -20,7 +20,7 @@ yarn-error.log*
 # ======================
 # NODE MODULES
 # ======================
-node_modules/
+**/node_modules/
 
 # ======================
 # BUILD / DIST

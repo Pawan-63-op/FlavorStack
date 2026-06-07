@@ -1,0 +1,521 @@
+@startuml FlavorStack_User_Domain
+
+skinparam backgroundColor #12121F
+skinparam classBackgroundColor #1E1E35
+skinparam classBorderColor #7F77DD
+skinparam classHeaderBackgroundColor #3D3580
+skinparam classFontColor #E8E6FF
+skinparam classAttributeFontColor #C4C0F0
+skinparam classStereotypeFontColor #A09AE0
+skinparam arrowColor #7F77DD
+skinparam shadowing false
+skinparam nodesep 50
+skinparam ranksep 70
+skinparam classFontSize 12
+skinparam classAttributeFontSize 10
+skinparam defaultFontName Arial
+skinparam enumBackgroundColor #252545
+skinparam enumBorderColor #5D5A9A
+skinparam interfaceBackgroundColor #1A2A35
+skinparam interfaceBorderColor #5DCAA5
+skinparam noteBackgroundColor #252545
+skinparam noteBorderColor #5D5A9A
+skinparam noteFontColor #C4C0F0
+
+' ═══════════════════════════════════════════
+'  ENUMERATIONS
+' ═══════════════════════════════════════════
+
+enum UserRole {
+  CUSTOMER
+  DRIVER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum AuthProvider {
+  LOCAL
+  GOOGLE
+  FACEBOOK
+}
+
+enum DriverStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  SUSPENDED
+  OFFLINE
+  ON_DELIVERY
+}
+
+enum LoyaltyTier {
+  BRONZE
+  SILVER
+  GOLD
+  PLATINUM
+}
+
+enum PermissionAction {
+  CREATE
+  READ
+  UPDATE
+  DELETE
+  MANAGE
+}
+
+enum PermissionResource {
+  ORDER
+  MENU
+  USER
+  RESTAURANT
+  REVIEW
+  COUPON
+  REPORT
+  DRIVER
+  WALLET
+  REFUND
+}
+
+enum TokenType {
+  ACCESS
+  REFRESH
+  EMAIL_VERIFY
+  PASSWORD_RESET
+}
+
+' ═══════════════════════════════════════════
+'  VALUE OBJECTS
+' ═══════════════════════════════════════════
+
+class GeoPoint <<ValueObject>> {
+  + lat : number
+  + lng : number
+  ..methods..
+  + distanceTo(other: GeoPoint) : number
+  + toGeoJSON() : object
+}
+
+class Address <<ValueObject>> {
+  + label : string
+  + street : string
+  + city : string
+  + state : string
+  + pincode : string
+  + coordinates : GeoPoint
+  + isDefault : boolean
+  ..methods..
+  + toString() : string
+}
+
+class Permission <<ValueObject>> {
+  + resource : PermissionResource
+  + action : PermissionAction
+  + scope : string
+  ..methods..
+  + matches(resource, action) : boolean
+}
+
+class TokenPayload <<ValueObject>> {
+  + userId : ObjectId
+  + role : UserRole
+  + sessionId : string
+  + jti : string
+  + iat : number
+  + exp : number
+}
+
+class VehicleInfo <<ValueObject>> {
+  + type : string
+  + brand : string
+  + model : string
+  + licensePlate : string
+  + rcDocumentUrl : string
+  + insuranceUrl : string
+  + isVerified : boolean
+}
+
+class WalletTransaction <<ValueObject>> {
+  + txId : string
+  + type : string
+  + amount : number
+  + currency : string
+  + source : string
+  + referenceId : string
+  + createdAt : Date
+}
+
+class AuditEntry <<EmbeddedDoc>> {
+  + action : string
+  + targetModel : string
+  + targetId : ObjectId
+  + meta : object
+  + performedAt : Date
+  + ipAddress : string
+}
+
+' ═══════════════════════════════════════════
+'  ABSTRACT BASE USER
+' ═══════════════════════════════════════════
+
+abstract class BaseUser {
+  == Identity ==
+  # _id : ObjectId
+  # name : string
+  # email : string
+  # phone : string
+  # avatarUrl : string
+  # role : UserRole
+  == Auth Credentials ==
+  # passwordHash : string
+  # authProvider : AuthProvider
+  # providerId : string
+  == Email Verification ==
+  # isEmailVerified : boolean
+  # emailOtp : string
+  # emailOtpExpiresAt : Date
+  == Password Reset ==
+  # resetPasswordOtp : string
+  # resetPasswordOtpExpiresAt : Date
+  # passwordChangedAt : Date
+  == Session Tracking ==
+  # refreshTokenHash : string
+  # sessionId : string
+  # tokenVersion : number
+  == Security ==
+  # loginAttempts : number
+  # lockUntil : Date
+  # lastLoginAt : Date
+  # lastLoginIp : string
+  # isBanned : boolean
+  # banReason : string
+  == Soft Delete ==
+  # isActive : boolean
+  # deletedAt : Date
+  == Concurrency ==
+  # version : number
+  == Timestamps ==
+  # createdAt : Date
+  # updatedAt : Date
+  == Virtuals ==
+  + {abstract} displayName() : string
+  + isLocked() : boolean
+  + isDeleted() : boolean
+  + publicProfile() : object
+  == Auth Methods ==
+  + comparePassword(plain: string) : boolean
+  + hashPassword(plain: string) : void
+  + generateAccessToken() : string
+  + generateRefreshToken() : string
+  + generateEmailOtp() : string
+  + generatePasswordResetOtp() : string
+  + verifyEmailOtp(otp: string) : boolean
+  + verifyResetOtp(otp: string) : boolean
+  + invalidateAllSessions() : void
+  + incrementTokenVersion() : void
+  + recordLogin(ip: string) : void
+  + incrementLoginAttempts() : void
+  + resetLoginAttempts() : void
+  + ban(reason: string) : void
+  + unban() : void
+  + toJSON() : object
+  == Statics ==
+  + {static} findByEmail(email) : BaseUser
+  + {static} findByIdActive(id) : BaseUser
+  + {static} existsByEmail(email) : boolean
+  + {static} createWithRole(dto, role) : BaseUser
+}
+
+' ═══════════════════════════════════════════
+'  CUSTOMER
+' ═══════════════════════════════════════════
+
+class Customer {
+  == Addresses ==
+  - addresses : Address[]
+  - defaultAddressId : ObjectId
+  == Wallet ==
+  - walletBalance : number
+  - walletCurrency : string
+  - walletTransactions : WalletTransaction[]
+  == Loyalty ==
+  - loyaltyPoints : number
+  - totalLifetimeSpend : number
+  == Referral ==
+  - referralCode : string
+  - referredBy : ObjectId
+  - referralCount : number
+  == Preferences ==
+  - savedRestaurants : ObjectId[]
+  - dietaryPreferences : string[]
+  - defaultPaymentMethod : string
+  == Notifications ==
+  - fcmTokens : string[]
+  - notificationsEnabled : boolean
+  == Virtuals ==
+  + loyaltyTier() : LoyaltyTier
+  + walletFormatted() : string
+  + defaultAddress() : Address
+  == Order Methods ==
+  + placeOrder(cart, address, coupon?) : Order
+  + reorder(orderId) : Order
+  + cancelOrder(orderId, reason) : void
+  == Address Methods ==
+  + addAddress(addr) : void
+  + removeAddress(addrId) : void
+  + setDefaultAddress(addrId) : void
+  == Wallet Methods ==
+  + topUpWallet(amount, stripePaymentId) : void
+  + deductWallet(amount, orderId) : void
+  + getWalletHistory(cursor?, limit?) : WalletTransaction[]
+  == Loyalty Methods ==
+  + creditLoyaltyPoints(points, orderId) : void
+  + redeemLoyaltyPoints(points) : number
+  + recalculateTier() : LoyaltyTier
+  == Referral Methods ==
+  + applyReferral(code) : void
+  + creditReferralBonus(refereeOrderId) : void
+  == Review Methods ==
+  + addReview(restaurantId, rating, comment) : Review
+  + canReview(orderId) : boolean
+  == Notification Methods ==
+  + registerFcmToken(token) : void
+  + removeFcmToken(token) : void
+  == Statics ==
+  + {static} findByReferralCode(code) : Customer
+  + {static} getTopSpenders(limit) : Customer[]
+}
+
+' ═══════════════════════════════════════════
+'  DRIVER
+' ═══════════════════════════════════════════
+
+class Driver {
+  == Verification ==
+  - driverStatus : DriverStatus
+  - isBackgroundChecked : boolean
+  - verifiedAt : Date
+  - verifiedBy : ObjectId
+  == Vehicle ==
+  - vehicle : VehicleInfo
+  == Location ==
+  - currentLocation : GeoPoint
+  - locationUpdatedAt : Date
+  == Availability ==
+  - isAvailable : boolean
+  - activeOrderId : ObjectId
+  == Earnings ==
+  - totalEarnings : number
+  - pendingPayout : number
+  - stripeAccountId : string
+  == Ratings ==
+  - averageRating : number
+  - totalDeliveries : number
+  - totalRatings : number
+  == Notifications ==
+  - fcmTokens : string[]
+  == Virtuals ==
+  + isVerified() : boolean
+  + isBusy() : boolean
+  + earningsFormatted() : string
+  == Availability Methods ==
+  + goOnline() : void
+  + goOffline() : void
+  + updateLocation(point: GeoPoint) : void
+  == Order Methods ==
+  + acceptOrder(orderId) : void
+  + rejectOrder(orderId, reason) : void
+  + markPickedUp(orderId) : void
+  + markDelivered(orderId, proofUrl?) : void
+  + getActiveOrder() : Order
+  == Earnings Methods ==
+  + creditEarnings(amount, orderId) : void
+  + requestPayout() : void
+  + getEarningsHistory(from, to) : object[]
+  == Rating Methods ==
+  + receiveRating(rating) : void
+  + recalculateAverageRating() : void
+  == Notification Methods ==
+  + registerFcmToken(token) : void
+  + removeFcmToken(token) : void
+  == Statics ==
+  + {static} findNearby(point, radiusKm) : Driver[]
+  + {static} findAvailable(restaurantLocation) : Driver[]
+  + {static} assignToOrder(orderId) : Driver
+}
+
+' ═══════════════════════════════════════════
+'  ADMIN
+' ═══════════════════════════════════════════
+
+class Admin {
+  == Identity ==
+  - department : string
+  - isSuperAdmin : boolean
+  - managedBy : ObjectId
+  == RBAC ==
+  - permissions : Permission[]
+  == Two-Factor Auth ==
+  - twoFactorEnabled : boolean
+  - twoFactorSecret : string
+  == Audit ==
+  - auditLog : AuditEntry[]
+  - lastActivityAt : Date
+  == Virtuals ==
+  + permissionSummary() : string[]
+  + isFullAccess() : boolean
+  == Permission Check ==
+  + hasPermission(resource, action) : boolean
+  + hasAnyPermission(perms: Permission[]) : boolean
+  + can(action, resource) : boolean
+  == Permission Management ==
+  + grantPermission(perm: Permission) : void
+  + revokePermission(resource, action) : void
+  + grantFullAccess() : void
+  + revokeAllPermissions() : void
+  == User Management ==
+  + banUser(userId, reason) : void
+  + unbanUser(userId) : void
+  + softDeleteUser(userId) : void
+  + resetUserPassword(userId) : string
+  == Driver Management ==
+  + verifyDriver(driverId) : void
+  + suspendDriver(driverId, reason) : void
+  == Restaurant Management ==
+  + approveRestaurant(restaurantId) : void
+  + suspendRestaurant(restaurantId, reason) : void
+  + toggleRestaurantVisibility(restaurantId) : void
+  == Order Management ==
+  + approveRefund(orderId, amount) : void
+  + rejectRefund(orderId, reason) : void
+  + overrideOrderStatus(orderId, status) : void
+  == Coupon Management ==
+  + createCoupon(dto) : Coupon
+  + deactivateCoupon(couponId) : void
+  == Analytics ==
+  + viewRevenueReport(from, to) : Report
+  + viewOrderAnalytics(filters) : Report
+  + viewDriverPerformance(driverId) : Report
+  == 2FA Methods ==
+  + enable2FA() : string
+  + verify2FA(token) : boolean
+  + disable2FA(token) : void
+  == Audit Methods ==
+  + logAction(action, meta) : void
+  + getAuditLog(cursor?, limit?) : AuditEntry[]
+  == Statics ==
+  + {static} findWithPermission(resource, action) : Admin[]
+  + {static} createSuperAdmin(dto) : Admin
+  + {static} bootstrapPermissions(adminId, role) : void
+}
+
+' ═══════════════════════════════════════════
+'  SERVICE LAYER
+' ═══════════════════════════════════════════
+
+class AuthService <<Service>> {
+  + register(dto) : object
+  + login(email, password, ip) : object
+  + logout(userId, sessionId) : void
+  + refreshTokens(refreshToken) : object
+  + verifyEmail(userId, otp) : void
+  + resendVerificationEmail(userId) : void
+  + forgotPassword(email) : void
+  + resetPassword(email, otp, newPassword) : void
+  + changePassword(userId, oldPwd, newPwd) : void
+  + revokeAllSessions(userId) : void
+  + loginWithOAuth(provider, providerToken) : object
+}
+
+class TokenService <<Service>> {
+  + signAccessToken(payload: TokenPayload) : string
+  + signRefreshToken(payload: TokenPayload) : string
+  + verifyAccessToken(token) : TokenPayload
+  + verifyRefreshToken(token) : TokenPayload
+  + blacklistToken(jti, ttl) : void
+  + isBlacklisted(jti) : boolean
+  + rotateRefreshToken(oldToken) : string
+}
+
+class AuthMiddleware <<Middleware>> {
+  + verifyAccessToken(req, res, next) : void
+  + verifyRefreshToken(req, res, next) : void
+  + requireEmailVerified(req, res, next) : void
+  + requireRole(...roles: UserRole[]) : Middleware
+  + requirePermission(resource, action) : Middleware
+  + requireSuperAdmin(req, res, next) : void
+  + attachUser(req, res, next) : void
+}
+
+class RbacGuard <<Middleware>> {
+  + checkPermission(resource, action) : Middleware
+  + checkOwnership(model, idParam) : Middleware
+  + checkScope(resource, scope) : Middleware
+}
+
+' ═══════════════════════════════════════════
+'  INHERITANCE
+' ═══════════════════════════════════════════
+
+BaseUser <|-- Customer
+BaseUser <|-- Driver
+BaseUser <|-- Admin
+
+' ═══════════════════════════════════════════
+'  COMPOSITIONS
+' ═══════════════════════════════════════════
+
+Customer *-down- Address : addresses[]
+Customer *-down- WalletTransaction : walletTransactions[]
+Driver *-down- VehicleInfo : vehicle
+Driver *-down- GeoPoint : currentLocation
+Admin *-down- Permission : permissions[]
+Admin *-down- AuditEntry : auditLog[]
+Address *-- GeoPoint : coordinates
+
+' ═══════════════════════════════════════════
+'  DEPENDENCIES
+' ═══════════════════════════════════════════
+
+BaseUser ..> TokenPayload : generates
+AuthService ..> BaseUser : uses
+AuthService ..> TokenService : uses
+AuthMiddleware ..> TokenService : verifies
+AuthMiddleware ..> BaseUser : attaches to req
+RbacGuard ..> Admin : reads permissions
+RbacGuard ..> Permission : evaluates
+
+' ═══════════════════════════════════════════
+'  ENUM USAGE NOTES
+' ═══════════════════════════════════════════
+
+note top of BaseUser
+  Mongoose base schema.
+  Discriminator key = role field.
+  All subclasses share one MongoDB
+  "users" collection.
+  toJSON strips: passwordHash,
+  emailOtp, resetOtp, tokenVersion,
+  refreshTokenHash, __v
+end note
+
+note right of Admin
+  RBAC model:
+  Permission = resource + action + scope
+  scope "own"  → only self-owned docs
+  scope "all"  → entire collection
+  isSuperAdmin bypasses all checks
+end note
+
+note bottom of Driver
+  Location stored as GeoJSON Point.
+  2dsphere index on currentLocation.
+  findNearby() uses $geoNear aggregation.
+end note
+
+note bottom of Customer
+  loyaltyTier is a virtual computed
+  from totalLifetimeSpend thresholds:
+  Bronze < 1000 | Silver < 5000
+  Gold < 15000  | Platinum 15000+
+end note
+
+@enduml

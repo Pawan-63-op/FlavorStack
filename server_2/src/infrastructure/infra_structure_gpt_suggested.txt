@@ -1,0 +1,32 @@
+infrastructure
+│
+├── database
+│
+├── repositories
+│
+├── auth
+│   ├── JwtTokenService
+│   └── BcryptPasswordHasher
+│
+├── email
+│   ├── ResendProvider
+│   ├── SendGridProvider
+│   └── AwsSesProvider
+│
+├── payments
+│   └── StripePaymentProvider
+│
+├── sms
+│   └── TwilioProvider
+│
+├── storage
+│   └── CloudinaryProvider
+│
+├── cache
+│   └── RedisCache
+│
+├── sessions
+│   └── RedisSessionStore
+│
+└── realtime
+    └── SocketIoGateway

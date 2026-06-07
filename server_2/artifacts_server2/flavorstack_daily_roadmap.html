@@ -1,0 +1,446 @@
+
+<style>
+*{box-sizing:border-box;}
+.week-block{margin-bottom:1.75rem;}
+.week-header{display:flex;align-items:center;gap:10px;margin-bottom:.75rem;}
+.week-badge{font-size:11px;font-weight:600;padding:4px 12px;border-radius:6px;}
+.week-title{font-size:15px;font-weight:600;color:var(--color-text-primary);}
+.week-sub{font-size:12px;color:var(--color-text-tertiary);margin-left:auto;}
+.days{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:8px;}
+.day{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:.75rem .85rem;}
+.day-label{font-size:10px;font-weight:600;color:var(--color-text-tertiary);letter-spacing:.05em;margin-bottom:4px;}
+.day-title{font-size:12px;font-weight:600;color:var(--color-text-primary);margin-bottom:4px;}
+.day-tasks{list-style:none;padding:0;margin:0;}
+.day-tasks li{font-size:11px;color:var(--color-text-secondary);padding:2px 0;display:flex;align-items:flex-start;gap:5px;line-height:1.4;}
+.day-tasks li::before{content:"·";flex-shrink:0;margin-top:0;}
+.tag{display:inline-block;font-size:10px;padding:1px 6px;border-radius:3px;font-weight:500;margin-top:5px;}
+.t-red{background:#FAECE7;color:#712B13;}
+.t-amber{background:#FAEEDA;color:#633806;}
+.t-green{background:#E1F5EE;color:#085041;}
+.t-blue{background:#E6F1FB;color:#0C447C;}
+.t-purple{background:#EEEDFE;color:#3C3489;}
+.t-teal{background:#E1F5EE;color:#085041;}
+.divider{border:none;border-top:0.5px solid var(--color-border-tertiary);margin:1.25rem 0;}
+.rest-day{opacity:.6;background:var(--color-background-secondary);}
+</style>
+
+<!-- WEEK 1 -->
+<div class="week-block">
+  <div class="week-header">
+    <span class="week-badge" style="background:#FAECE7;color:#712B13;">Week 1</span>
+    <span class="week-title">Security + Stability foundation</span>
+    <span class="week-sub">zero new architecture · drop-in fixes</span>
+  </div>
+  <div class="days">
+    <div class="day" style="border-left:2px solid #C85B3A;">
+      <div class="day-label">DAY 1 — MON</div>
+      <div class="day-title">HTTP Security</div>
+      <ul class="day-tasks">
+        <li>Install + configure Helmet.js</li>
+        <li>Set up CORS properly (whitelist origins)</li>
+        <li>Add express-rate-limit (basic, before Redis)</li>
+        <li>Test all existing routes still work</li>
+      </ul>
+      <span class="tag t-red">security</span>
+    </div>
+    <div class="day" style="border-left:2px solid #C85B3A;">
+      <div class="day-label">DAY 2 — TUE</div>
+      <div class="day-title">Input Sanitization</div>
+      <ul class="day-tasks">
+        <li>Global sanitization middleware</li>
+        <li>Strip HTML from all body inputs</li>
+        <li>Block NoSQL injection ($where, $gt)</li>
+        <li>Add content-type validation</li>
+      </ul>
+      <span class="tag t-red">security</span>
+    </div>
+    <div class="day" style="border-left:2px solid #C85B3A;">
+      <div class="day-label">DAY 3 — WED</div>
+      <div class="day-title">JWT Refresh Rotation</div>
+      <ul class="day-tasks">
+        <li>15min access token</li>
+        <li>30-day refresh in httpOnly cookie</li>
+        <li>Rotate refresh on every use</li>
+        <li>Update auth middleware + frontend store</li>
+      </ul>
+      <span class="tag t-red">auth</span>
+    </div>
+    <div class="day" style="border-left:2px solid #C85B3A;">
+      <div class="day-label">DAY 4 — THU</div>
+      <div class="day-title">API Versioning + Soft Deletes</div>
+      <ul class="day-tasks">
+        <li>Prefix all routes with /api/v1/</li>
+        <li>Update frontend Axios base URL</li>
+        <li>Global Mongoose soft delete plugin</li>
+        <li>Add deletedAt to all models</li>
+      </ul>
+      <span class="tag t-red">data safety</span>
+    </div>
+    <div class="day" style="border-left:2px solid #C85B3A;">
+      <div class="day-label">DAY 5 — FRI</div>
+      <div class="day-title">Pagination + Health</div>
+      <ul class="day-tasks">
+        <li>Cursor-based pagination (orders, reviews)</li>
+        <li>/health endpoint (process alive)</li>
+        <li>/ready endpoint (Mongo connected)</li>
+        <li>Sentry setup on Express + Next.js</li>
+      </ul>
+      <span class="tag t-red">reliability</span>
+    </div>
+    <div class="day" style="border-left:2px solid #C85B3A;">
+      <div class="day-label">DAY 6 — SAT</div>
+      <div class="day-title">Opening Hours Engine</div>
+      <ul class="day-tasks">
+        <li>Per-day schedule schema on Restaurant model</li>
+        <li>isOpen() utility function</li>
+        <li>Auto-disable order button when closed</li>
+        <li>Holiday closure support</li>
+      </ul>
+      <span class="tag t-red">critical gap</span>
+    </div>
+    <div class="day rest-day" style="border-left:2px solid #999;">
+      <div class="day-label">DAY 7 — SUN</div>
+      <div class="day-title">Review + Rest</div>
+      <ul class="day-tasks">
+        <li>Test all Week 1 changes</li>
+        <li>Fix any broken auth flows</li>
+        <li>Code review with Claude Code</li>
+      </ul>
+      <span class="tag" style="background:#F1EFE8;color:#444;">buffer</span>
+    </div>
+  </div>
+</div>
+
+<hr class="divider"/>
+
+<!-- WEEK 2 -->
+<div class="week-block">
+  <div class="week-header">
+    <span class="week-badge" style="background:#FAEEDA;color:#633806;">Week 2</span>
+    <span class="week-title">Redis — Full Integration</span>
+    <span class="week-sub">ioredis · cache · sessions · rate limit · Socket.io adapter</span>
+  </div>
+  <div class="days">
+    <div class="day" style="border-left:2px solid #D08B2D;">
+      <div class="day-label">DAY 8 — MON</div>
+      <div class="day-title">Redis Setup</div>
+      <ul class="day-tasks">
+        <li>Install ioredis</li>
+        <li>Connection + pool config</li>
+        <li>Reconnect logic + error handling</li>
+        <li>Add Redis to /ready health check</li>
+      </ul>
+      <span class="tag t-amber">foundation</span>
+    </div>
+    <div class="day" style="border-left:2px solid #D08B2D;">
+      <div class="day-label">DAY 9 — TUE</div>
+      <div class="day-title">Cache-Aside</div>
+      <ul class="day-tasks">
+        <li>Cache GET /restaurants (TTL 60s)</li>
+        <li>Cache GET /menu/:id (TTL 120s)</li>
+        <li>Cache tag invalidation on update</li>
+        <li>Write-through on availability toggle</li>
+      </ul>
+      <span class="tag t-amber">performance</span>
+    </div>
+    <div class="day" style="border-left:2px solid #D08B2D;">
+      <div class="day-label">DAY 10 — WED</div>
+      <div class="day-title">Sessions + Rate Limit</div>
+      <ul class="day-tasks">
+        <li>Redis session store (replace stateless JWT)</li>
+        <li>Instant token revoke on logout/ban</li>
+        <li>Sliding window rate limit via Redis</li>
+        <li>Apply on OTP + login + order endpoints</li>
+      </ul>
+      <span class="tag t-amber">security</span>
+    </div>
+    <div class="day" style="border-left:2px solid #D08B2D;">
+      <div class="day-label">DAY 11 — THU</div>
+      <div class="day-title">Socket.io + Idempotency</div>
+      <ul class="day-tasks">
+        <li>@socket.io/redis-adapter (1 import)</li>
+        <li>Test chat works across instances</li>
+        <li>Idempotency keys on order placement</li>
+        <li>Idempotency keys on payment charge</li>
+      </ul>
+      <span class="tag t-amber">reliability</span>
+    </div>
+    <div class="day" style="border-left:2px solid #D08B2D;">
+      <div class="day-label">DAY 12 — FRI</div>
+      <div class="day-title">Optimistic Locking</div>
+      <ul class="day-tasks">
+        <li>Version field on User (wallet + loyalty)</li>
+        <li>Version check before update</li>
+        <li>Retry logic on version mismatch</li>
+        <li>Test concurrent requests</li>
+      </ul>
+      <span class="tag t-amber">correctness</span>
+    </div>
+    <div class="day" style="border-left:2px solid #D08B2D;">
+      <div class="day-label">DAY 13 — SAT</div>
+      <div class="day-title">TanStack Query Upgrade</div>
+      <ul class="day-tasks">
+        <li>Add staleTime + gcTime to all queries</li>
+        <li>Optimistic updates on cart mutations</li>
+        <li>invalidateQueries on order place</li>
+        <li>Infinite query on order history list</li>
+        <li>Prefetch restaurant on hover</li>
+      </ul>
+      <span class="tag t-amber">UX</span>
+    </div>
+    <div class="day rest-day" style="border-left:2px solid #999;">
+      <div class="day-label">DAY 14 — SUN</div>
+      <div class="day-title">Review + Buffer</div>
+      <ul class="day-tasks">
+        <li>Test Redis cache hit/miss in dev</li>
+        <li>Verify Socket.io still works</li>
+        <li>Fix any TanStack Query stale state bugs</li>
+      </ul>
+      <span class="tag" style="background:#F1EFE8;color:#444;">buffer</span>
+    </div>
+  </div>
+</div>
+
+<hr class="divider"/>
+
+<!-- WEEK 3 -->
+<div class="week-block">
+  <div class="week-header">
+    <span class="week-badge" style="background:#E1F5EE;color:#085041;">Week 3</span>
+    <span class="week-title">BullMQ — Async Job Pipeline</span>
+    <span class="week-sub">email · image · notifications · outbox · refunds</span>
+  </div>
+  <div class="days">
+    <div class="day" style="border-left:2px solid #1A9B7B;">
+      <div class="day-label">DAY 15 — MON</div>
+      <div class="day-title">BullMQ Core Setup</div>
+      <ul class="day-tasks">
+        <li>Install BullMQ</li>
+        <li>Priority queue structure</li>
+        <li>Dead Letter Queue config</li>
+        <li>BullBoard admin UI (auth-gated)</li>
+      </ul>
+      <span class="tag t-green">foundation</span>
+    </div>
+    <div class="day" style="border-left:2px solid #1A9B7B;">
+      <div class="day-label">DAY 16 — TUE</div>
+      <div class="day-title">Email Worker</div>
+      <ul class="day-tasks">
+        <li>Move all Nodemailer off request path</li>
+        <li>Switch to Resend (better DX)</li>
+        <li>Queue: OTP, order confirm, receipt</li>
+        <li>Retry with exponential backoff</li>
+      </ul>
+      <span class="tag t-green">async</span>
+    </div>
+    <div class="day" style="border-left:2px solid #1A9B7B;">
+      <div class="day-label">DAY 17 — WED</div>
+      <div class="day-title">Image Worker</div>
+      <ul class="day-tasks">
+        <li>Multer hands off to queue</li>
+        <li>Resize + compress before Cloudinary</li>
+        <li>Never block upload response</li>
+        <li>Return temp URL immediately</li>
+      </ul>
+      <span class="tag t-green">performance</span>
+    </div>
+    <div class="day" style="border-left:2px solid #1A9B7B;">
+      <div class="day-label">DAY 18 — THU</div>
+      <div class="day-title">FCM Push Notifications</div>
+      <ul class="day-tasks">
+        <li>FCM setup + device token storage</li>
+        <li>Notification worker via BullMQ</li>
+        <li>Push: order accepted, rider nearby</li>
+        <li>Push: chat reply when user offline</li>
+      </ul>
+      <span class="tag t-green">UX gap</span>
+    </div>
+    <div class="day" style="border-left:2px solid #1A9B7B;">
+      <div class="day-label">DAY 19 — FRI</div>
+      <div class="day-title">Outbox Pattern</div>
+      <ul class="day-tasks">
+        <li>Outbox collection in Mongo</li>
+        <li>Atomic: save order + outbox event</li>
+        <li>Poller reads outbox → BullMQ</li>
+        <li>OrderPlaced → fan out to workers</li>
+      </ul>
+      <span class="tag t-green">reliability</span>
+    </div>
+    <div class="day" style="border-left:2px solid #1A9B7B;">
+      <div class="day-label">DAY 20 — SAT</div>
+      <div class="day-title">Refund Workflow</div>
+      <ul class="day-tasks">
+        <li>User raises dispute UI</li>
+        <li>Admin review dashboard</li>
+        <li>Stripe refund via API on approve</li>
+        <li>Status: raised→review→resolved</li>
+        <li>Email notification on resolution</li>
+      </ul>
+      <span class="tag t-green">critical gap</span>
+    </div>
+    <div class="day rest-day" style="border-left:2px solid #999;">
+      <div class="day-label">DAY 21 — SUN</div>
+      <div class="day-title">Review + Buffer</div>
+      <ul class="day-tasks">
+        <li>Test BullBoard queue depth</li>
+        <li>Verify DLQ catches failed jobs</li>
+        <li>Test push notification end-to-end</li>
+      </ul>
+      <span class="tag" style="background:#F1EFE8;color:#444;">buffer</span>
+    </div>
+  </div>
+</div>
+
+<hr class="divider"/>
+
+<!-- WEEK 4 -->
+<div class="week-block">
+  <div class="week-header">
+    <span class="week-badge" style="background:#E6F1FB;color:#0C447C;">Week 4</span>
+    <span class="week-title">Features — Visible to Users</span>
+    <span class="week-sub">wallet · loyalty · referral · scheduled orders · RBAC</span>
+  </div>
+  <div class="days">
+    <div class="day" style="border-left:2px solid #3A86C8;">
+      <div class="day-label">DAY 22 — MON</div>
+      <div class="day-title">In-App Wallet</div>
+      <ul class="day-tasks">
+        <li>Wallet balance field on User model</li>
+        <li>Stripe top-up → credit wallet</li>
+        <li>Deduct wallet on order checkout</li>
+        <li>Transaction history collection</li>
+      </ul>
+      <span class="tag t-blue">revenue</span>
+    </div>
+    <div class="day" style="border-left:2px solid #3A86C8;">
+      <div class="day-label">DAY 23 — TUE</div>
+      <div class="day-title">Tiered Loyalty</div>
+      <ul class="day-tasks">
+        <li>Bronze/Silver/Gold tier by spend</li>
+        <li>Tier perks (free delivery, discounts)</li>
+        <li>Loyalty worker recalc via BullMQ</li>
+        <li>Tier badge in user profile UI</li>
+      </ul>
+      <span class="tag t-blue">retention</span>
+    </div>
+    <div class="day" style="border-left:2px solid #3A86C8;">
+      <div class="day-label">DAY 24 — WED</div>
+      <div class="day-title">Referral System</div>
+      <ul class="day-tasks">
+        <li>Unique referral code per user</li>
+        <li>Track referral chain in Mongo</li>
+        <li>Credit referrer on first order</li>
+        <li>Referral stats in user dashboard</li>
+      </ul>
+      <span class="tag t-blue">growth</span>
+    </div>
+    <div class="day" style="border-left:2px solid #3A86C8;">
+      <div class="day-label">DAY 25 — THU</div>
+      <div class="day-title">Scheduled + Reorder</div>
+      <ul class="day-tasks">
+        <li>Schedule order (deliver at X time)</li>
+        <li>BullMQ delayed job triggers order</li>
+        <li>Reorder in one tap (last N orders)</li>
+        <li>Cart pre-fill with previous items</li>
+      </ul>
+      <span class="tag t-blue">UX</span>
+    </div>
+    <div class="day" style="border-left:2px solid #3A86C8;">
+      <div class="day-label">DAY 26 — FRI</div>
+      <div class="day-title">RBAC + Circuit Breaker</div>
+      <ul class="day-tasks">
+        <li>Role → permission map middleware</li>
+        <li>Roles: admin / rider / customer</li>
+        <li>opossum circuit breaker on Stripe</li>
+        <li>opossum circuit breaker on Cloudinary</li>
+      </ul>
+      <span class="tag t-blue">security</span>
+    </div>
+    <div class="day" style="border-left:2px solid #3A86C8;">
+      <div class="day-label">DAY 27 — SAT</div>
+      <div class="day-title">Verified Reviews + UPI</div>
+      <ul class="day-tasks">
+        <li>Gate reviews behind completed order</li>
+        <li>7-day review window post-delivery</li>
+        <li>Admin reply to reviews</li>
+        <li>Add UPI payment method (Stripe IN)</li>
+      </ul>
+      <span class="tag t-blue">trust</span>
+    </div>
+    <div class="day rest-day" style="border-left:2px solid #999;">
+      <div class="day-label">DAY 28 — SUN</div>
+      <div class="day-title">Final Review</div>
+      <ul class="day-tasks">
+        <li>End-to-end test all new features</li>
+        <li>Fix any broken flows</li>
+        <li>Docker Compose all services</li>
+        <li>Deploy to staging</li>
+      </ul>
+      <span class="tag" style="background:#F1EFE8;color:#444;">ship it</span>
+    </div>
+  </div>
+</div>
+
+<hr class="divider"/>
+
+<!-- MONTH 2 PREVIEW -->
+<div class="week-block">
+  <div class="week-header">
+    <span class="week-badge" style="background:#EEEDFE;color:#3C3489;">Month 2</span>
+    <span class="week-title">What comes next (don't rush it)</span>
+    <span class="week-sub">rider layer · delivery zones · AI chatbot · MongoDB geo</span>
+  </div>
+  <div class="days">
+    <div class="day" style="border-left:2px solid #7F77DD;">
+      <div class="day-label">WEEK 5</div>
+      <div class="day-title">Rider Layer</div>
+      <ul class="day-tasks">
+        <li>Rider PWA (Next.js separate app)</li>
+        <li>Order accept/reject flow</li>
+        <li>GPS push via Socket.io every 5s</li>
+        <li>Live tracking on customer side</li>
+      </ul>
+      <span class="tag t-purple">biggest gap</span>
+    </div>
+    <div class="day" style="border-left:2px solid #7F77DD;">
+      <div class="day-label">WEEK 6</div>
+      <div class="day-title">Delivery Zones</div>
+      <ul class="day-tasks">
+        <li>GeoJSON polygon per restaurant</li>
+        <li>MongoDB 2dsphere index</li>
+        <li>Block orders outside zone</li>
+        <li>Variable fee by zone distance</li>
+      </ul>
+      <span class="tag t-purple">operational</span>
+    </div>
+    <div class="day" style="border-left:2px solid #7F77DD;">
+      <div class="day-label">WEEK 7</div>
+      <div class="day-title">AI Support Chatbot</div>
+      <ul class="day-tasks">
+        <li>Claude API in chat system</li>
+        <li>Handle: order status, offers, cancel</li>
+        <li>Escalate to human when needed</li>
+        <li>Context-aware per user/order</li>
+      </ul>
+      <span class="tag t-purple">differentiator</span>
+    </div>
+    <div class="day" style="border-left:2px solid #7F77DD;">
+      <div class="day-label">WEEK 8</div>
+      <div class="day-title">Analytics + Search</div>
+      <ul class="day-tasks">
+        <li>Mongo aggregation dashboard</li>
+        <li>Revenue / top items / peak hours</li>
+        <li>Atlas Search for restaurants + menu</li>
+        <li>Dietary filter + allergen tags</li>
+      </ul>
+      <span class="tag t-purple">operations</span>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top:1rem;display:flex;gap:8px;flex-wrap:wrap;">
+  <button onclick="sendPrompt('Give me the exact Claude Code prompts to implement Day 1 — Helmet.js and CORS for FlavorStack')">Day 1 prompts ↗</button>
+  <button onclick="sendPrompt('How do I upgrade TanStack Query in FlavorStack for optimistic updates and infinite queries?')">TanStack upgrade ↗</button>
+  <button onclick="sendPrompt('How do I implement the in-app wallet with Stripe and MongoDB for FlavorStack?')">Wallet (Day 22) ↗</button>
+  <button onclick="sendPrompt('How do I set up BullMQ with priority queues and DLQ for FlavorStack?')">BullMQ setup ↗</button>
+</div>

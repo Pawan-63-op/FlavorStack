@@ -1,0 +1,683 @@
+#!/usr/bin/env bash
+# =============================================================================
+# FlavorStack — Backend Scaffold
+# Architecture : Clean Architecture (Domain → Application → Infrastructure → API)
+# Principles   : SOLID · OOP · LLD bounded contexts · RBAC · Event-driven
+# Async layer  : BullMQ workers + Outbox pattern
+# Infra deps   : Redis (cache · sessions · rate-limit · Socket.io adapter)
+#                Docker (Compose — api, workers, redis, nginx)
+# Usage        : bash create_flavorstack_backend.sh [target-dir]
+#                Defaults to ./server if no argument is given.
+# =============================================================================
+
+set -euo pipefail
+
+ROOT="${1:-server}"
+
+# ─── colour helpers ───────────────────────────────────────────────────────────
+GREEN="\033[0;32m"; CYAN="\033[0;36m"; YELLOW="\033[0;33m"; RESET="\033[0m"
+info()    { echo -e "${CYAN}[scaffold]${RESET} $*"; }
+success() { echo -e "${GREEN}[done]${RESET}    $*"; }
+warn()    { echo -e "${YELLOW}[note]${RESET}    $*"; }
+
+# ─── guard ────────────────────────────────────────────────────────────────────
+if [[ -d "$ROOT" ]]; then
+  warn "Directory '$ROOT' already exists. Merging (no files overwritten)."
+fi
+
+# =============================================================================
+# HELPER: mk — silently make a directory
+# =============================================================================
+mk() { mkdir -p "$ROOT/$1"; }
+
+# =============================================================================
+# HELPER: touch_with_header — create an empty .ts stub with a one-line comment
+#         so the file exists but contains NO implementation code.
+# =============================================================================
+stub() {
+  local path="$ROOT/$1"
+  local dir; dir="$(dirname "$path")"
+  mkdir -p "$dir"
+  if [[ ! -f "$path" ]]; then
+    echo "// $2" > "$path"
+  fi
+}
+
+info "Creating FlavorStack backend in './$ROOT' ..."
+
+# =============================================================================
+# 0. TOP-LEVEL CONFIG & DOCKER FILES
+#    Everything needed before a single line of business logic is written.
+# =============================================================================
+info "0 · Top-level config & Docker ..."
+
+# -- TypeScript / Node --
+stub "tsconfig.json"                          "TypeScript project config (strict, paths)"
+stub "tsconfig.build.json"                    "Production build config — excludes tests"
+stub "package.json"                           "Dependencies: express, mongoose, ioredis, bullmq, socket.io, stripe, cloudinary, nodemailer, helmet, zod, opossum, winston, sentry"
+stub ".env.example"                           "All required env vars — safe to commit (no secrets)"
+stub ".env"                                   "NEVER COMMIT — real secrets go here"
+stub ".eslintrc.json"                         "ESLint + TypeScript rules"
+stub ".prettierrc"                            "Prettier formatting rules"
+stub "nodemon.json"                           "Nodemon watch config for dev"
+stub ".gitignore"                             "node_modules, dist, .env, coverage, *.log"
+
+# -- Docker --
+stub "Dockerfile"                             "Multi-stage: build (tsc) → production (node dist/)"
+stub "Dockerfile.worker"                      "Same codebase, entrypoint = workers/index.ts"
+stub "docker-compose.yml"                     "Services: api, worker-email, worker-image, worker-notify, worker-loyalty, outbox-poller, redis, nginx"
+stub "docker-compose.dev.yml"                 "Dev overrides: volume mounts for hot-reload, debug ports"
+stub ".dockerignore"                          "node_modules, dist, .env, coverage"
+
+# -- Nginx (reverse proxy for Docker) --
+mk "nginx"
+stub "nginx/nginx.conf"                       "Proxy api:8000, WebSocket upgrade for Socket.io, static caching"
+
+# -- GitHub Actions CI/CD --
+mk ".github/workflows"
+stub ".github/workflows/ci.yml"               "lint → tsc → unit tests → build Docker image"
+stub ".github/workflows/deploy.yml"           "Push image → deploy to staging on merge to main"
+
+# =============================================================================
+# 1. DOMAIN LAYER  (innermost — zero dependencies on Express / Mongo / Redis)
+#    Contains: Entities, Value Objects, Domain Events, Repository Interfaces,
+#              Domain Service Interfaces, Enums, Errors.
+#    OOP: each entity is a class with behaviour, not a plain data bag.
+#    SOLID: Dependency Inversion — application depends on interfaces here,
+#           not on concrete Mongoose models.
+# =============================================================================
+info "1 · Domain layer ..."
+
+# ── 1a. Shared kernel ─────────────────────────────────────────────────────────
+mk "src/domain/shared"
+stub "src/domain/shared/Entity.ts"            "Abstract base class: _id, equals(), toJSON() — OOP base for all entities"
+stub "src/domain/shared/ValueObject.ts"       "Abstract VO base: immutable, structural equality"
+stub "src/domain/shared/AggregateRoot.ts"     "Extends Entity — holds domain events list, addDomainEvent(), pullDomainEvents()"
+stub "src/domain/shared/DomainEvent.ts"       "Interface: eventId, occurredAt, eventName, aggregateId"
+stub "src/domain/shared/Result.ts"            "Result<T> / Either monad — avoid throw-based control flow"
+stub "src/domain/shared/Guard.ts"             "Null/type/range checks returning Result — used inside entities"
+stub "src/domain/shared/UniqueEntityId.ts"    "Wraps ObjectId string — prevents primitive obsession"
+stub "src/domain/shared/Pagination.ts"        "CursorPage<T> value object — cursor-based pagination contract"
+stub "src/domain/shared/Money.ts"             "Value object: amount (in paise) + currency — prevents float arithmetic bugs"
+stub "src/domain/shared/errors/DomainError.ts"       "Base domain error class"
+stub "src/domain/shared/errors/NotFoundError.ts"     "Entity not found"
+stub "src/domain/shared/errors/ConflictError.ts"     "Optimistic lock mismatch, duplicate key"
+stub "src/domain/shared/errors/ForbiddenError.ts"    "RBAC denial"
+stub "src/domain/shared/errors/ValidationError.ts"   "Invariant violation"
+
+# ── 1b. Identity bounded context ──────────────────────────────────────────────
+mk "src/domain/identity"
+stub "src/domain/identity/entities/User.ts"               "Entity: name, email, passwordHash, role, isVerified, version, deletedAt — methods: verify(), deactivate(), incrementVersion()"
+stub "src/domain/identity/entities/Rider.ts"              "Entity: userId, vehicleType, status, currentLocation — updateLocation(), goOffline()"
+stub "src/domain/identity/entities/OtpCode.ts"            "Entity: codeHash, purpose, used, expiresAt — isExpired(), consume()"
+stub "src/domain/identity/entities/RefreshToken.ts"       "Entity: tokenHash, family, revoked, expiresAt — revoke(), isValid()"
+stub "src/domain/identity/value-objects/Email.ts"         "VO: validates format, normalises lowercase"
+stub "src/domain/identity/value-objects/Password.ts"      "VO: min-length, hashing encapsulated"
+stub "src/domain/identity/value-objects/Role.ts"          "VO: enum customer | admin | rider"
+stub "src/domain/identity/value-objects/Permission.ts"    "VO: role + resource + actions[]"
+stub "src/domain/identity/events/UserRegistered.ts"       "Domain event — triggers welcome email worker"
+stub "src/domain/identity/events/UserVerified.ts"         "Domain event"
+stub "src/domain/identity/events/PasswordReset.ts"        "Domain event"
+stub "src/domain/identity/events/RiderLocationUpdated.ts" "Domain event — Fulfillment listens"
+stub "src/domain/identity/repositories/IUserRepository.ts"         "Interface: findById, findByEmail, save, softDelete"
+stub "src/domain/identity/repositories/IRiderRepository.ts"        "Interface: findByUserId, findAvailableNear, save"
+stub "src/domain/identity/repositories/IOtpRepository.ts"          "Interface: findActiveByUserId, save, markUsed"
+stub "src/domain/identity/repositories/IRefreshTokenRepository.ts" "Interface: findByTokenHash, revokeFamily, save"
+stub "src/domain/identity/repositories/IPermissionRepository.ts"   "Interface: findByRoleAndResource"
+stub "src/domain/identity/services/IAuthService.ts"       "Interface: login(), logout(), refresh(), verifyOtp()"
+stub "src/domain/identity/services/IRbacService.ts"       "Interface: can(role, resource, action): boolean"
+
+# ── 1c. Catalog bounded context ───────────────────────────────────────────────
+mk "src/domain/catalog"
+stub "src/domain/catalog/entities/Restaurant.ts"          "Entity: name, ownerId, cuisineType, isActive, openingHours, deletedAt — isOpen(), toggleActive()"
+stub "src/domain/catalog/entities/MenuItem.ts"            "Entity: restaurantId, name, price(Money), category, isAvailable — toggleAvailability()"
+stub "src/domain/catalog/entities/Category.ts"            "Entity: label, restaurantId, sortOrder"
+stub "src/domain/catalog/entities/OpeningHours.ts"        "VO: per-day schedule + holiday list — isOpenAt(datetime)"
+stub "src/domain/catalog/entities/DeliveryZone.ts"        "Entity: GeoJSON polygon, restaurantId, feeMatrix"
+stub "src/domain/catalog/events/MenuItemToggled.ts"       "Domain event — Commerce listens for availability"
+stub "src/domain/catalog/events/RestaurantCreated.ts"     "Domain event"
+stub "src/domain/catalog/repositories/IRestaurantRepository.ts"   "Interface: findById, findAll(cursor), search, save, softDelete"
+stub "src/domain/catalog/repositories/IMenuItemRepository.ts"     "Interface: findByRestaurant, findById, save"
+stub "src/domain/catalog/repositories/IDeliveryZoneRepository.ts" "Interface: findZoneContaining(point)"
+stub "src/domain/catalog/services/IOpeningHoursService.ts"        "Interface: isRestaurantOpen(restaurantId, at?)"
+
+# ── 1d. Commerce bounded context ──────────────────────────────────────────────
+mk "src/domain/commerce"
+stub "src/domain/commerce/entities/Cart.ts"               "AggregateRoot: userId, items[], appliedCoupon — addItem(), removeItem(), applyCoupon(), clear()"
+stub "src/domain/commerce/entities/CartItem.ts"           "Entity: menuItemId, quantity, unitPrice(Money)"
+stub "src/domain/commerce/entities/Order.ts"              "AggregateRoot: status FSM, items[], totalAmount(Money), paymentId — place(), cancel(), confirm()"
+stub "src/domain/commerce/entities/OrderItem.ts"          "Entity: menuItemId, name snapshot, quantity, unitPrice"
+stub "src/domain/commerce/entities/Payment.ts"            "Entity: stripePaymentIntentId, amount, status, method (card|wallet|upi)"
+stub "src/domain/commerce/entities/Coupon.ts"             "Entity: code, discountType, value, minOrderValue, expiresAt, maxUses — isValid(), apply(Money)"
+stub "src/domain/commerce/entities/Wallet.ts"             "Entity: userId, balanceInPaise, version — credit(), debit() with optimistic lock"
+stub "src/domain/commerce/entities/Transaction.ts"        "Entity: walletId, type credit|debit, amount, reference"
+stub "src/domain/commerce/value-objects/OrderStatus.ts"   "VO: enum pending|confirmed|preparing|dispatched|delivered|cancelled"
+stub "src/domain/commerce/value-objects/IdempotencyKey.ts" "VO: uuid per request — prevents double charge"
+stub "src/domain/commerce/events/OrderPlaced.ts"          "Domain event — triggers Outbox fan-out to all workers"
+stub "src/domain/commerce/events/OrderCancelled.ts"       "Domain event"
+stub "src/domain/commerce/events/PaymentSucceeded.ts"     "Domain event"
+stub "src/domain/commerce/events/WalletCredited.ts"       "Domain event"
+stub "src/domain/commerce/repositories/ICartRepository.ts"        "Interface: findByUserId, save, clear"
+stub "src/domain/commerce/repositories/IOrderRepository.ts"       "Interface: findById, findByUser(cursor), save"
+stub "src/domain/commerce/repositories/IPaymentRepository.ts"     "Interface: findByOrderId, save"
+stub "src/domain/commerce/repositories/ICouponRepository.ts"      "Interface: findByCode, save, incrementUse"
+stub "src/domain/commerce/repositories/IWalletRepository.ts"      "Interface: findByUserId, saveWithVersion"
+stub "src/domain/commerce/repositories/ITransactionRepository.ts" "Interface: findByWallet(cursor), save"
+stub "src/domain/commerce/services/IOrderService.ts"      "Interface: placeOrder(), cancelOrder()"
+stub "src/domain/commerce/services/IPaymentService.ts"    "Interface: charge(), refund(), topUpWallet()"
+stub "src/domain/commerce/services/ICouponService.ts"     "Interface: validate(), apply()"
+
+# ── 1e. Fulfillment bounded context ───────────────────────────────────────────
+mk "src/domain/fulfillment"
+stub "src/domain/fulfillment/entities/Delivery.ts"        "AggregateRoot: orderId, riderId, status FSM — assign(), markPickedUp(), markDelivered()"
+stub "src/domain/fulfillment/entities/RiderAssignment.ts" "Entity: deliveryId, riderId, assignedAt, acceptedAt"
+stub "src/domain/fulfillment/entities/TrackingEvent.ts"   "Entity: deliveryId, coordinates, timestamp, eventType"
+stub "src/domain/fulfillment/entities/Refund.ts"          "AggregateRoot: orderId, reason, status raised|review|resolved — approve(), reject()"
+stub "src/domain/fulfillment/entities/DisputeLog.ts"      "Entity: refundId, adminId, action, note, timestamp"
+stub "src/domain/fulfillment/entities/ScheduledOrder.ts"  "Entity: orderId, scheduledAt, bullmqJobId — cancel()"
+stub "src/domain/fulfillment/entities/OutboxEvent.ts"     "Entity: eventName, payload, processedAt, retries — marks atomically with order save"
+stub "src/domain/fulfillment/value-objects/DeliveryStatus.ts"     "VO: enum assigned|en-route|picked-up|delivered|failed"
+stub "src/domain/fulfillment/value-objects/RefundStatus.ts"       "VO: enum raised|under-review|approved|rejected"
+stub "src/domain/fulfillment/events/DeliveryAssigned.ts"          "Domain event"
+stub "src/domain/fulfillment/events/DeliveryCompleted.ts"         "Domain event — Engagement listens for loyalty credit"
+stub "src/domain/fulfillment/events/RefundApproved.ts"            "Domain event — triggers Stripe refund worker"
+stub "src/domain/fulfillment/repositories/IDeliveryRepository.ts"       "Interface"
+stub "src/domain/fulfillment/repositories/IRefundRepository.ts"         "Interface"
+stub "src/domain/fulfillment/repositories/IOutboxRepository.ts"         "Interface: saveWithSession(), findUnprocessed(), markProcessed()"
+stub "src/domain/fulfillment/repositories/IScheduledOrderRepository.ts" "Interface"
+stub "src/domain/fulfillment/services/IDeliveryAssignmentService.ts"    "Interface: assignNearestRider(orderId)"
+stub "src/domain/fulfillment/services/IRefundService.ts"                "Interface: raise(), approve(), reject()"
+
+# ── 1f. Engagement bounded context ────────────────────────────────────────────
+mk "src/domain/engagement"
+stub "src/domain/engagement/entities/Review.ts"           "Entity: userId, restaurantId, orderId (gate), rating, body, adminReply, windowExpiresAt — addReply(), isWindowOpen()"
+stub "src/domain/engagement/entities/LoyaltyAccount.ts"   "AggregateRoot: userId, points, tier — credit(), redeem(), recalculateTier()"
+stub "src/domain/engagement/entities/LoyaltyTier.ts"      "VO: enum bronze|silver|gold, threshold, perks"
+stub "src/domain/engagement/entities/Referral.ts"         "Entity: referrerId, refereeId, code, creditedAt"
+stub "src/domain/engagement/entities/Conversation.ts"     "AggregateRoot: participants[], lastMessage, type user|support"
+stub "src/domain/engagement/entities/ChatMessage.ts"      "Entity: conversationId, senderId, body, readAt"
+stub "src/domain/engagement/entities/Notification.ts"     "Entity: userId, title, body, type, readAt"
+stub "src/domain/engagement/entities/DeviceToken.ts"      "Entity: userId, fcmToken, platform ios|android|web"
+stub "src/domain/engagement/events/ReviewCreated.ts"      "Domain event"
+stub "src/domain/engagement/events/LoyaltyTierChanged.ts" "Domain event"
+stub "src/domain/engagement/events/ReferralCredited.ts"   "Domain event"
+stub "src/domain/engagement/repositories/IReviewRepository.ts"         "Interface: findByRestaurant(cursor), findByUser, save"
+stub "src/domain/engagement/repositories/ILoyaltyRepository.ts"        "Interface: findByUserId, save"
+stub "src/domain/engagement/repositories/IReferralRepository.ts"       "Interface: findByCode, findByReferrer, save"
+stub "src/domain/engagement/repositories/IConversationRepository.ts"   "Interface"
+stub "src/domain/engagement/repositories/IChatMessageRepository.ts"    "Interface: findByConversation(cursor), save"
+stub "src/domain/engagement/repositories/INotificationRepository.ts"   "Interface"
+stub "src/domain/engagement/repositories/IDeviceTokenRepository.ts"    "Interface: findByUser, upsert"
+stub "src/domain/engagement/services/INotificationService.ts"          "Interface: sendPush(), sendInApp()"
+stub "src/domain/engagement/services/IChatService.ts"                  "Interface: sendMessage(), markRead()"
+
+# =============================================================================
+# 2. APPLICATION LAYER  (use-cases — orchestrates domain objects)
+#    Contains: Use-case classes (one class = one use-case), DTOs (in/out),
+#              Application Service implementations, Event handlers.
+#    SOLID: SRP — one use-case per class.
+#           OCP — new use-cases without touching existing ones.
+# =============================================================================
+info "2 · Application layer ..."
+
+# ── 2a. Identity use-cases ────────────────────────────────────────────────────
+mk "src/application/identity/use-cases"
+stub "src/application/identity/use-cases/RegisterUser.ts"        "UC: validate → create User → enqueue welcome email via event"
+stub "src/application/identity/use-cases/VerifyEmail.ts"         "UC: consume OTP → mark isVerified"
+stub "src/application/identity/use-cases/Login.ts"               "UC: verify password → issue access + refresh tokens → write Redis session"
+stub "src/application/identity/use-cases/Logout.ts"              "UC: revoke RefreshToken → delete Redis session"
+stub "src/application/identity/use-cases/RefreshTokens.ts"       "UC: validate token hash → detect reuse → rotate"
+stub "src/application/identity/use-cases/ForgotPassword.ts"      "UC: generate OTP → enqueue email"
+stub "src/application/identity/use-cases/ResetPassword.ts"       "UC: consume OTP → hash new password → revoke all sessions"
+stub "src/application/identity/use-cases/GetProfile.ts"          "UC: fetch User + Rider if applicable"
+stub "src/application/identity/use-cases/UpdateProfile.ts"       "UC: update allowed fields only"
+stub "src/application/identity/use-cases/DeactivateUser.ts"      "UC: admin only — soft-delete + revoke sessions"
+stub "src/application/identity/use-cases/RegisterRider.ts"       "UC: create Rider profile linked to User(role=rider)"
+stub "src/application/identity/use-cases/UpdateRiderLocation.ts" "UC: validate coords → save → emit RiderLocationUpdated event"
+
+mk "src/application/identity/dtos"
+stub "src/application/identity/dtos/RegisterUserDto.ts"    "Input DTO — validated by Zod"
+stub "src/application/identity/dtos/LoginDto.ts"           "Input DTO"
+stub "src/application/identity/dtos/AuthResponseDto.ts"    "Output DTO — accessToken + user summary"
+stub "src/application/identity/dtos/UserProfileDto.ts"     "Output DTO"
+
+mk "src/application/identity/event-handlers"
+stub "src/application/identity/event-handlers/OnUserRegistered.ts"  "Handler: enqueue welcome email BullMQ job"
+stub "src/application/identity/event-handlers/OnPasswordReset.ts"   "Handler: enqueue password-reset email"
+
+# ── 2b. Catalog use-cases ─────────────────────────────────────────────────────
+mk "src/application/catalog/use-cases"
+stub "src/application/catalog/use-cases/CreateRestaurant.ts"       "UC: admin only"
+stub "src/application/catalog/use-cases/UpdateRestaurant.ts"       "UC: admin + owner"
+stub "src/application/catalog/use-cases/DeleteRestaurant.ts"       "UC: soft delete"
+stub "src/application/catalog/use-cases/GetRestaurant.ts"          "UC: cache-aside Redis → Mongo fallback"
+stub "src/application/catalog/use-cases/ListRestaurants.ts"        "UC: cursor-based, cached"
+stub "src/application/catalog/use-cases/SearchRestaurants.ts"      "UC: text search + geo filter"
+stub "src/application/catalog/use-cases/AddMenuItem.ts"            "UC: invalidate restaurant cache on write"
+stub "src/application/catalog/use-cases/UpdateMenuItem.ts"         "UC: write-through cache"
+stub "src/application/catalog/use-cases/ToggleMenuItemAvailability.ts" "UC: Redis write-through + emit MenuItemToggled"
+stub "src/application/catalog/use-cases/SetOpeningHours.ts"        "UC: update schedule, invalidate isOpen cache"
+stub "src/application/catalog/use-cases/ManageDeliveryZone.ts"     "UC: admin — create/update GeoJSON zone"
+
+mk "src/application/catalog/dtos"
+stub "src/application/catalog/dtos/CreateRestaurantDto.ts"   "Input DTO"
+stub "src/application/catalog/dtos/MenuItemDto.ts"           "Input + Output DTO"
+stub "src/application/catalog/dtos/RestaurantResponseDto.ts" "Output DTO — includes isOpen computed field"
+
+# ── 2c. Commerce use-cases ────────────────────────────────────────────────────
+mk "src/application/commerce/use-cases"
+stub "src/application/commerce/use-cases/AddToCart.ts"             "UC: validate item available + restaurant open"
+stub "src/application/commerce/use-cases/RemoveFromCart.ts"        "UC"
+stub "src/application/commerce/use-cases/ApplyCoupon.ts"           "UC: validate + apply discount"
+stub "src/application/commerce/use-cases/GetCart.ts"               "UC"
+stub "src/application/commerce/use-cases/PlaceOrder.ts"            "UC: idempotency check → deduct wallet/stripe → atomic save Order + OutboxEvent"
+stub "src/application/commerce/use-cases/ScheduleOrder.ts"         "UC: create ScheduledOrder + BullMQ delayed job"
+stub "src/application/commerce/use-cases/CancelOrder.ts"           "UC: validate cancellation window"
+stub "src/application/commerce/use-cases/GetOrderHistory.ts"       "UC: cursor-based"
+stub "src/application/commerce/use-cases/ReOrder.ts"               "UC: clone last order into cart"
+stub "src/application/commerce/use-cases/TopUpWallet.ts"           "UC: Stripe payment intent → credit Wallet"
+stub "src/application/commerce/use-cases/GetWalletBalance.ts"      "UC"
+stub "src/application/commerce/use-cases/GetTransactionHistory.ts" "UC: cursor-based"
+stub "src/application/commerce/use-cases/ValidateCoupon.ts"        "UC: public validation before cart apply"
+
+mk "src/application/commerce/dtos"
+stub "src/application/commerce/dtos/PlaceOrderDto.ts"     "Input DTO — items, address, paymentMethod, idempotencyKey"
+stub "src/application/commerce/dtos/OrderResponseDto.ts"  "Output DTO"
+stub "src/application/commerce/dtos/CartResponseDto.ts"   "Output DTO"
+stub "src/application/commerce/dtos/WalletDto.ts"         "Output DTO"
+
+mk "src/application/commerce/event-handlers"
+stub "src/application/commerce/event-handlers/OnOrderPlaced.ts"    "Handler: write OutboxEvent atomically"
+stub "src/application/commerce/event-handlers/OnPaymentSucceeded.ts" "Handler: confirm Order status"
+
+# ── 2d. Fulfillment use-cases ─────────────────────────────────────────────────
+mk "src/application/fulfillment/use-cases"
+stub "src/application/fulfillment/use-cases/AssignRider.ts"         "UC: find nearest available rider → create Delivery"
+stub "src/application/fulfillment/use-cases/AcceptDelivery.ts"      "UC: rider accepts"
+stub "src/application/fulfillment/use-cases/UpdateDeliveryStatus.ts" "UC: FSM transition → emit TrackingEvent"
+stub "src/application/fulfillment/use-cases/GetLiveTracking.ts"     "UC: latest TrackingEvents for order"
+stub "src/application/fulfillment/use-cases/RaiseRefund.ts"         "UC: create Refund in 'raised' state"
+stub "src/application/fulfillment/use-cases/ReviewRefund.ts"        "UC: admin moves to 'under-review'"
+stub "src/application/fulfillment/use-cases/ApproveRefund.ts"       "UC: trigger Stripe refund + emit RefundApproved"
+stub "src/application/fulfillment/use-cases/RejectRefund.ts"        "UC"
+stub "src/application/fulfillment/use-cases/ProcessOutbox.ts"       "UC: poller reads unprocessed OutboxEvents → publishes to BullMQ"
+
+mk "src/application/fulfillment/dtos"
+stub "src/application/fulfillment/dtos/DeliveryResponseDto.ts" "Output DTO"
+stub "src/application/fulfillment/dtos/RefundDto.ts"           "Input + Output DTO"
+
+mk "src/application/fulfillment/event-handlers"
+stub "src/application/fulfillment/event-handlers/OnDeliveryCompleted.ts" "Handler: trigger loyalty credit use-case"
+stub "src/application/fulfillment/event-handlers/OnRefundApproved.ts"    "Handler: enqueue Stripe refund BullMQ job"
+
+# ── 2e. Engagement use-cases ──────────────────────────────────────────────────
+mk "src/application/engagement/use-cases"
+stub "src/application/engagement/use-cases/CreateReview.ts"         "UC: verify orderId + 7-day window + not already reviewed"
+stub "src/application/engagement/use-cases/ReplyToReview.ts"        "UC: admin only"
+stub "src/application/engagement/use-cases/GetRestaurantReviews.ts" "UC: cursor-based"
+stub "src/application/engagement/use-cases/CreditLoyaltyPoints.ts"  "UC: add points + recalculate tier"
+stub "src/application/engagement/use-cases/RedeemLoyaltyPoints.ts"  "UC: deduct points on checkout"
+stub "src/application/engagement/use-cases/GetLoyaltyAccount.ts"    "UC"
+stub "src/application/engagement/use-cases/GenerateReferralCode.ts" "UC: create unique code for user"
+stub "src/application/engagement/use-cases/ApplyReferral.ts"        "UC: validate code → credit referrer"
+stub "src/application/engagement/use-cases/GetReferralStats.ts"     "UC"
+stub "src/application/engagement/use-cases/SendMessage.ts"          "UC: save ChatMessage → emit via Socket.io"
+stub "src/application/engagement/use-cases/GetConversation.ts"      "UC: cursor-based messages"
+stub "src/application/engagement/use-cases/MarkNotificationsRead.ts" "UC"
+stub "src/application/engagement/use-cases/RegisterDeviceToken.ts"   "UC: upsert FCM token"
+
+mk "src/application/engagement/dtos"
+stub "src/application/engagement/dtos/ReviewDto.ts"         "Input + Output DTO"
+stub "src/application/engagement/dtos/LoyaltyDto.ts"        "Output DTO"
+stub "src/application/engagement/dtos/ChatMessageDto.ts"    "Input + Output DTO"
+stub "src/application/engagement/dtos/NotificationDto.ts"   "Output DTO"
+
+mk "src/application/engagement/event-handlers"
+stub "src/application/engagement/event-handlers/OnDeliveryCompleted.ts" "Handler: trigger CreditLoyaltyPoints"
+stub "src/application/engagement/event-handlers/OnUserRegistered.ts"    "Handler: create LoyaltyAccount"
+
+# =============================================================================
+# 3. INFRASTRUCTURE LAYER  (concrete implementations — Mongo, Redis, BullMQ …)
+#    SOLID: Dependency Inversion — these classes implement domain interfaces.
+#           All instantiated via DI container, never imported directly in app.
+# =============================================================================
+info "3 · Infrastructure layer ..."
+
+# ── 3a. Database — Mongoose models ────────────────────────────────────────────
+mk "src/infrastructure/database/models"
+stub "src/infrastructure/database/models/UserModel.ts"           "Mongoose schema — implements IUser shape, softDelete plugin, version field"
+stub "src/infrastructure/database/models/RiderModel.ts"          "Mongoose schema — 2dsphere index on currentLocation"
+stub "src/infrastructure/database/models/OtpCodeModel.ts"        "Mongoose schema — TTL index on expiresAt"
+stub "src/infrastructure/database/models/RefreshTokenModel.ts"   "Mongoose schema — TTL index on expiresAt"
+stub "src/infrastructure/database/models/PermissionModel.ts"     "Mongoose schema — seeded on startup"
+stub "src/infrastructure/database/models/RestaurantModel.ts"     "Mongoose schema"
+stub "src/infrastructure/database/models/MenuItemModel.ts"       "Mongoose schema"
+stub "src/infrastructure/database/models/CategoryModel.ts"       "Mongoose schema"
+stub "src/infrastructure/database/models/DeliveryZoneModel.ts"   "Mongoose schema — GeoJSON polygon"
+stub "src/infrastructure/database/models/CartModel.ts"           "Mongoose schema"
+stub "src/infrastructure/database/models/OrderModel.ts"          "Mongoose schema — status enum, outbox embedded"
+stub "src/infrastructure/database/models/PaymentModel.ts"        "Mongoose schema"
+stub "src/infrastructure/database/models/CouponModel.ts"         "Mongoose schema"
+stub "src/infrastructure/database/models/WalletModel.ts"         "Mongoose schema — version field for optimistic lock"
+stub "src/infrastructure/database/models/TransactionModel.ts"    "Mongoose schema"
+stub "src/infrastructure/database/models/DeliveryModel.ts"       "Mongoose schema"
+stub "src/infrastructure/database/models/RefundModel.ts"         "Mongoose schema"
+stub "src/infrastructure/database/models/OutboxEventModel.ts"    "Mongoose schema — processedAt nullable, retries counter"
+stub "src/infrastructure/database/models/ScheduledOrderModel.ts" "Mongoose schema"
+stub "src/infrastructure/database/models/ReviewModel.ts"         "Mongoose schema — compound unique index (userId, orderId)"
+stub "src/infrastructure/database/models/LoyaltyAccountModel.ts" "Mongoose schema"
+stub "src/infrastructure/database/models/ReferralModel.ts"       "Mongoose schema"
+stub "src/infrastructure/database/models/ConversationModel.ts"   "Mongoose schema"
+stub "src/infrastructure/database/models/ChatMessageModel.ts"    "Mongoose schema"
+stub "src/infrastructure/database/models/NotificationModel.ts"   "Mongoose schema"
+stub "src/infrastructure/database/models/DeviceTokenModel.ts"    "Mongoose schema"
+
+mk "src/infrastructure/database/plugins"
+stub "src/infrastructure/database/plugins/softDelete.plugin.ts"  "Mongoose plugin: adds deletedAt, overrides find/findOne to filter"
+stub "src/infrastructure/database/plugins/timestamp.plugin.ts"   "Mongoose plugin: createdAt, updatedAt auto-managed"
+stub "src/infrastructure/database/plugins/paginate.plugin.ts"    "Mongoose plugin: cursor-based pagination helper"
+
+mk "src/infrastructure/database/seeds"
+stub "src/infrastructure/database/seeds/permissions.seed.ts"     "Seeds all role → resource → actions entries on startup"
+stub "src/infrastructure/database/seeds/index.ts"                "Runs all seeds in order"
+
+stub "src/infrastructure/database/connection.ts"                 "Mongoose connect — reads MONGO_URI from env, emits ready/error events"
+
+# ── 3b. Repositories — concrete implementations ───────────────────────────────
+mk "src/infrastructure/repositories"
+stub "src/infrastructure/repositories/UserRepository.ts"          "Implements IUserRepository using UserModel"
+stub "src/infrastructure/repositories/RiderRepository.ts"         "Implements IRiderRepository — geo near query"
+stub "src/infrastructure/repositories/OtpRepository.ts"           "Implements IOtpRepository"
+stub "src/infrastructure/repositories/RefreshTokenRepository.ts"  "Implements IRefreshTokenRepository"
+stub "src/infrastructure/repositories/PermissionRepository.ts"    "Implements IPermissionRepository — in-memory cache"
+stub "src/infrastructure/repositories/RestaurantRepository.ts"    "Implements IRestaurantRepository"
+stub "src/infrastructure/repositories/MenuItemRepository.ts"      "Implements IMenuItemRepository"
+stub "src/infrastructure/repositories/DeliveryZoneRepository.ts"  "Implements IDeliveryZoneRepository"
+stub "src/infrastructure/repositories/CartRepository.ts"          "Implements ICartRepository"
+stub "src/infrastructure/repositories/OrderRepository.ts"         "Implements IOrderRepository"
+stub "src/infrastructure/repositories/PaymentRepository.ts"       "Implements IPaymentRepository"
+stub "src/infrastructure/repositories/CouponRepository.ts"        "Implements ICouponRepository"
+stub "src/infrastructure/repositories/WalletRepository.ts"        "Implements IWalletRepository — optimistic lock via version"
+stub "src/infrastructure/repositories/TransactionRepository.ts"   "Implements ITransactionRepository"
+stub "src/infrastructure/repositories/DeliveryRepository.ts"      "Implements IDeliveryRepository"
+stub "src/infrastructure/repositories/RefundRepository.ts"        "Implements IRefundRepository"
+stub "src/infrastructure/repositories/OutboxRepository.ts"        "Implements IOutboxRepository — session-aware atomic writes"
+stub "src/infrastructure/repositories/ScheduledOrderRepository.ts" "Implements IScheduledOrderRepository"
+stub "src/infrastructure/repositories/ReviewRepository.ts"        "Implements IReviewRepository"
+stub "src/infrastructure/repositories/LoyaltyRepository.ts"       "Implements ILoyaltyRepository"
+stub "src/infrastructure/repositories/ReferralRepository.ts"      "Implements IReferralRepository"
+stub "src/infrastructure/repositories/ConversationRepository.ts"  "Implements IConversationRepository"
+stub "src/infrastructure/repositories/ChatMessageRepository.ts"   "Implements IChatMessageRepository"
+stub "src/infrastructure/repositories/NotificationRepository.ts"  "Implements INotificationRepository"
+stub "src/infrastructure/repositories/DeviceTokenRepository.ts"   "Implements IDeviceTokenRepository"
+
+# ── 3c. Redis ─────────────────────────────────────────────────────────────────
+mk "src/infrastructure/redis"
+stub "src/infrastructure/redis/client.ts"               "ioredis client — singleton, reconnect strategy, health-check method"
+stub "src/infrastructure/redis/SessionStore.ts"         "set/get/delete session:{userId}:{sessionId} — 30d TTL"
+stub "src/infrastructure/redis/CacheStore.ts"           "get/set/invalidate with tag-based invalidation helper"
+stub "src/infrastructure/redis/RateLimiter.ts"          "Sliding window counter — used by rate-limit middleware"
+stub "src/infrastructure/redis/locks/OptimisticLock.ts" "Lua-script helper for compare-and-swap on wallet version"
+
+# ── 3d. BullMQ workers ────────────────────────────────────────────────────────
+mk "src/infrastructure/workers"
+stub "src/infrastructure/workers/index.ts"                        "Worker process entrypoint — starts all workers"
+stub "src/infrastructure/workers/email/EmailQueue.ts"             "BullMQ Queue definition — priority levels"
+stub "src/infrastructure/workers/email/EmailWorker.ts"            "Processor: welcome, OTP, order confirm, receipt, refund resolved"
+stub "src/infrastructure/workers/email/jobs/WelcomeEmailJob.ts"   "Job data type + handler"
+stub "src/infrastructure/workers/email/jobs/OtpEmailJob.ts"       "Job data type + handler"
+stub "src/infrastructure/workers/email/jobs/OrderConfirmJob.ts"   "Job data type + handler"
+stub "src/infrastructure/workers/email/jobs/RefundEmailJob.ts"    "Job data type + handler"
+stub "src/infrastructure/workers/image/ImageQueue.ts"             "BullMQ Queue — image processing"
+stub "src/infrastructure/workers/image/ImageWorker.ts"            "Processor: resize → compress → Cloudinary upload"
+stub "src/infrastructure/workers/notification/NotifyQueue.ts"     "BullMQ Queue — FCM push"
+stub "src/infrastructure/workers/notification/NotifyWorker.ts"    "Processor: send FCM via Firebase Admin SDK"
+stub "src/infrastructure/workers/loyalty/LoyaltyQueue.ts"        "BullMQ Queue — async loyalty recalc"
+stub "src/infrastructure/workers/loyalty/LoyaltyWorker.ts"       "Processor: recalc tier, credit referrer"
+stub "src/infrastructure/workers/refund/RefundQueue.ts"           "BullMQ Queue — Stripe refund execution"
+stub "src/infrastructure/workers/refund/RefundWorker.ts"          "Processor: call Stripe refund API → update Refund status"
+stub "src/infrastructure/workers/scheduled/ScheduledOrderQueue.ts" "BullMQ Queue — delayed jobs"
+stub "src/infrastructure/workers/scheduled/ScheduledOrderWorker.ts" "Processor: trigger PlaceOrder use-case at scheduled time"
+stub "src/infrastructure/workers/shared/DLQHandler.ts"            "Dead Letter Queue — log + alert on repeated failures"
+stub "src/infrastructure/workers/shared/JobLogger.ts"             "Winston-based job lifecycle logger"
+
+# ── 3e. Outbox poller ─────────────────────────────────────────────────────────
+mk "src/infrastructure/outbox"
+stub "src/infrastructure/outbox/OutboxPoller.ts"         "Polls OutboxEvent collection every N seconds → publishes to BullMQ queues"
+stub "src/infrastructure/outbox/EventRouter.ts"          "Maps eventName → target Queue + job data transformer"
+
+# ── 3f. External services ─────────────────────────────────────────────────────
+mk "src/infrastructure/external"
+stub "src/infrastructure/external/stripe/StripeService.ts"            "Implements IPaymentService — circuit breaker via opossum"
+stub "src/infrastructure/external/stripe/StripeCircuitBreaker.ts"     "opossum config: fallback, timeout, reset threshold"
+stub "src/infrastructure/external/cloudinary/CloudinaryService.ts"    "Upload/delete — circuit breaker"
+stub "src/infrastructure/external/cloudinary/CloudinaryCircuitBreaker.ts" "opossum config"
+stub "src/infrastructure/external/fcm/FcmService.ts"                  "Firebase Admin SDK push notification sender"
+stub "src/infrastructure/external/email/ResendService.ts"             "Implements email sending via Resend SDK"
+stub "src/infrastructure/external/maps/GeoService.ts"                 "Point-in-polygon check for delivery zone validation"
+
+# ── 3g. Socket.io ─────────────────────────────────────────────────────────────
+mk "src/infrastructure/realtime"
+stub "src/infrastructure/realtime/SocketServer.ts"        "Socket.io server init — attaches Redis adapter (@socket.io/redis-adapter)"
+stub "src/infrastructure/realtime/namespaces/chat.ts"     "Chat namespace — room per conversation"
+stub "src/infrastructure/realtime/namespaces/tracking.ts" "Tracking namespace — room per order, rider emits GPS every 5s"
+stub "src/infrastructure/realtime/middleware/socketAuth.ts" "Verify JWT on handshake — rejects unauthenticated connections"
+
+# ── 3h. Observability ─────────────────────────────────────────────────────────
+mk "src/infrastructure/observability"
+stub "src/infrastructure/observability/logger.ts"         "Winston — structured JSON logs, levels per env"
+stub "src/infrastructure/observability/sentry.ts"         "Sentry init — Express handler + unhandledRejection capture"
+stub "src/infrastructure/observability/httpLogger.ts"     "Morgan / custom request logger middleware"
+
+# =============================================================================
+# 4. API LAYER  (HTTP interface — Express routes, controllers, middleware)
+#    Controllers are thin: parse request → call use-case → send response.
+#    No business logic lives here — SOLID SRP enforced.
+# =============================================================================
+info "4 · API (HTTP) layer ..."
+
+mk "src/api/v1"
+
+# ── 4a. Middleware ────────────────────────────────────────────────────────────
+mk "src/api/v1/middleware"
+stub "src/api/v1/middleware/authenticate.ts"        "Verify JWT → check Redis session → attach req.user"
+stub "src/api/v1/middleware/authorize.ts"           "RBAC: authorize(resource, action) → checks Permission"
+stub "src/api/v1/middleware/rateLimiter.ts"         "Redis sliding window — configurable per route"
+stub "src/api/v1/middleware/validate.ts"            "Zod schema validator — parses body/query/params"
+stub "src/api/v1/middleware/idempotency.ts"         "Check/store idempotency key in Redis — 409 on duplicate"
+stub "src/api/v1/middleware/sanitize.ts"            "Strip HTML, block NoSQL injection operators"
+stub "src/api/v1/middleware/upload.ts"              "Multer config — hands file buffer to ImageQueue"
+stub "src/api/v1/middleware/errorHandler.ts"        "Global Express error handler — maps DomainErrors → HTTP codes"
+stub "src/api/v1/middleware/notFound.ts"            "Catch-all 404 handler"
+stub "src/api/v1/middleware/requestId.ts"           "Attach x-request-id to every request for tracing"
+
+# ── 4b. Controllers ───────────────────────────────────────────────────────────
+mk "src/api/v1/controllers"
+stub "src/api/v1/controllers/AuthController.ts"          "POST register, verify-email, login, logout, refresh, forgot-password, reset-password"
+stub "src/api/v1/controllers/UserController.ts"          "GET/PATCH profile, GET me, DELETE (admin)"
+stub "src/api/v1/controllers/RiderController.ts"         "POST register-rider, PATCH location, GET assignments"
+stub "src/api/v1/controllers/RestaurantController.ts"    "CRUD + search + opening hours"
+stub "src/api/v1/controllers/MenuController.ts"          "CRUD + toggle availability"
+stub "src/api/v1/controllers/DeliveryZoneController.ts"  "CRUD zones (admin)"
+stub "src/api/v1/controllers/CartController.ts"          "GET, POST add-item, DELETE remove-item, POST apply-coupon"
+stub "src/api/v1/controllers/OrderController.ts"         "POST place, POST schedule, POST cancel, GET history, POST reorder"
+stub "src/api/v1/controllers/PaymentController.ts"       "POST create-intent, POST webhook (Stripe)"
+stub "src/api/v1/controllers/WalletController.ts"        "GET balance, POST top-up, GET transactions"
+stub "src/api/v1/controllers/CouponController.ts"        "CRUD (admin) + POST validate (public)"
+stub "src/api/v1/controllers/DeliveryController.ts"      "PATCH status (rider), GET tracking"
+stub "src/api/v1/controllers/RefundController.ts"        "POST raise, PATCH status (admin), GET list"
+stub "src/api/v1/controllers/ReviewController.ts"        "POST create, PATCH reply (admin), GET by restaurant"
+stub "src/api/v1/controllers/LoyaltyController.ts"       "GET account, POST redeem"
+stub "src/api/v1/controllers/ReferralController.ts"      "GET code, POST apply, GET stats"
+stub "src/api/v1/controllers/ChatController.ts"          "POST send, GET conversation, GET conversations"
+stub "src/api/v1/controllers/NotificationController.ts"  "GET list, PATCH mark-read, POST register-token"
+stub "src/api/v1/controllers/HealthController.ts"        "GET /health (alive), GET /ready (Mongo+Redis)"
+stub "src/api/v1/controllers/AdminController.ts"         "Admin dashboard aggregates — users, orders, analytics"
+
+# ── 4c. Routes ────────────────────────────────────────────────────────────────
+mk "src/api/v1/routes"
+stub "src/api/v1/routes/auth.routes.ts"          "Mounts AuthController"
+stub "src/api/v1/routes/user.routes.ts"          "Mounts UserController — protected"
+stub "src/api/v1/routes/rider.routes.ts"         "Mounts RiderController — rider role"
+stub "src/api/v1/routes/restaurant.routes.ts"    "Mounts RestaurantController"
+stub "src/api/v1/routes/menu.routes.ts"          "Mounts MenuController"
+stub "src/api/v1/routes/zone.routes.ts"          "Mounts DeliveryZoneController — admin"
+stub "src/api/v1/routes/cart.routes.ts"          "Mounts CartController — customer"
+stub "src/api/v1/routes/order.routes.ts"         "Mounts OrderController — customer + admin"
+stub "src/api/v1/routes/payment.routes.ts"       "Mounts PaymentController"
+stub "src/api/v1/routes/wallet.routes.ts"        "Mounts WalletController"
+stub "src/api/v1/routes/coupon.routes.ts"        "Mounts CouponController"
+stub "src/api/v1/routes/delivery.routes.ts"      "Mounts DeliveryController"
+stub "src/api/v1/routes/refund.routes.ts"        "Mounts RefundController"
+stub "src/api/v1/routes/review.routes.ts"        "Mounts ReviewController"
+stub "src/api/v1/routes/loyalty.routes.ts"       "Mounts LoyaltyController"
+stub "src/api/v1/routes/referral.routes.ts"      "Mounts ReferralController"
+stub "src/api/v1/routes/chat.routes.ts"          "Mounts ChatController — protected"
+stub "src/api/v1/routes/notification.routes.ts"  "Mounts NotificationController"
+stub "src/api/v1/routes/admin.routes.ts"         "Mounts AdminController — admin role"
+stub "src/api/v1/routes/health.routes.ts"        "Mounts HealthController — public"
+stub "src/api/v1/routes/index.ts"                "Aggregates all routers under /api/v1"
+
+# ── 4d. Validators (Zod schemas) ─────────────────────────────────────────────
+mk "src/api/v1/validators"
+stub "src/api/v1/validators/auth.validator.ts"         "Zod schemas for all auth DTOs"
+stub "src/api/v1/validators/restaurant.validator.ts"   "Zod schemas for restaurant CRUD"
+stub "src/api/v1/validators/menu.validator.ts"         "Zod schemas for menu item"
+stub "src/api/v1/validators/order.validator.ts"        "Zod schemas for order placement"
+stub "src/api/v1/validators/coupon.validator.ts"       "Zod schemas for coupon"
+stub "src/api/v1/validators/review.validator.ts"       "Zod schemas for review"
+stub "src/api/v1/validators/chat.validator.ts"         "Zod schemas for chat message"
+stub "src/api/v1/validators/common.validator.ts"       "Shared: cursor, pagination, ObjectId param"
+
+# =============================================================================
+# 5. DEPENDENCY INJECTION CONTAINER
+#    Wires interfaces → implementations. Never import concrete classes
+#    directly in application or domain layers.
+# =============================================================================
+info "5 · DI container ..."
+
+mk "src/container"
+stub "src/container/index.ts"              "Bootstraps and exports all bindings"
+stub "src/container/identity.container.ts" "Binds IUserRepository → UserRepository, IAuthService → AuthService, etc."
+stub "src/container/catalog.container.ts"  "Binds Catalog interfaces → implementations"
+stub "src/container/commerce.container.ts" "Binds Commerce interfaces → implementations"
+stub "src/container/fulfillment.container.ts" "Binds Fulfillment interfaces → implementations"
+stub "src/container/engagement.container.ts"  "Binds Engagement interfaces → implementations"
+stub "src/container/infrastructure.container.ts" "Binds Redis, BullMQ, Stripe, Cloudinary, FCM"
+
+# =============================================================================
+# 6. DOMAIN EVENT BUS
+#    In-process pub/sub — domain events dispatched after aggregate mutations.
+#    Decouples domain from side-effects (email, push, loyalty credit).
+# =============================================================================
+info "6 · Event bus ..."
+
+mk "src/events"
+stub "src/events/EventBus.ts"              "In-process EventEmitter wrapper — publish(event), subscribe(eventName, handler)"
+stub "src/events/EventRegistry.ts"         "Registers all event handlers on startup — single place to trace all subscriptions"
+
+# =============================================================================
+# 7. APP + SERVER BOOTSTRAP
+# =============================================================================
+info "7 · App bootstrap ..."
+
+mk "src"
+stub "src/app.ts"         "Creates Express app — mounts middleware, routes, error handler (no listen here)"
+stub "src/server.ts"      "Calls app.ts → connect Mongo → connect Redis → init Socket.io → start EventRegistry → listen"
+stub "src/config/index.ts" "Reads + validates all env vars — throws on startup if required vars missing"
+stub "src/config/redis.ts" "Redis connection config (host, port, password, TLS)"
+stub "src/config/cors.ts"  "Allowed origins list per environment"
+stub "src/config/helmet.ts" "Helmet directive config"
+stub "src/config/bullmq.ts" "Queue names, default job options, retry/backoff strategy"
+
+# =============================================================================
+# 8. TESTS  (unit-first — Clean Architecture makes this trivial because
+#            use-cases depend only on interfaces, which are easy to mock)
+# =============================================================================
+info "8 · Test scaffolding ..."
+
+mk "tests/unit/domain/identity"
+stub "tests/unit/domain/identity/User.test.ts"          "Unit: User entity invariants — verify(), deactivate()"
+stub "tests/unit/domain/identity/OtpCode.test.ts"       "Unit: expiry, consume idempotency"
+stub "tests/unit/domain/identity/RefreshToken.test.ts"  "Unit: revoke, isValid"
+
+mk "tests/unit/domain/catalog"
+stub "tests/unit/domain/catalog/Restaurant.test.ts"     "Unit: isOpen() against various schedules + holidays"
+stub "tests/unit/domain/catalog/MenuItem.test.ts"       "Unit: toggleAvailability"
+
+mk "tests/unit/domain/commerce"
+stub "tests/unit/domain/commerce/Cart.test.ts"          "Unit: addItem, applyCoupon, invariants"
+stub "tests/unit/domain/commerce/Order.test.ts"         "Unit: FSM transitions — invalid transitions throw"
+stub "tests/unit/domain/commerce/Wallet.test.ts"        "Unit: debit below zero throws, version increments"
+stub "tests/unit/domain/commerce/Coupon.test.ts"        "Unit: expired, maxUses exhausted, apply()"
+
+mk "tests/unit/application/identity"
+stub "tests/unit/application/identity/Login.test.ts"         "UC test: mock IUserRepository + IAuthService → assert tokens issued"
+stub "tests/unit/application/identity/RefreshTokens.test.ts" "UC test: reuse detection path"
+stub "tests/unit/application/identity/ResetPassword.test.ts" "UC test: OTP consumed, sessions revoked"
+
+mk "tests/unit/application/commerce"
+stub "tests/unit/application/commerce/PlaceOrder.test.ts"   "UC test: idempotency key dedupe, OutboxEvent written"
+stub "tests/unit/application/commerce/TopUpWallet.test.ts"  "UC test: Stripe mock → wallet credited"
+stub "tests/unit/application/commerce/ApplyCoupon.test.ts"  "UC test: invalid/expired coupon paths"
+
+mk "tests/unit/application/fulfillment"
+stub "tests/unit/application/fulfillment/ApproveRefund.test.ts" "UC test: Stripe refund job enqueued"
+stub "tests/unit/application/fulfillment/AssignRider.test.ts"   "UC test: nearest rider selected"
+
+mk "tests/unit/application/engagement"
+stub "tests/unit/application/engagement/CreateReview.test.ts"  "UC test: order-gate enforced, window enforced"
+stub "tests/unit/application/engagement/CreditLoyalty.test.ts" "UC test: tier upgrade triggered"
+
+mk "tests/integration"
+stub "tests/integration/auth.integration.test.ts"     "E2E auth flow against real Mongo + Redis (testcontainers)"
+stub "tests/integration/order.integration.test.ts"    "E2E order placement + outbox write"
+stub "tests/integration/wallet.integration.test.ts"   "E2E top-up + debit optimistic lock"
+
+mk "tests/mocks"
+stub "tests/mocks/repositories.ts"    "In-memory repository mocks implementing all domain interfaces"
+stub "tests/mocks/redis.ts"           "Redis mock (ioredis-mock)"
+stub "tests/mocks/stripe.ts"          "Stripe mock responses"
+stub "tests/mocks/bullmq.ts"          "BullMQ queue mock — captures enqueued jobs for assertions"
+stub "tests/mocks/fcm.ts"             "FCM Admin SDK mock"
+
+stub "tests/setup.ts"                 "Global test setup — connect test Mongo, flush Redis, seed permissions"
+stub "jest.config.ts"                 "Jest config — ts-jest, coverage thresholds, module aliases"
+stub "jest.integration.config.ts"     "Separate Jest config for integration tests — longer timeout"
+
+# =============================================================================
+# 9. SCRIPTS & TOOLING
+# =============================================================================
+info "9 · Scripts ..."
+
+mk "scripts"
+stub "scripts/seed.ts"               "Runs database seeds (permissions, test data)"
+stub "scripts/migrate.ts"            "Placeholder for future MongoDB migrations"
+stub "scripts/healthcheck.ts"        "Used by Docker HEALTHCHECK — exits 0 if /ready returns 200"
+stub "scripts/generateApiKey.ts"     "One-off: generate hashed admin API key"
+
+# =============================================================================
+# DONE
+# =============================================================================
+success "FlavorStack backend scaffold complete!"
+echo ""
+echo "  Folder: ./$ROOT"
+echo ""
+echo "  Architecture layers:"
+echo "    src/domain/          → Entities, VOs, Events, Repository interfaces"
+echo "    src/application/     → Use-cases, DTOs, Event handlers"
+echo "    src/infrastructure/  → Mongo models, Repositories, Redis, BullMQ, External"
+echo "    src/api/v1/          → Express routes, Controllers, Middleware, Validators"
+echo "    src/container/       → DI bindings"
+echo "    src/events/          → In-process event bus"
+echo ""
+echo "  Bounded contexts:  identity · catalog · commerce · fulfillment · engagement"
+echo ""
+echo "  Next steps:"
+echo "    1. cd $ROOT && npm init -y"
+echo "    2. Fill in package.json with your deps"
+echo "    3. Run: bash create_flavorstack_backend.sh  (idempotent — won't overwrite)"
+echo "    4. Start implementing domain entities first — they have zero external deps"
+echo ""
+warn "No implementation code has been written. Every file contains only a comment"
+warn "describing its responsibility. Implement layer by layer, domain-inward-out."

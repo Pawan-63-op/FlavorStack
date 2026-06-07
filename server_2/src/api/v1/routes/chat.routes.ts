@@ -1,0 +1,1 @@
+// Mounts ChatController — protected

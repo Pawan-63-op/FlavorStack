@@ -1,0 +1,1 @@
+// lint → tsc → unit tests → build Docker image

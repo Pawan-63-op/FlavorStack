@@ -1,0 +1,1 @@
+// Interface: findByRestaurant, findById, save

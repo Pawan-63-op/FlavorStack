@@ -1,0 +1,233 @@
+
+<style>
+.sec { margin-bottom:1.5rem; }
+.sec-title { font-size:11px; font-weight:500; color:var(--color-text-tertiary); letter-spacing:.06em; margin:0 0 .6rem; }
+.card { background:var(--color-background-primary); border:0.5px solid var(--color-border-tertiary); border-radius:var(--border-radius-lg); padding:.9rem 1.1rem; margin-bottom:.6rem; }
+.card-title { font-size:13px; font-weight:500; color:var(--color-text-primary); margin:0 0 5px; display:flex; align-items:center; gap:7px; }
+.card-desc { font-size:12px; color:var(--color-text-secondary); line-height:1.55; margin:0; }
+.grid2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; }
+.green { border-left:3px solid #1A9B7B; }
+.red   { border-left:3px solid #C85B3A; }
+.amber { border-left:3px solid #D08B2D; }
+.blue  { border-left:3px solid #3A86C8; }
+.gray  { border-left:3px solid #999; }
+.badge { display:inline-block; font-size:10px; padding:2px 7px; border-radius:4px; font-weight:500; margin-right:4px; }
+.b-green  { background:#E1F5EE; color:#085041; }
+.b-amber  { background:#FAEEDA; color:#633806; }
+.b-coral  { background:#FAECE7; color:#712B13; }
+.b-blue   { background:#E6F1FB; color:#0C447C; }
+.b-gray   { background:#F1EFE8; color:#444; }
+.week { background:var(--color-background-primary); border:0.5px solid var(--color-border-tertiary); border-radius:var(--border-radius-lg); padding:1rem 1.1rem; }
+.week-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:.6rem; }
+.week-title { font-size:14px; font-weight:600; color:var(--color-text-primary); }
+.week-tag { font-size:11px; padding:2px 8px; border-radius:4px; font-weight:500; }
+.task-list { list-style:none; padding:0; margin:0; }
+.task-list li { font-size:12px; color:var(--color-text-secondary); padding:4px 0; border-bottom:0.5px solid var(--color-border-tertiary); display:flex; align-items:center; gap:6px; line-height:1.4; }
+.task-list li:last-child { border-bottom:none; }
+.dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+.dot-green { background:#1A9B7B; }
+.dot-amber { background:#D08B2D; }
+.dot-blue  { background:#3A86C8; }
+.dot-coral { background:#C85B3A; }
+.verdict-box { background:var(--color-background-secondary); border-radius:var(--border-radius-lg); padding:1.1rem 1.25rem; margin-top:.5rem; }
+.progress-row { display:flex; align-items:center; gap:10px; margin:6px 0; }
+.progress-label { font-size:12px; color:var(--color-text-secondary); width:160px; flex-shrink:0; }
+.progress-bar { flex:1; background:var(--color-border-tertiary); border-radius:4px; height:8px; overflow:hidden; }
+.progress-fill { height:100%; border-radius:4px; }
+</style>
+
+<!-- PRO LIMIT REALITY -->
+<div class="sec">
+  <div class="sec-title">WHAT PRO ACTUALLY GIVES YOU</div>
+  <div class="grid2">
+    <div class="card green">
+      <div class="card-title">✅ What Pro handles well</div>
+      <div class="card-desc">
+        Focused 1–2 hour sessions per feature. Single-feature implementations (e.g. "add Redis cache to menu routes"). Bug fixes across 2–4 files. Architecture discussions. Code reviews. Explaining patterns before you implement them.
+      </div>
+    </div>
+    <div class="card amber">
+      <div class="card-title">⚠️ Where Pro hits limits</div>
+      <div class="card-desc">
+        Very long agentic sessions (3+ hours). Implementing an entire phase in one sitting. Large codebase-wide refactors touching 10+ files at once. Limits reset every 5 hours — so work in focused blocks, not marathon sessions.
+      </div>
+    </div>
+  </div>
+  <div class="card blue" style="margin-top:4px;">
+    <div class="card-title">💡 The workaround for Pro limits</div>
+    <div class="card-desc">Break every feature into small, completable tasks. "Add ioredis connection" is one session. "Add cache-aside to restaurant routes" is another. Pro works great when you scope tightly — it struggles when you try to do everything at once.</div>
+  </div>
+</div>
+
+<!-- WHAT TO SKIP -->
+<div class="sec">
+  <div class="sec-title">WHAT TO CUT — NOT WORTH IT ON PRO RIGHT NOW</div>
+  <div class="grid3">
+    <div class="card red">
+      <div class="card-title">❌ Kubernetes</div>
+      <div class="card-desc">Overkill until you have real traffic. Docker Compose is enough for now.</div>
+      <span class="badge b-coral">skip entirely</span>
+    </div>
+    <div class="card red">
+      <div class="card-title">❌ Terraform</div>
+      <div class="card-desc">Infrastructure as code matters at scale. Not needed for a single-server deploy.</div>
+      <span class="badge b-coral">skip entirely</span>
+    </div>
+    <div class="card red">
+      <div class="card-title">❌ Prometheus + Grafana</div>
+      <div class="card-desc">Heavy observability stack. Use Sentry + BullBoard instead — same insight, 10% of the effort.</div>
+      <span class="badge b-coral">skip entirely</span>
+    </div>
+    <div class="card red">
+      <div class="card-title">❌ ClickHouse</div>
+      <div class="card-desc">Mongo aggregation pipelines give you 90% of the analytics you need right now.</div>
+      <span class="badge b-coral">skip entirely</span>
+    </div>
+    <div class="card red">
+      <div class="card-title">❌ OpenTelemetry</div>
+      <div class="card-desc">Winston structured logs + Sentry errors is more than enough at this stage.</div>
+      <span class="badge b-coral">skip entirely</span>
+    </div>
+    <div class="card red">
+      <div class="card-title">❌ Redis Streams + CQRS</div>
+      <div class="card-desc">Advanced patterns. BullMQ alone solves your async problems for now. Add Streams later.</div>
+      <span class="badge b-coral">skip for now</span>
+    </div>
+    <div class="card red">
+      <div class="card-title">❌ Typesense</div>
+      <div class="card-desc">MongoDB text indexes + Atlas Search gives you good-enough search. External search engine is a later problem.</div>
+      <span class="badge b-coral">skip for now</span>
+    </div>
+    <div class="card red">
+      <div class="card-title">❌ Vault / Secrets Manager</div>
+      <div class="card-desc">.env files are fine for now. Vault is a production ops concern at team scale.</div>
+      <span class="badge b-coral">skip for now</span>
+    </div>
+    <div class="card red">
+      <div class="card-title">❌ Group ordering / Subscriptions</div>
+      <div class="card-desc">Complex features. Get core delivery working first. Add these in month 2+.</div>
+      <span class="badge b-coral">month 2+</span>
+    </div>
+  </div>
+</div>
+
+<!-- REALISTIC MONTH PLAN -->
+<div class="sec">
+  <div class="sec-title">YOUR REALISTIC 4-WEEK PLAN WITH PRO</div>
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+
+    <div class="week">
+      <div class="week-header">
+        <span class="week-title">Week 1 — Safety net</span>
+        <span class="week-tag" style="background:#FAECE7;color:#712B13;">no new deps</span>
+      </div>
+      <ul class="task-list">
+        <li><span class="dot dot-coral"></span>Helmet.js + CORS (30 min)</li>
+        <li><span class="dot dot-coral"></span>Input sanitization middleware (1 hr)</li>
+        <li><span class="dot dot-coral"></span>JWT refresh + rotation, httpOnly cookie (2 hr)</li>
+        <li><span class="dot dot-coral"></span>API versioning /api/v1/ prefix (1 hr)</li>
+        <li><span class="dot dot-coral"></span>Soft deletes Mongoose plugin (1 hr)</li>
+        <li><span class="dot dot-coral"></span>Cursor-based pagination on orders + reviews (2 hr)</li>
+        <li><span class="dot dot-coral"></span>Sentry setup (both apps) (1 hr)</li>
+        <li><span class="dot dot-coral"></span>/health + /ready endpoints (30 min)</li>
+        <li><span class="dot dot-coral"></span>Opening hours engine (2 hr)</li>
+        <li><span class="dot dot-coral"></span>Refund workflow with Stripe (3 hr)</li>
+      </ul>
+    </div>
+
+    <div class="week">
+      <div class="week-header">
+        <span class="week-title">Week 2 — Redis foundation</span>
+        <span class="week-tag" style="background:#FAEEDA;color:#633806;">ioredis install</span>
+      </div>
+      <ul class="task-list">
+        <li><span class="dot dot-amber"></span>ioredis connection + pool setup (1 hr)</li>
+        <li><span class="dot dot-amber"></span>Cache-aside on restaurant + menu routes (2 hr)</li>
+        <li><span class="dot dot-amber"></span>Cache tag invalidation on menu updates (1 hr)</li>
+        <li><span class="dot dot-amber"></span>Redis session store — replace stateless JWT (2 hr)</li>
+        <li><span class="dot dot-amber"></span>Sliding window rate limiter on OTP + login (1 hr)</li>
+        <li><span class="dot dot-amber"></span>Socket.io Redis adapter (30 min)</li>
+        <li><span class="dot dot-amber"></span>Idempotency keys on order + payment (2 hr)</li>
+        <li><span class="dot dot-amber"></span>Optimistic locking on wallet + loyalty (2 hr)</li>
+        <li><span class="dot dot-amber"></span>Menu item real-time availability toggle (2 hr)</li>
+      </ul>
+    </div>
+
+    <div class="week">
+      <div class="week-header">
+        <span class="week-title">Week 3 — BullMQ workers</span>
+        <span class="week-tag" style="background:#E1F5EE;color:#085041;">bullmq install</span>
+      </div>
+      <ul class="task-list">
+        <li><span class="dot dot-green"></span>BullMQ setup + priority queue structure (2 hr)</li>
+        <li><span class="dot dot-green"></span>Dead Letter Queue config (1 hr)</li>
+        <li><span class="dot dot-green"></span>Email worker — move Nodemailer off request (2 hr)</li>
+        <li><span class="dot dot-green"></span>Switch Nodemailer → Resend (1 hr)</li>
+        <li><span class="dot dot-green"></span>Image processing worker (Cloudinary async) (2 hr)</li>
+        <li><span class="dot dot-green"></span>FCM push notification worker (2 hr)</li>
+        <li><span class="dot dot-green"></span>Loyalty points worker (async credit) (1 hr)</li>
+        <li><span class="dot dot-green"></span>Outbox pattern on order placement (3 hr)</li>
+        <li><span class="dot dot-green"></span>BullBoard dashboard (admin-gated) (1 hr)</li>
+      </ul>
+    </div>
+
+    <div class="week">
+      <div class="week-header">
+        <span class="week-title">Week 4 — Features + polish</span>
+        <span class="week-tag" style="background:#E6F1FB;color:#0C447C;">visible to users</span>
+      </div>
+      <ul class="task-list">
+        <li><span class="dot dot-blue"></span>In-app wallet (Stripe top-up + deduct) (4 hr)</li>
+        <li><span class="dot dot-blue"></span>Tiered loyalty Bronze/Silver/Gold (3 hr)</li>
+        <li><span class="dot dot-blue"></span>Verified reviews (order-gated, 7-day window) (2 hr)</li>
+        <li><span class="dot dot-blue"></span>Referral system + code generation (2 hr)</li>
+        <li><span class="dot dot-blue"></span>Scheduled orders (BullMQ delayed jobs) (2 hr)</li>
+        <li><span class="dot dot-blue"></span>Reorder in one tap (2 hr)</li>
+        <li><span class="dot dot-blue"></span>RBAC middleware (superadmin/admin/rider/user) (2 hr)</li>
+        <li><span class="dot dot-blue"></span>UPI / local payment methods (Stripe) (2 hr)</li>
+        <li><span class="dot dot-blue"></span>Circuit breaker on Stripe + Cloudinary (1 hr)</li>
+      </ul>
+    </div>
+
+  </div>
+</div>
+
+<!-- PROGRESS SUMMARY -->
+<div class="verdict-box">
+  <div style="font-size:14px;font-weight:600;color:var(--color-text-primary);margin-bottom:10px;">What you'll have after 1 month</div>
+  <div class="progress-row">
+    <span class="progress-label">Security hardened</span>
+    <div class="progress-bar"><div class="progress-fill" style="width:95%;background:#C85B3A;"></div></div>
+    <span style="font-size:12px;color:var(--color-text-tertiary);">95%</span>
+  </div>
+  <div class="progress-row">
+    <span class="progress-label">Redis fully integrated</span>
+    <div class="progress-bar"><div class="progress-fill" style="width:90%;background:#D08B2D;"></div></div>
+    <span style="font-size:12px;color:var(--color-text-tertiary);">90%</span>
+  </div>
+  <div class="progress-row">
+    <span class="progress-label">Async job pipeline</span>
+    <div class="progress-bar"><div class="progress-fill" style="width:85%;background:#1A9B7B;"></div></div>
+    <span style="font-size:12px;color:var(--color-text-tertiary);">85%</span>
+  </div>
+  <div class="progress-row">
+    <span class="progress-label">User-facing features</span>
+    <div class="progress-bar"><div class="progress-fill" style="width:75%;background:#3A86C8;"></div></div>
+    <span style="font-size:12px;color:var(--color-text-tertiary);">75%</span>
+  </div>
+  <div class="progress-row">
+    <span class="progress-label">Production readiness</span>
+    <div class="progress-bar"><div class="progress-fill" style="width:70%;background:#7F77DD;"></div></div>
+    <span style="font-size:12px;color:var(--color-text-tertiary);">70%</span>
+  </div>
+  <div style="font-size:12px;color:var(--color-text-secondary);margin-top:10px;line-height:1.6;">
+    FlavorStack goes from a dev-grade project → a genuinely production-ready platform. Real auth security, real caching, real async jobs, real user features. No Kubernetes needed.
+  </div>
+</div>
+
+<div style="margin-top:1rem;display:flex;gap:8px;flex-wrap:wrap;">
+  <button onclick="sendPrompt('Give me the exact steps to start Week 1 safety net implementation in FlavorStack with Claude Code')">Start Week 1 ↗</button>
+  <button onclick="sendPrompt('How do I install Claude Code and set it up for FlavorStack monorepo?')">Setup Claude Code ↗</button>
+  <button onclick="sendPrompt('How do I implement the in-app wallet with Stripe for FlavorStack?')">Wallet feature ↗</button>
+</div>

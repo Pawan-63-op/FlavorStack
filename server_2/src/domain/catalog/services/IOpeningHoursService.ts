@@ -1,0 +1,1 @@
+// Interface: isRestaurantOpen(restaurantId, at?)
