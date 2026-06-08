@@ -1,1 +1,0 @@
-// VO: role + resource + actions[]

@@ -1,13 +1,13 @@
 import { BaseUser } from './BaseUser'
 // import { UserRole }    from '../enums/UserRole'
-import { DomainError } from '../Errors/DomainError'
+import { DomainError } from '../../shared/errors/DomainError'
 // import { DomainError } from '../errors/DomainError'
 // import {DomainErro}
 import { DRIVER_STATUS, DriverStatus } from '../enums/driver-status.enum'
 import { GeoPoint } from '../value-objects/GeoPoint.vo'
 import { VehicleInfo } from '../value-objects/VehicleInfo.vo'
 import { USER_ROLE } from '../enums/user-role.enum'
-import { CreateDriverInput } from '../Domain_Creation_DTO/CreateDriverInput'
+import { CreateDriverInput } from '../types/CreateDriverInput'
 export class Driver extends BaseUser {
     // Verification
     driverStatus: DriverStatus

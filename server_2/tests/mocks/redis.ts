@@ -1,1 +1,0 @@
-// Redis mock (ioredis-mock)

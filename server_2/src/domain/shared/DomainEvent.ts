@@ -1,1 +1,6 @@
-// Interface: eventId, occurredAt, eventName, aggregateId
+export interface DomainEvent {
+  eventId: string;
+  occurredOn: Date;
+  eventName: string;
+  aggregateId: string;
+}

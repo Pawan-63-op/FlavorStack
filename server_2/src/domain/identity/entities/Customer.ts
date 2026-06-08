@@ -8,7 +8,7 @@ import { USER_ROLE } from "../enums/user-role.enum";
 import { LOYALTY_TIER, LoyaltyTier } from "../enums/loyalty-tier.enum";
 import { Address } from "../value-objects/Address.vo";
 import { WalletTransaction } from '../value-objects/WalletTransaction.vo';
-import { CreateCustomerInput } from '../Domain_Creation_DTO/CreateCustomerInput';
+import { CreateCustomerInput } from '../types/CreateCustomerInput';
 export class Customer extends BaseUser {
 
     // ── Customer-specific fields 
