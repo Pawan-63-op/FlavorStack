@@ -1,5 +1,5 @@
-import { Money } from '../../../../src/domain/shared/Money';
-import { ValidationError } from '../../../../src/domain/shared/errors/ValidationError';
+import { Money } from '../../../../domain/shared/Money';
+import { ValidationError } from '../../../../domain/shared/errors/ValidationError';
 
 describe('Money', () => {
   describe('creation', () => {

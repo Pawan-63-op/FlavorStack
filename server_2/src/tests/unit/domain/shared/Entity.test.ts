@@ -1,5 +1,5 @@
-import { Entity } from '../../../../src/domain/shared/Entity';
-import { UniqueEntityId } from '../../../../src/domain/shared/UniqueEntityId';
+import { Entity } from '../../../../domain/shared/Entity';
+import { UniqueEntityId } from '../../../../domain/shared/UniqueEntityId';
 
 interface TestEntityProps {
   name: string;

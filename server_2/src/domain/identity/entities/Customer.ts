@@ -7,13 +7,20 @@ import { BaseUser } from './BaseUser'
 import { USER_ROLE } from "../enums/user-role.enum";
 import { LOYALTY_TIER, LoyaltyTier } from "../enums/loyalty-tier.enum";
 import { Address } from "../value-objects/Address.vo";
+import { randomUUID } from 'crypto';
 import { WalletTransaction } from '../value-objects/WalletTransaction.vo';
 import { CreateCustomerInput } from '../types/CreateCustomerInput';
+
+export interface CustomerAddress {
+    id: string;
+    address: Address;
+}
+
 export class Customer extends BaseUser {
 
     // ── Customer-specific fields 
     //Addresses──────────────────────────
-    addresses!: Address[]
+    addresses!: CustomerAddress[]
     defaultAddressId!: string | null
 
     // wallet
@@ -52,6 +59,7 @@ export class Customer extends BaseUser {
         this.referralCode = data.referralCode ?? ''
         this.referredBy = data.referredBy ?? null
         this.addresses = data.addresses ?? []
+        this.defaultAddressId = data.defaultAddressId ?? null
         this.savedRestaurants = data.savedRestaurants ?? []
         this.dietaryPreferences = data.dietaryPreferences ?? []
         this.fcmTokens = data.fcmTokens ?? []
@@ -72,7 +80,9 @@ export class Customer extends BaseUser {
     }
 
     get defaultAddress(): Address | null {
-        return this.addresses.find(a => a.isDefault) ?? null
+        if (!this.defaultAddressId) return null;
+        const entry = this.addresses.find(a => a.id === this.defaultAddressId);
+        return entry ? entry.address : null;
     }
 
     get walletFormatted(): string {
@@ -83,16 +93,25 @@ export class Customer extends BaseUser {
 
     // ── Address methods  ────────────────────────────────────
     addAddress(addr: Address): void {
-        if (this.addresses.length === 0) addr.isDefault = true
-        this.addresses.push(addr)
+        const id = randomUUID();
+        this.addresses.push({ id, address: addr });
+        if (!this.defaultAddressId) {
+            this.defaultAddressId = id;
+        }
     }
 
     removeAddress(addrId: string): void {
         this.addresses = this.addresses.filter(a => a.id !== addrId);
-
+        if (this.defaultAddressId === addrId) {
+            this.defaultAddressId = this.addresses.length > 0 ? this.addresses[0].id : null;
+        }
     }
+
     setDefaultAddress(addrId: string): void {
-        this.addresses.forEach(a => a.isDefault = a.id === addrId);
+        const exists = this.addresses.some(a => a.id === addrId);
+        if (exists) {
+            this.defaultAddressId = addrId;
+        }
     }
 
     // wallet methods
@@ -131,6 +150,11 @@ export class Customer extends BaseUser {
     // import { CreateCustomerInput } from '../types/CreateCustomerInput'
 
     static create(input: CreateCustomerInput): Customer {
+        const defaultAddressId = input.defaultAddress ? randomUUID() : null;
+        const addresses: CustomerAddress[] = [];
+        if (input.defaultAddress) {
+            addresses.push({ id: defaultAddressId!, address: input.defaultAddress });
+        }
         return new Customer({
             ...input,
             role: USER_ROLE.CUSTOMER,
@@ -142,7 +166,8 @@ export class Customer extends BaseUser {
             loyaltyPoints: 0,
             totalLifetimeSpend: 0,
             referralCount: 0,
-            addresses: input.defaultAddress ? [{ ...input.defaultAddress, isDefault: true }] : [],
+            addresses,
+            defaultAddressId,
             savedRestaurants: [],
             fcmTokens: [],
         })

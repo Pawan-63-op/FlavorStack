@@ -1,5 +1,5 @@
-import { Guard } from '../../../../src/domain/shared/Guard';
-import { ValidationError } from '../../../../src/domain/shared/errors/ValidationError';
+import { Guard } from '../../../../domain/shared/Guard';
+import { ValidationError } from '../../../../domain/shared/errors/ValidationError';
 
 describe('Guard', () => {
   describe('againstNullOrUndefined', () => {

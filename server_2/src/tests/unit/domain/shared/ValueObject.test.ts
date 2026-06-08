@@ -1,4 +1,4 @@
-import { ValueObject } from '../../../../src/domain/shared/ValueObject';
+import { ValueObject } from '../../../../domain/shared/ValueObject';
 
 interface TestVoProps {
   name: string;

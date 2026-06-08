@@ -1,7 +1,6 @@
-import { ObjectId } from "mongodb";
 import { UserRole } from "../enums/user-role.enum";
 export interface TokenPayLoad {
-    userId: ObjectId;
+    userId: string;
     role: UserRole;
     sessionId: string;
     jti: string;

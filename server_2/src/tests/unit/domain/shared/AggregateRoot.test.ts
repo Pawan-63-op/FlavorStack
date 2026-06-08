@@ -1,6 +1,6 @@
-import { AggregateRoot } from '../../../../src/domain/shared/AggregateRoot';
-import { DomainEvent } from '../../../../src/domain/shared/DomainEvent';
-import { UniqueEntityId } from '../../../../src/domain/shared/UniqueEntityId';
+import { AggregateRoot } from '../../../../domain/shared/AggregateRoot';
+import { DomainEvent } from '../../../../domain/shared/DomainEvent';
+import { UniqueEntityId } from '../../../../domain/shared/UniqueEntityId';
 
 // Define a concrete subclass of AggregateRoot for testing
 interface TestAggregateProps {

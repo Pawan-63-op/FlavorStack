@@ -1,4 +1,4 @@
-import { UniqueEntityId } from '../../../../src/domain/shared/UniqueEntityId';
+import { UniqueEntityId } from '../../../../domain/shared/UniqueEntityId';
 
 describe('UniqueEntityId', () => {
   it('should auto-generate a v4 UUID when no id is provided', () => {

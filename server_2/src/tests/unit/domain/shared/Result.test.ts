@@ -1,5 +1,5 @@
-import { Result } from '../../../../src/domain/shared/Result';
-import { ValidationError } from '../../../../src/domain/shared/errors/ValidationError';
+import { Result } from '../../../../domain/shared/Result';
+import { ValidationError } from '../../../../domain/shared/errors/ValidationError';
 
 describe('Result', () => {
   describe('success paths', () => {
