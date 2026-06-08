@@ -1,0 +1,13 @@
+InvalidEmailError
+InvalidPasswordError
+InvalidOtpError
+
+UserAlreadyExistsError
+UserNotFoundError
+
+UserLockedError
+UserBannedError
+
+DriverNotVerifiedError
+
+PermissionDeniedError

@@ -1,0 +1,1 @@
+// Interface: findByUserId, findAvailableNear, save
