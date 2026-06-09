@@ -1,13 +1,32 @@
-
 // src/modules/user/domain/entities/BaseUser.ts
-// src/modules/user/domain/entities/BaseUser.ts:
 
 import { UserRole } from "../enums/user-role.enum";
 import { AuthProvider } from "../enums/auth-provider.enum";
-export abstract class BaseUser {
+import { AggregateRoot } from "../../shared/AggregateRoot";
+import { UniqueEntityId } from "../../shared/UniqueEntityId";
+
+// Import events raised by BaseUser
+import { UserVerified } from "../events/UserVerified";
+import { PasswordChanged } from "../events/PasswordChanged";
+import { PasswordResetRequested } from "../events/PasswordResetRequested";
+import { PasswordResetCompleted } from "../events/PasswordResetCompleted";
+import { UserBanned } from "../events/UserBanned";
+import { UserUnbanned } from "../events/UserUnbanned";
+
+export abstract class BaseUser extends AggregateRoot<any> {
 
     // ── Section 1: Identity ──────────────────────────────
-    _id!: string
+    // @ts-ignore
+    get _id(): string {
+        return this.id.toString();
+    }
+    // @ts-ignore
+    set _id(val: string | undefined) {
+        if (val) {
+            (this as any)._id = new UniqueEntityId(val);
+        }
+    }
+
     name!: string
     email!: string
     phone!: string
@@ -19,19 +38,13 @@ export abstract class BaseUser {
     authProvider!: AuthProvider
     providerId!: string
 
-    // ── Section 3: Email verification ────────────────────
+    // ── Section 3: Email verification (Redis fields removed) ──
     isEmailVerified!: boolean
-    emailOtp!: string | null
-    emailOtpExpiresAt!: Date | null
 
-    // ── Section 4: Password reset ─────────────────────────
-    resetPasswordOtp!: string | null
-    resetPasswordOtpExpiresAt!: Date | null
+    // ── Section 4: Password reset (Redis fields removed) ──────
     passwordChangedAt!: Date | null
 
-    // ── Section 5: Session tracking ──────────────────────
-    refreshTokenHash!: string | null
-    sessionId!: string | null
+    // ── Section 5: Session tracking (Redis fields removed) ────
     tokenVersion!: number
 
     // ── Section 6: Security ───────────────────────────────
@@ -50,7 +63,8 @@ export abstract class BaseUser {
     updatedAt!: Date
 
     constructor(data: Partial<BaseUser>) {
-        Object.assign(this, data)
+        super(data, data._id ? new UniqueEntityId(data._id) : undefined);
+        Object.assign(this, data);
     }
 
     // ── Abstract — each subclass must implement ───────────
@@ -106,380 +120,52 @@ export abstract class BaseUser {
         this.lockUntil = null
     }
 
+    verifyEmail(): void {
+        this.isEmailVerified = true;
+        this.addDomainEvent(new UserVerified(this._id, this.email, new Date()));
+    }
+
+    changePassword(newPasswordHash: string): void {
+        this.passwordHash = newPasswordHash;
+        this.passwordChangedAt = new Date();
+        this.addDomainEvent(new PasswordChanged(this._id, this.passwordChangedAt));
+    }
+
+    requestPasswordReset(): void {
+        this.addDomainEvent(new PasswordResetRequested(this._id, this.email, new Date()));
+    }
+
+    completePasswordReset(newPasswordHash: string): void {
+        this.passwordHash = newPasswordHash;
+        this.passwordChangedAt = new Date();
+        this.tokenVersion += 1;
+        this.addDomainEvent(new PasswordResetCompleted(this._id, this.passwordChangedAt));
+    }
+
     ban(reason: string): void {
         this.isBanned = true
         this.banReason = reason
         this.isActive = false
+        this.addDomainEvent(new UserBanned(this._id, reason, new Date()));
     }
 
     unban(): void {
         this.isBanned = false
         this.banReason = null
         this.isActive = true
+        this.addDomainEvent(new UserUnbanned(this._id, new Date()));
     }
 
     incrementTokenVersion(): void {
         this.tokenVersion += 1
     }
+
     softDelete(): void {
         this.isActive = false
         this.deletedAt = new Date()
     }
 
-
     invalidateAllSessions(): void {
         this.tokenVersion += 1
-        this.refreshTokenHash = null
-        this.sessionId = null
-
     }
-};
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+}

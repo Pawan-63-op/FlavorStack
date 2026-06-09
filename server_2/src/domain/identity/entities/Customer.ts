@@ -1,15 +1,18 @@
 // src/modules/user/domain/entities/Customer.ts
 
 import { BaseUser } from './BaseUser'
-// import { UserRole }    from "../enums/UserRole"
-// import { LoyaltyTier } from '../enums/LoyaltyTier'
-// import { Address }     from '../value-objects/Address'
 import { USER_ROLE } from "../enums/user-role.enum";
 import { LOYALTY_TIER, LoyaltyTier } from "../enums/loyalty-tier.enum";
 import { Address } from "../value-objects/Address.vo";
 import { randomUUID } from 'crypto';
 import { WalletTransaction } from '../value-objects/WalletTransaction.vo';
 import { CreateCustomerInput } from '../types/CreateCustomerInput';
+
+// Imports added for Batch 3
+import { Money } from '../../shared/Money';
+import { DomainError } from '../../shared/errors/DomainError';
+import { ValidationError } from '../../shared/errors/ValidationError';
+import { UserRegistered } from '../events/UserRegistered';
 
 export interface CustomerAddress {
     id: string;
@@ -24,7 +27,6 @@ export class Customer extends BaseUser {
     defaultAddressId!: string | null
 
     // wallet
-
     walletBalance!: number
     walletCurrency!: string
     walletTransactions!: WalletTransaction[]
@@ -49,8 +51,8 @@ export class Customer extends BaseUser {
 
     constructor(data: Partial<Customer>) {
         super(data)
-        this.role = USER_ROLE.CUSTOMER,
-            this.walletBalance = data.walletBalance ?? 0
+        this.role = USER_ROLE.CUSTOMER
+        this.walletBalance = data.walletBalance ?? 0
         this.walletCurrency = data.walletCurrency ?? "INR"
         this.walletTransactions = data.walletTransactions ?? []
         this.loyaltyPoints = data.loyaltyPoints ?? 0
@@ -89,8 +91,6 @@ export class Customer extends BaseUser {
         return `₹${(this.walletBalance / 100).toFixed(2)}`
     }
 
-
-
     // ── Address methods  ────────────────────────────────────
     addAddress(addr: Address): void {
         const id = randomUUID();
@@ -115,26 +115,42 @@ export class Customer extends BaseUser {
     }
 
     // wallet methods
+    deductwallet(amount: number): void {
+        const currentBalanceResult = Money.create(this.walletBalance, this.walletCurrency);
+        const deductAmountResult = Money.create(amount, this.walletCurrency);
 
-    deductwallet(amount: number) {
-
-        if (this.walletBalance < amount) {
-            // if (this.walletBalance < amount) throw new DomainError('insufficient_balance')
-            console.log('insufficient_balance')
+        if (currentBalanceResult.isFailure) {
+            throw currentBalanceResult.getError();
         }
-        this.walletBalance -= amount
+        if (deductAmountResult.isFailure) {
+            throw deductAmountResult.getError();
+        }
 
+        const balance = currentBalanceResult.getValue();
+        const deduct = deductAmountResult.getValue();
+
+        const newBalanceResult = balance.subtract(deduct);
+        if (newBalanceResult.isFailure) {
+            throw new DomainError('insufficient_balance');
+        }
+
+        this.walletBalance = newBalanceResult.getValue().amount;
     }
 
     // Loyalty methods
-    creditLoyaltyPoints(pts: number) {
+    creditLoyaltyPoints(pts: number): void {
+        if (pts < 0) {
+            throw new ValidationError('Loyalty points to credit cannot be negative');
+        }
         this.loyaltyPoints += pts;
     }
 
-    redeemLoyaltyPoints(pts: number) {
+    redeemLoyaltyPoints(pts: number): void {
+        if (pts < 0) {
+            throw new ValidationError('Loyalty points to redeem cannot be negative');
+        }
         if (this.loyaltyPoints < pts) {
-            // if (this.loyaltyPoints < pts) throw new DomainError('insufficient_points')
-            console.log('insufficient_points');
+            throw new DomainError('insufficient_points');
         }
         this.loyaltyPoints -= pts;
     }
@@ -143,11 +159,15 @@ export class Customer extends BaseUser {
     canReview() {
 
     }
+    
     // notifications methods
-    registerFcmToken(token: string) { if (!this.fcmTokens.includes(token)) this.fcmTokens.push(token) }
-    removeFcmToken(token: string) { this.fcmTokens = this.fcmTokens.filter(t => t !== token) }
-
-    // import { CreateCustomerInput } from '../types/CreateCustomerInput'
+    registerFcmToken(token: string) { 
+        if (!this.fcmTokens.includes(token)) this.fcmTokens.push(token) 
+    }
+    
+    removeFcmToken(token: string) { 
+        this.fcmTokens = this.fcmTokens.filter(t => t !== token) 
+    }
 
     static create(input: CreateCustomerInput): Customer {
         const defaultAddressId = input.defaultAddress ? randomUUID() : null;
@@ -155,7 +175,7 @@ export class Customer extends BaseUser {
         if (input.defaultAddress) {
             addresses.push({ id: defaultAddressId!, address: input.defaultAddress });
         }
-        return new Customer({
+        const customer = new Customer({
             ...input,
             role: USER_ROLE.CUSTOMER,
             isActive: true,
@@ -170,6 +190,12 @@ export class Customer extends BaseUser {
             defaultAddressId,
             savedRestaurants: [],
             fcmTokens: [],
-        })
+        });
+
+        customer.addDomainEvent(
+            new UserRegistered(customer._id, customer.email, customer.role, customer.name)
+        );
+
+        return customer;
     }
 };

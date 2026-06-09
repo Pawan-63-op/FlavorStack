@@ -2,7 +2,6 @@
 // import { VehicleInfo }  from '../value-objects/VehicleInfo'
 
 import { VehicleInfo } from "../value-objects/VehicleInfo.vo"
-import { AuthProvider } from "../enums/auth-provider.enum"
 
 export interface CreateDriverInput {
   // identity

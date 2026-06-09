@@ -1,19 +1,19 @@
 import { DomainEvent } from '../../shared/DomainEvent';
 import { randomUUID } from 'crypto';
 
-export class UserVerified implements DomainEvent {
+export class DriverSuspended implements DomainEvent {
   public readonly eventId: string;
   public readonly occurredOn: Date;
-  public readonly eventName = 'UserVerified';
+  public readonly eventName = 'DriverSuspended';
   public readonly aggregateId: string;
 
   constructor(
-    userId: string,
-    public readonly email: string,
-    public readonly verifiedAt: Date
+    driverId: string,
+    public readonly reason: string,
+    public readonly suspendedAt: Date
   ) {
     this.eventId = randomUUID();
     this.occurredOn = new Date();
-    this.aggregateId = userId;
+    this.aggregateId = driverId;
   }
 }

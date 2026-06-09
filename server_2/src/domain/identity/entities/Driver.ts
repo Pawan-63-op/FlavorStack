@@ -1,13 +1,20 @@
+// src/modules/user/domain/entities/Driver.ts
+
 import { BaseUser } from './BaseUser'
-// import { UserRole }    from '../enums/UserRole'
-import { DomainError } from '../../shared/errors/DomainError'
-// import { DomainError } from '../errors/DomainError'
-// import {DomainErro}
 import { DRIVER_STATUS, DriverStatus } from '../enums/driver-status.enum'
 import { GeoPoint } from '../value-objects/GeoPoint.vo'
 import { VehicleInfo } from '../value-objects/VehicleInfo.vo'
 import { USER_ROLE } from '../enums/user-role.enum'
 import { CreateDriverInput } from '../types/CreateDriverInput'
+
+// Imports added for Batch 4
+import { DomainError } from '../../shared/errors/DomainError';
+import { ValidationError } from '../../shared/errors/ValidationError';
+import { ForbiddenError } from '../../shared/errors/ForbiddenError';
+import { UserRegistered } from '../events/UserRegistered';
+import { DriverVerified } from '../events/DriverVerified';
+import { DriverSuspended } from '../events/DriverSuspended';
+
 export class Driver extends BaseUser {
     // Verification
     driverStatus: DriverStatus
@@ -51,27 +58,31 @@ export class Driver extends BaseUser {
     get displayName() { return `${this.name} (Driver)` }
 
     // ── Virtuals ──────────────────────────────────────────
-    get isVerified() { return this.driverStatus === DRIVER_STATUS.ACTIVE }
+    get isVerified() {
+        return (
+            this.driverStatus !== DRIVER_STATUS.PENDING_VERIFICATION &&
+            this.driverStatus !== DRIVER_STATUS.SUSPENDED
+        );
+    }
     get isBusy() { return this.activeOrderId != null }
     get isOnline() { return this.isAvailable && this.driverStatus === DRIVER_STATUS.ACTIVE }
     get earningsFormatted() { return `₹${(this.totalEarnings / 100).toFixed(2)}` }
 
     // ── Availability ──────────────────────────────────────
     goOnline() {
-        // if (!this.isVerified) throw new DomainError('driver_not_verified')
         if (!this.isVerified) {
-            console.error('Driver verification failed. Current status:', this.driverStatus)
+            throw new ForbiddenError('driver_not_verified');
+        }
+        if (this.driverStatus === DRIVER_STATUS.ACTIVE) {
+            return;
         }
         this.isAvailable = true
         this.driverStatus = DRIVER_STATUS.ACTIVE
     }
 
     goOffline() {
-        // if (this.isBusy) throw new DomainError('cannot_go_offline_on_active_delivery')
-        if (!this.isBusy && !this.isVerified) {
-            console.error('Driver is busy or it is not verified. Verification failed. Current status:', this.
-                driverStatus
-            )
+        if (this.isBusy) {
+            throw new DomainError('driver_busy_cannot_go_offline');
         }
         this.isAvailable = false
         this.driverStatus = DRIVER_STATUS.OFFLINE
@@ -83,13 +94,11 @@ export class Driver extends BaseUser {
 
     // ── Order lifecycle ───────────────────────────────────
     assignOrder(orderId: string) {
-        // if (this.isBusy) throw new DomainError('driver_already_busy')
-        // if (!this.isOnline) throw new DomainError('driver_not_online')
         if (this.isBusy) {
-            console.error('Driver is already busy with order:', this.activeOrderId)
+            throw new DomainError('driver_already_busy');
         }
         if (!this.isOnline) {
-            console.error('Driver is not online. Current status:', this.driverStatus)
+            throw new DomainError('driver_not_online');
         }
         this.activeOrderId = orderId
         this.driverStatus = DRIVER_STATUS.ON_DELIVERY
@@ -99,6 +108,7 @@ export class Driver extends BaseUser {
         this.activeOrderId = null
         this.driverStatus = DRIVER_STATUS.ACTIVE
     }
+    
     completeDelivery() {
         this.activeOrderId = null
         this.driverStatus = DRIVER_STATUS.ACTIVE
@@ -108,29 +118,44 @@ export class Driver extends BaseUser {
     markedPickedUp() {
         this.driverStatus = DRIVER_STATUS.ON_DELIVERY
     }
+    
     getActiveOrder() {
         return this.activeOrderId;
     }
 
+    // ── Verification management ───────────────────────────
+    verifyDriver(): void {
+        if (this.driverStatus === DRIVER_STATUS.PENDING_VERIFICATION) {
+            this.driverStatus = DRIVER_STATUS.OFFLINE;
+            this.addDomainEvent(new DriverVerified(this._id, new Date()));
+        }
+    }
+
+    suspendDriver(reason: string): void {
+        this.driverStatus = DRIVER_STATUS.SUSPENDED;
+        this.isAvailable = false;
+        this.addDomainEvent(new DriverSuspended(this._id, reason, new Date()));
+    }
+
     // ── Earnings methods  ──────────────────────────────────────────
     creditEarnings(amount: number) {
-        // if (amount <= 0) throw new DomainError('invalid_earning_amount')
         if (amount <= 0) {
-            console.error("invalid_earning_amount");
+            throw new ValidationError('invalid_earning_amount');
         }
         this.totalEarnings += amount
         this.pendingPayout += amount
     }
+    
     requestPayout(): void {
 
     }
+    
     clearPendingPayout() { this.pendingPayout = 0 }
 
     // ── Ratings ───────────────────────────────────────────
     receiveRating(rating: number) {
-        // if (rating < 1 || rating > 5) throw new DomainError('invalid_rating')
         if (rating < 1 || rating > 5) {
-            console.error("invalid rating");
+            throw new ValidationError('invalid_rating');
         }
         this.totalRatings += 1
         this.averageRating = ((this.averageRating * (this.totalRatings - 1)) + rating) / this.totalRatings
@@ -146,9 +171,8 @@ export class Driver extends BaseUser {
     }
 
     // ── Static factory ────────────────────────────────────
-
     static create(input: CreateDriverInput): Driver {
-        return new Driver({
+        const driver = new Driver({
             ...input,
             role: USER_ROLE.DRIVER,
             driverStatus: DRIVER_STATUS.PENDING_VERIFICATION,
@@ -163,7 +187,12 @@ export class Driver extends BaseUser {
             totalDeliveries: 0,
             totalRatings: 0,
             fcmTokens: [],
-        })
-    }
+        });
 
+        driver.addDomainEvent(
+            new UserRegistered(driver._id, driver.email, driver.role, driver.name)
+        );
+
+        return driver;
+    }
 };

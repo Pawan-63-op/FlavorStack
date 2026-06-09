@@ -2,17 +2,16 @@ import { DomainEvent } from '../../shared/DomainEvent';
 import { UserRole } from '../enums/user-role.enum';
 import { randomUUID } from 'crypto';
 
-export class UserRegistered implements DomainEvent {
+export class RoleAssigned implements DomainEvent {
   public readonly eventId: string;
   public readonly occurredOn: Date;
-  public readonly eventName = 'UserRegistered';
+  public readonly eventName = 'RoleAssigned';
   public readonly aggregateId: string;
 
   constructor(
     userId: string,
-    public readonly email: string,
-    public readonly role: UserRole,
-    public readonly name: string
+    public readonly assignedRole: UserRole,
+    public readonly assignedBy: string
   ) {
     this.eventId = randomUUID();
     this.occurredOn = new Date();
