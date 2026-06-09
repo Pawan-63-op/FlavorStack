@@ -105,17 +105,26 @@ export class Driver extends BaseUser {
     }
 
     cancelDelivery() {
+        if (!this.isBusy) {
+            throw new DomainError('driver_not_on_delivery');
+        }
         this.activeOrderId = null
         this.driverStatus = DRIVER_STATUS.ACTIVE
     }
-    
+
     completeDelivery() {
+        if (!this.isBusy) {
+            throw new DomainError('driver_not_on_delivery');
+        }
         this.activeOrderId = null
         this.driverStatus = DRIVER_STATUS.ACTIVE
         this.totalDeliveries += 1
     }
 
     markedPickedUp() {
+        if (!this.isBusy) {
+            throw new DomainError('driver_not_on_delivery');
+        }
         this.driverStatus = DRIVER_STATUS.ON_DELIVERY
     }
     
@@ -125,7 +134,11 @@ export class Driver extends BaseUser {
 
     // ── Verification management ───────────────────────────
     verifyDriver(): void {
-        if (this.driverStatus === DRIVER_STATUS.PENDING_VERIFICATION) {
+        // Allow both initial verification and re-verification after suspension.
+        if (
+            this.driverStatus === DRIVER_STATUS.PENDING_VERIFICATION ||
+            this.driverStatus === DRIVER_STATUS.SUSPENDED
+        ) {
             this.driverStatus = DRIVER_STATUS.OFFLINE;
             this.addDomainEvent(new DriverVerified(this._id, new Date()));
         }

@@ -16,15 +16,9 @@ import { UserUnbanned } from "../events/UserUnbanned";
 export abstract class BaseUser extends AggregateRoot<any> {
 
     // ── Section 1: Identity ──────────────────────────────
-    // @ts-ignore
+    // String projection of the aggregate's UniqueEntityId — safe for events/persistence.
     get _id(): string {
         return this.id.toString();
-    }
-    // @ts-ignore
-    set _id(val: string | undefined) {
-        if (val) {
-            (this as any)._id = new UniqueEntityId(val);
-        }
     }
 
     name!: string
@@ -63,8 +57,11 @@ export abstract class BaseUser extends AggregateRoot<any> {
     updatedAt!: Date
 
     constructor(data: Partial<BaseUser>) {
-        super(data, data._id ? new UniqueEntityId(data._id) : undefined);
-        Object.assign(this, data);
+        // Destructure _id so Object.assign never overwrites the UniqueEntityId
+        // managed by Entity. Props passed as {} since BaseUser uses flat fields.
+        const { _id: rawId, ...rest } = data as any;
+        super({} as any, rawId ? new UniqueEntityId(String(rawId)) : undefined);
+        Object.assign(this, rest);
     }
 
     // ── Abstract — each subclass must implement ───────────

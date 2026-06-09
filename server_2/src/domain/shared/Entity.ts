@@ -1,16 +1,17 @@
 import { UniqueEntityId } from './UniqueEntityId';
 
 export abstract class Entity<T> {
-  protected readonly _id: UniqueEntityId;
+  // Private so subclasses cannot shadow it; access via the `id` getter only.
+  private readonly _entityId: UniqueEntityId;
   protected readonly props: T;
 
   protected constructor(props: T, id?: UniqueEntityId) {
-    this._id = id || new UniqueEntityId();
+    this._entityId = id || new UniqueEntityId();
     this.props = props;
   }
 
   get id(): UniqueEntityId {
-    return this._id;
+    return this._entityId;
   }
 
   public equals(other?: Entity<T> | null): boolean {
@@ -23,12 +24,12 @@ export abstract class Entity<T> {
     if (Object.getPrototypeOf(this) !== Object.getPrototypeOf(other)) {
       return false;
     }
-    return this._id.equals(other._id);
+    return this._entityId.equals((other as any)._entityId);
   }
 
   public toJSON(): any {
     return {
-      id: this._id.toString(),
+      id: this._entityId.toString(),
       ...this.props
     };
   }
