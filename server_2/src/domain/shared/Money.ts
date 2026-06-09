@@ -70,9 +70,11 @@ export class Money extends ValueObject<MoneyProps> {
     if (typeof factor !== 'number' || isNaN(factor)) {
       throw new Error('Factor must be a valid number');
     }
+    if (factor < 0) {
+      throw new Error('Factor cannot be negative');
+    }
     const newAmount = Math.round(this.props.amount * factor);
-    const finalAmount = Math.max(0, newAmount);
-    return new Money({ amount: finalAmount, currency: this.props.currency });
+    return new Money({ amount: newAmount, currency: this.props.currency });
   }
 
   public isGreaterThan(m: Money): boolean {

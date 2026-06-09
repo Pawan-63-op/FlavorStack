@@ -12,6 +12,9 @@ export abstract class ValueObject<T> {
     if (vo.props === undefined) {
       return false;
     }
+    if (this.constructor !== vo.constructor) {
+      return false;
+    }
     return this.deepEquals(this.props, vo.props);
   }
 

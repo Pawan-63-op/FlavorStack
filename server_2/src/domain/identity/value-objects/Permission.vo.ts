@@ -27,8 +27,15 @@ export class Permission extends ValueObject<PermissionProps> {
     return this.props.scope;
   }
 
-  public matches(resource: PermissionResource, action: PermissionAction): boolean {
-    return this.props.resource === resource && this.props.action === action;
+  public matches(resource: PermissionResource, action: PermissionAction, scope?: string): boolean {
+    if (this.props.resource !== resource || this.props.action !== action) {
+      return false;
+    }
+    // Scope only constrains the match when this permission carries one.
+    if (this.props.scope !== undefined) {
+      return this.props.scope === scope;
+    }
+    return true;
   }
 
   public toString(): string {

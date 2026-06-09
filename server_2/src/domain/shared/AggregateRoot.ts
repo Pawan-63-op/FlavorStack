@@ -19,6 +19,6 @@ export abstract class AggregateRoot<T> extends Entity<T> {
   }
 
   get domainEvents(): readonly DomainEvent[] {
-    return Object.freeze(this._domainEvents);
+    return Object.freeze([...this._domainEvents]);
   }
 }

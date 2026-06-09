@@ -8,7 +8,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "test": "jest src/tests/unit/domain/shared/ src/tests/unit/domain/identity/value-objects/",
+    "test": "jest src/tests/unit/domain/shared/ src/tests/unit/domain/identity/",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage"
   },

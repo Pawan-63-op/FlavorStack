@@ -116,10 +116,9 @@ describe('Money', () => {
       expect(multiplied2.amount).toBe(33);
     });
 
-    it('should floor multiplication to 0 if factor is negative', () => {
+    it('should throw when multiply factor is negative', () => {
       const m = Money.create(100, 'INR').getValue();
-      const result = m.multiply(-1.5);
-      expect(result.amount).toBe(0);
+      expect(() => m.multiply(-1.5)).toThrow('Factor cannot be negative');
     });
   });
 
