@@ -14,4 +14,5 @@ export interface ISessionStore {
   find(userId: string, sessionId: string): Promise<SessionData | null>;
   invalidate(userId: string, sessionId: string): Promise<void>;
   invalidateAll(userId: string): Promise<void>;
+  list(userId: string): Promise<SessionData[]>;
 }
