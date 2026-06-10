@@ -8,8 +8,9 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "test": "jest src/tests/unit/domain/shared/ src/tests/unit/domain/identity/ src/tests/unit/application/identity/ src/tests/unit/application/shared/ src/tests/unit/infrastructure/",
+    "test": "jest src/tests/unit/domain/shared/ src/tests/unit/domain/identity/ src/tests/unit/application/identity/ src/tests/unit/application/shared/ src/tests/unit/infrastructure/ src/tests/unit/config/",
     "test:integration": "jest --config jest.integration.config.ts",
+    "test:integration:redis": "jest --config jest.integration.redis.config.ts",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage"
   },
@@ -32,6 +33,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@testcontainers/redis": "^12.0.1",
     "@types/bcrypt": "^6.0.0",
     "@types/cookie-parser": "^1.4.10",
     "@types/express": "^5.0.6",
@@ -46,6 +48,7 @@
     "nodemon": "^3.1.14",
     "prettier": "^3.8.3",
     "supertest": "^7.2.2",
+    "testcontainers": "^12.0.1",
     "ts-jest": "^29.4.11",
     "ts-node": "^10.9.2",
     "typescript": "^6.0.3"
