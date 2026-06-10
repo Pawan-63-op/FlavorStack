@@ -41,6 +41,7 @@ export class Admin extends BaseUser {
         this.auditLog = data.auditLog ?? []
         this.lastActivityAt = data.lastActivityAt ?? null
         this.department = data.department ?? ''
+        this.managedBy = data.managedBy ?? ''
     }
 
     // ── Abstract ──────────────────────────────────────────

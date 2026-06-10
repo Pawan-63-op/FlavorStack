@@ -42,6 +42,8 @@ export class Driver extends BaseUser {
         super(data)
         this.role = USER_ROLE.DRIVER
         this.driverStatus = data.driverStatus ?? DRIVER_STATUS.PENDING_VERIFICATION
+        this.vehicle = data.vehicle as VehicleInfo
+        this.locationUpdatedAt = data.locationUpdatedAt ?? null
         this.isAvailable = data.isAvailable ?? false
         this.totalEarnings = data.totalEarnings ?? 0
         this.pendingPayout = data.pendingPayout ?? 0
