@@ -175,8 +175,11 @@ export class Customer extends BaseUser {
         if (input.defaultAddress) {
             addresses.push({ id: defaultAddressId!, address: input.defaultAddress });
         }
+        // Destructure to exclude defaultAddress from the spread — Customer has a getter
+        // named defaultAddress which conflicts with Object.assign in the constructor.
+        const { defaultAddress: _addr, ...inputWithoutAddress } = input;
         const customer = new Customer({
-            ...input,
+            ...inputWithoutAddress,
             role: USER_ROLE.CUSTOMER,
             isActive: true,
             isEmailVerified: false,

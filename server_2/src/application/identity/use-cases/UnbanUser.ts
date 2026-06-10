@@ -1,0 +1,54 @@
+import { Result } from '../../../domain/shared/Result';
+import { NotFoundError } from '../../../domain/shared/errors/NotFoundError';
+import { ForbiddenError } from '../../../domain/shared/errors/ForbiddenError';
+import { DomainError } from '../../../domain/shared/errors/DomainError';
+import { IUserRepository } from '../../../domain/identity/repositories/IUserRepository';
+import { Admin } from '../../../domain/identity/entities/Admin';
+import { IUnitOfWork } from '../../shared/ports/IUnitOfWork';
+import { IOutboxStore } from '../../shared/outbox/IOutboxStore';
+import { IEventBus } from '../../shared/events/IEventBus';
+import { UnbanUserDto } from '../dtos/UnbanUserDto';
+
+export class UnbanUser {
+  constructor(
+    private userRepo: IUserRepository,
+    private unitOfWork: IUnitOfWork,
+    private outboxStore: IOutboxStore,
+    private eventBus: IEventBus,
+  ) {}
+
+  async execute(dto: UnbanUserDto): Promise<Result<void>> {
+    // 1. Load actor and target
+    const actor = await this.userRepo.findById(dto.actorId);
+    if (!actor) return Result.fail(new NotFoundError('actor_not_found'));
+    if (!(actor instanceof Admin)) return Result.fail(new ForbiddenError('actor_not_admin'));
+
+    const target = await this.userRepo.findById(dto.targetUserId);
+    if (!target) return Result.fail(new NotFoundError('user_not_found'));
+
+    // 2. Authorize: same admin-target rule as banning applies symmetrically
+    try {
+      actor.assertCanBan(target.role);
+    } catch (e) {
+      if (e instanceof DomainError) return Result.fail(e);
+      throw e;
+    }
+
+    // 3. Lift the ban (raises UserUnbanned)
+    target.unban();
+
+    // 4. Pull events
+    const events = target.pullDomainEvents();
+
+    // 5. Atomic transaction: persist target + outbox
+    await this.unitOfWork.runInTransaction(async (ctx) => {
+      await this.userRepo.update(target);
+      await this.outboxStore.append(events, ctx);
+    });
+
+    // 6. Post-commit: publish events
+    await this.eventBus.publishAll(events);
+
+    return Result.ok();
+  }
+}
