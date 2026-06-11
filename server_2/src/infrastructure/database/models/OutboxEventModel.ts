@@ -22,6 +22,10 @@ export interface OutboxEventDocument {
   retryCount: number;
   createdAt: Date;
   processedAt: Date | null;
+  // Phase 8 (Batch 4): persisted exponential-backoff scheduling. `findPending`
+  // gates on `nextAttemptAt <= now` so retries are restart- and multi-instance-safe.
+  nextAttemptAt: Date;
+  lastError: string | null;
 }
 
 const OutboxEventSchema = new Schema<OutboxEventDocument>(
@@ -35,6 +39,8 @@ const OutboxEventSchema = new Schema<OutboxEventDocument>(
     retryCount: { type: Number, default: 0 },
     createdAt: { type: Date, required: true, default: Date.now },
     processedAt: { type: Date, default: null },
+    nextAttemptAt: { type: Date, required: true, default: Date.now },
+    lastError: { type: String, default: null },
   },
   {
     versionKey: false,
@@ -42,7 +48,8 @@ const OutboxEventSchema = new Schema<OutboxEventDocument>(
   }
 );
 
-// Poller's findPending(limit): { status: 'PENDING' } sorted by createdAt.
-OutboxEventSchema.index({ status: 1, createdAt: 1 });
+// Processor's findPending(limit): { status: 'PENDING', nextAttemptAt <= now }
+// served oldest-first by this index.
+OutboxEventSchema.index({ status: 1, nextAttemptAt: 1 });
 
 export const OutboxEventModel = model<OutboxEventDocument>('OutboxEvent', OutboxEventSchema);

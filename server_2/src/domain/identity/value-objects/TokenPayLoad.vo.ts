@@ -4,6 +4,7 @@ export interface TokenPayLoad {
     role: UserRole;
     sessionId: string;
     jti: string;
+    tokenVersion: number;
     iat: number;
     exp: number;
 }

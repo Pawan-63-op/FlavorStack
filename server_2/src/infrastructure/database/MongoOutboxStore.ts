@@ -50,6 +50,9 @@ export function toOutboxRow(
     retryCount: 0,
     createdAt: new Date(),
     processedAt: null,
+    // Eligible immediately; the processor reschedules this on transient failure.
+    nextAttemptAt: new Date(),
+    lastError: null,
   };
 }
 

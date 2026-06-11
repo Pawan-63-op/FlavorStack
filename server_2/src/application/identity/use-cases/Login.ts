@@ -6,12 +6,13 @@ import { Email } from '../../../domain/identity/value-objects/Email.vo';
 import { IUserRepository } from '../../../domain/identity/repositories/IUserRepository';
 import { IPasswordHasher } from '../../../domain/identity/services/IPasswordHasher';
 import { ITokenService } from '../../../domain/identity/services/ITokenService';
+import { IRefreshTokenHasher } from '../../../domain/identity/services/IRefreshTokenHasher';
 import { ISessionStore } from '../../../domain/identity/services/ISessionStore';
 import { LoginDto } from '../dtos/LoginDto';
 import { AuthResponse } from '../responses/AuthResponse';
 import { toAuthResponse } from '../responses/mappers';
 
-const ACCESS_TOKEN_TTL_SECONDS = 3600; // 1 hour
+const ACCESS_TOKEN_TTL_SECONDS = 900; // 15 minutes
 const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 export class Login {
@@ -20,6 +21,7 @@ export class Login {
     private passwordHasher: IPasswordHasher,
     private tokenService: ITokenService,
     private sessionStore: ISessionStore,
+    private refreshTokenHasher: IRefreshTokenHasher,
   ) {}
 
   async execute(dto: LoginDto): Promise<Result<AuthResponse>> {
@@ -63,6 +65,7 @@ export class Login {
       role: user.role,
       sessionId,
       jti,
+      tokenVersion: user.tokenVersion,
       iat: now,
       exp: now + ACCESS_TOKEN_TTL_SECONDS,
     };
@@ -71,8 +74,8 @@ export class Login {
     const accessToken = this.tokenService.generateAccessToken(payload);
     const refreshToken = this.tokenService.generateRefreshToken(payload);
 
-    // 8. Hash refresh token before storing
-    const refreshTokenHash = await this.passwordHasher.hash(refreshToken);
+    // 8. Hash refresh token before storing (SHA-256, full-length — bcrypt is passwords-only)
+    const refreshTokenHash = this.refreshTokenHasher.hash(refreshToken);
 
     // 9. Persist session
     const now2 = new Date();

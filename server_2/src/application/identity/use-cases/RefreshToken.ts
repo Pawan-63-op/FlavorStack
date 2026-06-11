@@ -2,22 +2,22 @@ import { randomUUID } from 'crypto';
 import { Result } from '../../../domain/shared/Result';
 import { ForbiddenError } from '../../../domain/shared/errors/ForbiddenError';
 import { IUserRepository } from '../../../domain/identity/repositories/IUserRepository';
-import { IPasswordHasher } from '../../../domain/identity/services/IPasswordHasher';
 import { ITokenService } from '../../../domain/identity/services/ITokenService';
+import { IRefreshTokenHasher } from '../../../domain/identity/services/IRefreshTokenHasher';
 import { ISessionStore } from '../../../domain/identity/services/ISessionStore';
 import { RefreshTokenDto } from '../dtos/RefreshTokenDto';
 import { AuthResponse } from '../responses/AuthResponse';
 import { toAuthResponse } from '../responses/mappers';
 
-const ACCESS_TOKEN_TTL_SECONDS = 3600; // 1 hour
+const ACCESS_TOKEN_TTL_SECONDS = 900; // 15 minutes
 const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 export class RefreshToken {
   constructor(
     private userRepo: IUserRepository,
     private tokenService: ITokenService,
-    private passwordHasher: IPasswordHasher,
     private sessionStore: ISessionStore,
+    private refreshTokenHasher: IRefreshTokenHasher,
   ) {}
 
   async execute(dto: RefreshTokenDto): Promise<Result<AuthResponse>> {
@@ -36,7 +36,7 @@ export class RefreshToken {
     }
 
     // 3. Verify refresh token hash (detect reuse)
-    const hashMatch = await this.passwordHasher.compare(dto.refreshToken, session.refreshTokenHash);
+    const hashMatch = this.refreshTokenHasher.compare(dto.refreshToken, session.refreshTokenHash);
     if (!hashMatch) {
       // Token reuse detected — invalidate all sessions for this user
       await this.sessionStore.invalidateAll(userId);
@@ -47,6 +47,11 @@ export class RefreshToken {
     const user = await this.userRepo.findById(userId);
     if (!user || !user.isActive) {
       return Result.fail(new ForbiddenError('user_not_found_or_inactive'));
+    }
+
+    // 4b. Reject stale tokenVersion (e.g. password changed / sessions revoked since issuance)
+    if (payload.tokenVersion !== user.tokenVersion) {
+      return Result.fail(new ForbiddenError('token_version_mismatch'));
     }
 
     // 5. Invalidate old session
@@ -62,6 +67,7 @@ export class RefreshToken {
       role,
       sessionId: newSessionId,
       jti: newJti,
+      tokenVersion: user.tokenVersion,
       iat: now,
       exp: now + ACCESS_TOKEN_TTL_SECONDS,
     };
@@ -70,8 +76,8 @@ export class RefreshToken {
     const newAccessToken = this.tokenService.generateAccessToken(newPayload);
     const newRefreshToken = this.tokenService.generateRefreshToken(newPayload);
 
-    // 8. Hash new refresh token before storing
-    const newRefreshTokenHash = await this.passwordHasher.hash(newRefreshToken);
+    // 8. Hash new refresh token before storing (SHA-256, full-length — bcrypt is passwords-only)
+    const newRefreshTokenHash = this.refreshTokenHasher.hash(newRefreshToken);
 
     // 9. Persist new session
     const now2 = new Date();

@@ -38,12 +38,19 @@ export class MongoOutboxRepository {
     await OutboxEventModel.create([row], { session: this.session });
   }
 
-  /** Oldest PENDING rows first, capped at `limit` (uses the {status,createdAt} index). */
+  /**
+   * Oldest due PENDING rows first, capped at `limit`. Gated on
+   * `nextAttemptAt <= now` so backed-off rows wait their turn (uses the
+   * {status, nextAttemptAt} index). Sorted by nextAttemptAt so the longest-due
+   * work drains first.
+   */
   async findPending(limit = 100): Promise<OutboxEventDocument[]> {
-    return OutboxEventModel.find({ status: OUTBOX_STATUS.PENDING }, null, {
-      session: this.session,
-    })
-      .sort({ createdAt: 1 })
+    return OutboxEventModel.find(
+      { status: OUTBOX_STATUS.PENDING, nextAttemptAt: { $lte: new Date() } },
+      null,
+      { session: this.session },
+    )
+      .sort({ nextAttemptAt: 1 })
       .limit(limit)
       .lean<OutboxEventDocument[]>();
   }
@@ -62,6 +69,38 @@ export class MongoOutboxRepository {
     await OutboxEventModel.updateOne(
       { _id: id },
       { $set: { status: OUTBOX_STATUS.PROCESSED, processedAt: new Date() } },
+      { session: this.session },
+    );
+  }
+
+  /**
+   * Transient failure with retries remaining: return the row to PENDING, persist
+   * the bumped retryCount, the backed-off nextAttemptAt and the last error so the
+   * schedule survives restarts.
+   */
+  async recordFailure(
+    id: string,
+    update: { retryCount: number; nextAttemptAt: Date; lastError: string },
+  ): Promise<void> {
+    await OutboxEventModel.updateOne(
+      { _id: id },
+      {
+        $set: {
+          status: OUTBOX_STATUS.PENDING,
+          retryCount: update.retryCount,
+          nextAttemptAt: update.nextAttemptAt,
+          lastError: update.lastError,
+        },
+      },
+      { session: this.session },
+    );
+  }
+
+  /** Terminal failure (retries exhausted): mark FAILED and record the last error. */
+  async markFailed(id: string, lastError: string): Promise<void> {
+    await OutboxEventModel.updateOne(
+      { _id: id },
+      { $set: { status: OUTBOX_STATUS.FAILED, lastError } },
       { session: this.session },
     );
   }
