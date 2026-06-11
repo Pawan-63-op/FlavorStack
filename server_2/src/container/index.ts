@@ -50,6 +50,8 @@ import { AssignRole } from '../application/identity/use-cases/AssignRole';
 import { GrantPermission } from '../application/identity/use-cases/GrantPermission';
 import { BanUser } from '../application/identity/use-cases/BanUser';
 import { UnbanUser } from '../application/identity/use-cases/UnbanUser';
+import { GetProfile } from '../application/identity/use-cases/GetProfile';
+import { UpdateProfile } from '../application/identity/use-cases/UpdateProfile';
 
 export interface IdentityUseCases {
   registerCustomer: RegisterCustomer;
@@ -72,6 +74,8 @@ export interface IdentityUseCases {
   grantPermission: GrantPermission;
   banUser: BanUser;
   unbanUser: UnbanUser;
+  getProfile: GetProfile;
+  updateProfile: UpdateProfile;
 }
 
 export interface AppContainer {
@@ -237,6 +241,8 @@ export async function bootstrap(): Promise<AppContainer> {
         identity.outboxStore,
         event.eventBus,
       ),
+      getProfile: new GetProfile(identity.userRepository),
+      updateProfile: new UpdateProfile(identity.userRepository),
     };
 
     // 9. Phase-10 placeholder: controllers (`src/api/v1/controllers/*`) are still stubs.

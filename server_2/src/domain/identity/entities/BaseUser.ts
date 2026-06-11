@@ -62,6 +62,10 @@ export abstract class BaseUser extends AggregateRoot<any> {
         const { _id: rawId, ...rest } = data as any;
         super({} as any, rawId ? new UniqueEntityId(String(rawId)) : undefined);
         Object.assign(this, rest);
+        // New entities (via create()) don't pass timestamps; rehydration
+        // (via baseToDomain) always does. UserModel requires both fields.
+        if (!this.createdAt) this.createdAt = new Date();
+        if (!this.updatedAt) this.updatedAt = new Date();
     }
 
     // ── Abstract — each subclass must implement ───────────
@@ -164,5 +168,10 @@ export abstract class BaseUser extends AggregateRoot<any> {
 
     invalidateAllSessions(): void {
         this.tokenVersion += 1
+    }
+
+    updateProfile(fields: { name?: string; avatarUrl?: string }): void {
+        if (fields.name !== undefined) this.name = fields.name
+        if (fields.avatarUrl !== undefined) this.avatarUrl = fields.avatarUrl
     }
 }
