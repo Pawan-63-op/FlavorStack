@@ -1,0 +1,1 @@
+// Interface: findByTokenHash, revokeFamily, save

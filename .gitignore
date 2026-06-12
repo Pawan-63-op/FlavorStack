@@ -1,8 +1,8 @@
 # ======================
 # GENERAL
 # ======================
-server_2/artifacts_before_update/
-# server_2/src
+artifacts_before_update/
+
 .DS_Store
 *.log
 *.tmp
@@ -63,3 +63,4 @@ logs/
 # TYPESCRIPT
 # ======================
 *.tsbuildinfo
+
