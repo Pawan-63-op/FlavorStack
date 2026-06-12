@@ -4,7 +4,8 @@ import { createApp } from './app';
 import { logger } from './infrastructure/observability/logger';
 
 async function main(): Promise<void> {
-  const app = await bootstrap();
+  // The OutboxWorker process owns the poller (Phase 11) — the API runs HTTP only.
+  const app = await bootstrap({ startOutboxProcessor: false });
   const expressApp = createApp(app);
 
   const port = Number(process.env.PORT ?? 3000);

@@ -1,4 +1,4 @@
-// Composition root / application bootstrap for the Identity bounded context (Phase 9, Batch 4).
+// Composition root / application bootstrap for the Identity bounded context (Phase 11, Batch 4).
 //
 // This is the single place the whole Identity object graph is assembled. It owns
 // connection lifecycle (Mongo, Redis, OutboxProcessor) and wires the three context
@@ -12,13 +12,15 @@
 //   4. createAuthContainer()         — token/password/session/email/otp/sms
 //   5. createEventContainer()        — in-process event bus
 //   6. wireIdentityEventHandlers()   — BEFORE the processor starts, so drained events have subscribers
-//   7. new OutboxProcessor().start() — reliable async dispatch spine
+//   7. new OutboxProcessor()         — only `.start()`s when opts.startOutboxProcessor !== false
 //   8. construct all 20 use-cases    — RegisterUser after RegisterCustomer/RegisterDriver
 //   9. return AppContainer
 //
-// NOTE: `bootstrap()` is intended to be called once per process (by server.ts in Phase 10/11).
+// NOTE: `bootstrap()` is intended to be called once per process. The API (`server.ts`) calls
+// `bootstrap({ startOutboxProcessor: false })` — `OutboxWorker` (`src/workers/outbox.worker.ts`)
+// owns the poller, so only one `OutboxProcessor.start()` ever runs across all processes.
 // A second call would create a duplicate RedisClient/OutboxProcessor (duplicate-poller bug);
-// single-call is enforced by the entrypoint structure, not a runtime guard here (YAGNI).
+// single-call per process is enforced by the entrypoint structure, not a runtime guard here (YAGNI).
 import type { Connection } from 'mongoose';
 
 import { assertRequiredConfig, getOutboxConfig } from '../config';
@@ -29,6 +31,8 @@ import { OutboxProcessor } from '../infrastructure/outbox/OutboxProcessor';
 import { createIdentityContainer, IdentityContainer } from './identity.container';
 import { createAuthContainer, AuthContainer } from './auth.container';
 import { createEventContainer, wireIdentityEventHandlers, EventContainer } from './event.container';
+import { IEmailQueue } from '../application/shared/queues/IEmailQueue';
+import { EmailQueue } from '../infrastructure/workers/email/EmailQueue';
 
 import { RegisterCustomer } from '../application/identity/use-cases/RegisterCustomer';
 import { RegisterDriver } from '../application/identity/use-cases/RegisterDriver';
@@ -78,6 +82,15 @@ export interface IdentityUseCases {
   updateProfile: UpdateProfile;
 }
 
+export interface BootstrapOptions {
+  /**
+   * Whether `bootstrap()` should start the `OutboxProcessor` poller. Defaults to `true`
+   * (backward-compatible). The API process (`server.ts`) passes `false` — `OutboxWorker`
+   * (Phase 11, Batch 4) owns `outboxProcessor.start()` so only one poller ever runs.
+   */
+  startOutboxProcessor?: boolean;
+}
+
 export interface AppContainer {
   connection: Connection;
   redisClient: RedisClient;
@@ -85,6 +98,7 @@ export interface AppContainer {
   auth: AuthContainer;
   event: EventContainer;
   outboxProcessor: OutboxProcessor;
+  emailQueue: IEmailQueue;
   useCases: IdentityUseCases;
 }
 
@@ -94,7 +108,9 @@ export interface AppContainer {
  * valid env vars and reachable Mongo + Redis. If a step after the DB connects throws,
  * the DB connection is closed before the error is re-thrown so nothing is left dangling.
  */
-export async function bootstrap(): Promise<AppContainer> {
+export async function bootstrap(opts: BootstrapOptions = {}): Promise<AppContainer> {
+  const startOutboxProcessor = opts.startOutboxProcessor ?? true;
+
   // 0. Fail fast on missing env (JWT keys / Resend key) before opening any connection.
   assertRequiredConfig();
 
@@ -116,15 +132,19 @@ export async function bootstrap(): Promise<AppContainer> {
     const event = createEventContainer();
 
     // 6. Subscribe identity handlers BEFORE the processor starts draining events.
-    wireIdentityEventHandlers(event.eventBus, auth.emailProvider);
+    const emailQueue = new EmailQueue();
+    wireIdentityEventHandlers(event.eventBus, emailQueue);
 
-    // 7. Reliable async dispatch spine.
+    // 7. Reliable async dispatch spine. The API process passes `startOutboxProcessor:
+    //    false` — `OutboxWorker` (Phase 11) owns `.start()` so only one poller ever runs.
     const outboxProcessor = new OutboxProcessor(
       identity.outboxRepository,
       event.eventBus,
       getOutboxConfig(),
     );
-    outboxProcessor.start();
+    if (startOutboxProcessor) {
+      outboxProcessor.start();
+    }
 
     // 8. Construct all 20 use-cases. RegisterUser composes RegisterCustomer + RegisterDriver,
     //    so those two are built first.
@@ -257,6 +277,7 @@ export async function bootstrap(): Promise<AppContainer> {
       auth,
       event,
       outboxProcessor,
+      emailQueue,
       useCases,
     };
   } catch (err) {
@@ -269,10 +290,11 @@ export async function bootstrap(): Promise<AppContainer> {
 
 /**
  * Graceful teardown in reverse order of bootstrap: stop the outbox poller (drains the
- * in-flight batch), close Redis, then disconnect Mongo.
+ * in-flight batch), close the email queue, close Redis, then disconnect Mongo.
  */
 export async function shutdown(app: AppContainer): Promise<void> {
   await app.outboxProcessor.stop();
+  await app.emailQueue.close();
   await app.redisClient.shutdown();
   await disconnectDB();
 }

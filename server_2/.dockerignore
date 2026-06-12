@@ -1,1 +1,7 @@
-// node_modules, dist, .env, coverage
+node_modules
+dist
+.env
+.env.*
+coverage
+*.log
+.git

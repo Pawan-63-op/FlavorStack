@@ -1,7 +1,7 @@
 // Composition root for the Identity in-process event bus and handler wiring (Phase 9, Batch 3).
 import { IEventBus } from '../application/shared/events/IEventBus';
 import { InMemoryEventBus } from '../application/shared/events/InMemoryEventBus';
-import { IEmailProvider } from '../domain/identity/services/IEmailProvider';
+import { IEmailQueue } from '../application/shared/queues/IEmailQueue';
 import { registerIdentityEventHandlers } from '../application/identity/event-handlers/EventRegistry';
 
 export interface EventContainer {
@@ -19,6 +19,6 @@ export function createEventContainer(): EventContainer {
  * Thin pass-through to `registerIdentityEventHandlers` — must be called before
  * `OutboxProcessor.start()` so events drained early have subscribers.
  */
-export function wireIdentityEventHandlers(eventBus: IEventBus, emailProvider: IEmailProvider): void {
-  registerIdentityEventHandlers(eventBus, emailProvider);
+export function wireIdentityEventHandlers(eventBus: IEventBus, emailQueue: IEmailQueue): void {
+  registerIdentityEventHandlers(eventBus, emailQueue);
 }
