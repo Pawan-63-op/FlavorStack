@@ -8,7 +8,12 @@ import { rateLimitKey } from './keys';
 import { SLIDING_WINDOW_SCRIPT } from './scripts/slidingWindow';
 
 /** Actions with a configured rate-limit rule. */
-export type RateLimitAction = 'login' | 'otp-generation' | 'otp-verification' | 'password-reset';
+export type RateLimitAction =
+  | 'login'
+  | 'otp-generation'
+  | 'otp-verification'
+  | 'password-reset'
+  | 'catalog-search';
 
 /** A single sliding-window rule: at most `max` requests per `windowSeconds`. */
 export interface RateLimitRule {
@@ -32,6 +37,8 @@ export const DEFAULT_RATE_LIMITS: Record<RateLimitAction, RateLimitRule> = {
   'otp-generation': { windowSeconds: 600, max: 3 },
   'otp-verification': { windowSeconds: 600, max: 5 },
   'password-reset': { windowSeconds: 3600, max: 3 },
+  // Public, unauthenticated discovery (search/nearby) — keyed by IP, generous.
+  'catalog-search': { windowSeconds: 60, max: 60 },
 };
 
 export class RateLimiter {

@@ -5,7 +5,10 @@ const config: Config = {
   testEnvironment: 'node',
   rootDir: '.',
   roots: ['<rootDir>/src'],
-  testMatch: ['**/integration/identity/**/*.integration.test.ts'],
+  testMatch: [
+    '**/integration/identity/**/*.integration.test.ts',
+    '**/integration/catalog/**/*.integration.test.ts',
+  ],
   transform: {
     '^.+\\.tsx?$': ['ts-jest', { tsconfig: 'tsconfig.json' }],
   },

@@ -7,6 +7,10 @@ import { PermissionDeps } from '../middleware/authorize';
 import { createAuthRoutes } from './auth.routes';
 import { createUserRoutes } from './user.routes';
 import { createAdminRoutes } from './admin.routes';
+import { createCatalogRoutes } from './catalog/catalog.routes';
+import { RestaurantController } from '../controllers/catalog/RestaurantController';
+import { MenuController } from '../controllers/catalog/MenuController';
+import { DiscoveryController } from '../controllers/catalog/DiscoveryController';
 
 export function createApiRouter(app: AppContainer): Router {
   const router = Router();
@@ -64,6 +68,44 @@ export function createApiRouter(app: AppContainer): Router {
       controller: identityController,
       tokenService: app.auth.tokenService,
       permissionDeps,
+    }),
+  );
+
+  const cmd = app.catalogWrite.commands;
+  const restaurantController = new RestaurantController({
+    createRestaurant: cmd.createRestaurant,
+    updateRestaurant: cmd.updateRestaurant,
+    publishRestaurant: cmd.publishRestaurant,
+    pauseRestaurant: cmd.pauseRestaurant,
+    closeRestaurant: cmd.closeRestaurant,
+    deleteRestaurant: cmd.deleteRestaurant,
+    setRestaurantVisibility: cmd.setRestaurantVisibility,
+    setOpeningHours: cmd.setOpeningHours,
+    addCategory: cmd.addCategory,
+    updateCategory: cmd.updateCategory,
+    reorderCategories: cmd.reorderCategories,
+    removeCategory: cmd.removeCategory,
+    manageDeliveryZone: cmd.manageDeliveryZone,
+    imageStorage: app.catalogWrite.imageStorage,
+  });
+  const menuController = new MenuController({
+    addMenuItem: cmd.addMenuItem,
+    updateMenuItem: cmd.updateMenuItem,
+    toggleMenuItemAvailability: cmd.toggleMenuItemAvailability,
+    removeMenuItem: cmd.removeMenuItem,
+    setItemVariants: cmd.setItemVariants,
+    imageStorage: app.catalogWrite.imageStorage,
+  });
+  const discoveryController = new DiscoveryController({ ...app.catalogRead.queries });
+
+  router.use(
+    '/catalog',
+    createCatalogRoutes({
+      restaurantController,
+      menuController,
+      discoveryController,
+      tokenService: app.auth.tokenService,
+      rateLimiter: app.auth.rateLimiter,
     }),
   );
 

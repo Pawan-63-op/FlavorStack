@@ -28,15 +28,37 @@ import {
   OUTBOX_STATUS,
 } from './models/OutboxEventModel';
 
-// `DomainEvent` carries no `aggregateType`; the Identity hierarchy persists to a
-// single `users` collection, so we synthesize `'user'`. Revisit (eventName→type
-// map) once other contexts emit to the shared outbox. See plan §9 / §16(1).
+// `DomainEvent` carries no `aggregateType`; we derive it from the event name so
+// each row is tagged with the aggregate it belongs to. Unmapped events fall back
+// to `'user'` — the Identity hierarchy persists to a single `users` collection and
+// was the original (sole) producer. As more contexts emit to the shared outbox
+// they extend `AGGREGATE_TYPE_BY_EVENT`. See plan §9 / §16(1).
 export const DEFAULT_AGGREGATE_TYPE = 'user';
+
+// eventName → owning aggregate type. Catalog (Phase 12) emits two aggregates.
+export const AGGREGATE_TYPE_BY_EVENT: Record<string, string> = {
+  // Catalog — Restaurant aggregate
+  RestaurantCreated: 'restaurant',
+  RestaurantUpdated: 'restaurant',
+  RestaurantStatusChanged: 'restaurant',
+  CategoryAdded: 'restaurant',
+  CategoryUpdated: 'restaurant',
+  DeliveryZoneChanged: 'restaurant',
+  // Catalog — MenuItem aggregate
+  MenuItemCreated: 'menu_item',
+  MenuItemUpdated: 'menu_item',
+  MenuItemAvailabilityChanged: 'menu_item',
+};
+
+/** Resolve the aggregate type for an event name, defaulting to `'user'`. */
+export function resolveAggregateType(eventName: string): string {
+  return AGGREGATE_TYPE_BY_EVENT[eventName] ?? DEFAULT_AGGREGATE_TYPE;
+}
 
 /** Map a domain event to a fresh PENDING outbox row. */
 export function toOutboxRow(
   event: DomainEvent,
-  aggregateType: string = DEFAULT_AGGREGATE_TYPE,
+  aggregateType: string = resolveAggregateType(event.eventName),
 ): Omit<OutboxEventDocument, '_id'> {
   return {
     eventId: event.eventId,

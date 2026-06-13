@@ -6,7 +6,15 @@ export const QUEUE = {
   email: 'email-queue',
   notification: 'notification-queue',
   dlq: 'dead-letter-queue',
+  // Cross-context delivery targets for catalog events (Catalog Phase 12). The
+  // consumers live in their owning contexts (still stubs); the EventRouter only
+  // needs stable queue names to address them.
+  commerce: 'commerce-queue',
+  fulfillment: 'fulfillment-queue',
+  searchReindex: 'search-reindex-queue',
 } as const;
+
+export type QueueName = (typeof QUEUE)[keyof typeof QUEUE];
 
 /**
  * BullMQ's blocking commands require `maxRetriesPerRequest: null` and

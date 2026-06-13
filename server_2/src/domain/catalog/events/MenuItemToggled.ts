@@ -1,1 +1,2 @@
-// Domain event — Commerce listens for availability
+// Realized as MenuItemAvailabilityChanged — alias kept for any stub imports.
+export { MenuItemAvailabilityChanged as MenuItemToggled } from './MenuItemAvailabilityChanged';

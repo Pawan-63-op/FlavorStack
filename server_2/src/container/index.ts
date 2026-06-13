@@ -26,11 +26,16 @@ import type { Connection } from 'mongoose';
 import { assertRequiredConfig, getOutboxConfig } from '../config';
 import { connectDB, disconnectDB } from '../infrastructure/database/connection';
 import { RedisClient } from '../infrastructure/redis/client';
+import { CacheStore } from '../infrastructure/redis/CacheStore';
+import { CatalogCache } from '../infrastructure/redis/catalog/CatalogCache';
 import { OutboxProcessor } from '../infrastructure/outbox/OutboxProcessor';
 
 import { createIdentityContainer, IdentityContainer } from './identity.container';
 import { createAuthContainer, AuthContainer } from './auth.container';
 import { createEventContainer, wireIdentityEventHandlers, EventContainer } from './event.container';
+import { createCatalogReadContainer, CatalogReadContainer } from './catalog.container';
+import { createCatalogWriteContainer, CatalogWriteContainer } from './catalog-write.container';
+import { TransactionContext } from '../infrastructure/database/TransactionContext';
 import { IEmailQueue } from '../application/shared/queues/IEmailQueue';
 import { EmailQueue } from '../infrastructure/workers/email/EmailQueue';
 
@@ -97,6 +102,8 @@ export interface AppContainer {
   identity: IdentityContainer;
   auth: AuthContainer;
   event: EventContainer;
+  catalogRead: CatalogReadContainer;
+  catalogWrite: CatalogWriteContainer;
   outboxProcessor: OutboxProcessor;
   emailQueue: IEmailQueue;
   useCases: IdentityUseCases;
@@ -130,6 +137,17 @@ export async function bootstrap(opts: BootstrapOptions = {}): Promise<AppContain
 
     // 5. In-process event bus.
     const event = createEventContainer();
+
+    // 5b. Catalog read + write graphs. The read container subscribes its
+    //     projector to `event.eventBus`, so command use-cases that publish on
+    //     the same bus after commit keep the projections in sync.
+    const catalogCache = new CatalogCache(new CacheStore(redisClient));
+    const catalogRead = createCatalogReadContainer(
+      event.eventBus,
+      new TransactionContext(),
+      catalogCache,
+    );
+    const catalogWrite = createCatalogWriteContainer(connection, event.eventBus);
 
     // 6. Subscribe identity handlers BEFORE the processor starts draining events.
     const emailQueue = new EmailQueue();
@@ -276,6 +294,8 @@ export async function bootstrap(opts: BootstrapOptions = {}): Promise<AppContain
       identity,
       auth,
       event,
+      catalogRead,
+      catalogWrite,
       outboxProcessor,
       emailQueue,
       useCases,

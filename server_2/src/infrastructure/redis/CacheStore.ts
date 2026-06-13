@@ -26,6 +26,11 @@ export class CacheStore {
     await this.del(key);
   }
 
+  /** Atomically increment an integer counter (creating it at 0 first). Returns the new value. */
+  async incr(key: string): Promise<number> {
+    return this.redisClient.getClient().incr(key);
+  }
+
   async getOrSet<T>(key: string, ttlSeconds: number | undefined, loader: () => Promise<T>): Promise<T> {
     const cached = await this.get<T>(key);
     if (cached !== null) {

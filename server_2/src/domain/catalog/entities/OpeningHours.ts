@@ -1,1 +1,1 @@
-// VO: per-day schedule + holiday list — isOpenAt(datetime)
+// Moved: OpeningHours is a value object, not an entity — see ../value-objects/OpeningHours.vo.ts
