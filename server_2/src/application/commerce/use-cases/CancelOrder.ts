@@ -1,1 +1,0 @@
-// UC: validate cancellation window

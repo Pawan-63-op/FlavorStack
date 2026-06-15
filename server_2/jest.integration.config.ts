@@ -8,6 +8,7 @@ const config: Config = {
   testMatch: [
     '**/integration/identity/**/*.integration.test.ts',
     '**/integration/catalog/**/*.integration.test.ts',
+    '**/integration/commerce/**/*.integration.test.ts',
   ],
   transform: {
     '^.+\\.tsx?$': ['ts-jest', { tsconfig: 'tsconfig.json' }],

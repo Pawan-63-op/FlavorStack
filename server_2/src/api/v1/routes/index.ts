@@ -11,6 +11,12 @@ import { createCatalogRoutes } from './catalog/catalog.routes';
 import { RestaurantController } from '../controllers/catalog/RestaurantController';
 import { MenuController } from '../controllers/catalog/MenuController';
 import { DiscoveryController } from '../controllers/catalog/DiscoveryController';
+import { createCartRoutes } from './cart.routes';
+import { CartController } from '../controllers/CartController';
+import { createCheckoutRoutes } from './checkout.routes';
+import { CheckoutController } from '../controllers/CheckoutController';
+import { createOrderRequestRoutes } from './order-request.routes';
+import { OrderRequestController } from '../controllers/OrderRequestController';
 
 export function createApiRouter(app: AppContainer): Router {
   const router = Router();
@@ -106,6 +112,52 @@ export function createApiRouter(app: AppContainer): Router {
       discoveryController,
       tokenService: app.auth.tokenService,
       rateLimiter: app.auth.rateLimiter,
+    }),
+  );
+
+  const cartCmd = app.commerce.commands;
+  const cartController = new CartController({
+    getCart: cartCmd.getCart,
+    getCartSummary: cartCmd.getCartSummary,
+    addToCart: cartCmd.addToCart,
+    removeFromCart: cartCmd.removeFromCart,
+    updateCartItem: cartCmd.updateCartItem,
+    clearCart: cartCmd.clearCart,
+    applyPromotion: cartCmd.applyPromotion,
+    removePromotion: cartCmd.removePromotion,
+    validatePromotion: cartCmd.validatePromotion,
+  });
+
+  router.use(
+    '/cart',
+    createCartRoutes({
+      cartController,
+      tokenService: app.auth.tokenService,
+    }),
+  );
+
+  const checkoutController = new CheckoutController({
+    checkout: cartCmd.checkout,
+    previewCheckout: cartCmd.previewCheckout,
+  });
+
+  router.use(
+    '/checkout',
+    createCheckoutRoutes({
+      checkoutController,
+      tokenService: app.auth.tokenService,
+    }),
+  );
+
+  const orderRequestController = new OrderRequestController({
+    getOrderRequest: cartCmd.getOrderRequest,
+  });
+
+  router.use(
+    '/order-requests',
+    createOrderRequestRoutes({
+      orderRequestController,
+      tokenService: app.auth.tokenService,
     }),
   );
 

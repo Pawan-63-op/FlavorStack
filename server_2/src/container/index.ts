@@ -35,6 +35,7 @@ import { createAuthContainer, AuthContainer } from './auth.container';
 import { createEventContainer, wireIdentityEventHandlers, EventContainer } from './event.container';
 import { createCatalogReadContainer, CatalogReadContainer } from './catalog.container';
 import { createCatalogWriteContainer, CatalogWriteContainer } from './catalog-write.container';
+import { createCommerceContainer, CommerceContainer } from './commerce.container';
 import { TransactionContext } from '../infrastructure/database/TransactionContext';
 import { IEmailQueue } from '../application/shared/queues/IEmailQueue';
 import { EmailQueue } from '../infrastructure/workers/email/EmailQueue';
@@ -104,6 +105,7 @@ export interface AppContainer {
   event: EventContainer;
   catalogRead: CatalogReadContainer;
   catalogWrite: CatalogWriteContainer;
+  commerce: CommerceContainer;
   outboxProcessor: OutboxProcessor;
   emailQueue: IEmailQueue;
   useCases: IdentityUseCases;
@@ -148,6 +150,16 @@ export async function bootstrap(opts: BootstrapOptions = {}): Promise<AppContain
       catalogCache,
     );
     const catalogWrite = createCatalogWriteContainer(connection, event.eventBus);
+
+    // 5c. Commerce write graph (Phase 4 cart use-cases). CartItemAdded/CartCleared
+    //     publish on the same in-process bus after commit (in-process only, not outbox-routed).
+    //     The Phase 10 Catalog ACL gateway is fed Catalog's three published read ports from the
+    //     read container above — Commerce adapts them, never re-instantiating Catalog concretes.
+    const commerce = createCommerceContainer(connection, event.eventBus, {
+      readRepository: catalogRead.readRepository,
+      serviceabilityQuery: catalogRead.queries.checkServiceability,
+      openingHoursService: catalogRead.openingHoursService,
+    });
 
     // 6. Subscribe identity handlers BEFORE the processor starts draining events.
     const emailQueue = new EmailQueue();
@@ -296,6 +308,7 @@ export async function bootstrap(opts: BootstrapOptions = {}): Promise<AppContain
       event,
       catalogRead,
       catalogWrite,
+      commerce,
       outboxProcessor,
       emailQueue,
       useCases,

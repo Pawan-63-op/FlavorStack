@@ -12,6 +12,12 @@ export const QUEUE = {
   commerce: 'commerce-queue',
   fulfillment: 'fulfillment-queue',
   searchReindex: 'search-reindex-queue',
+  // Cross-context delivery targets for commerce checkout events (Commerce Phase 12).
+  // The consuming contexts (Ordering, Payments) don't exist yet — these are
+  // publish-and-park queues: the EventRouter addresses them, rows persist in the
+  // outbox, and no worker drains them until a consumer attaches.
+  ordering: 'ordering-queue',
+  payments: 'payments-queue',
 } as const;
 
 export type QueueName = (typeof QUEUE)[keyof typeof QUEUE];

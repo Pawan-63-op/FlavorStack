@@ -1,1 +1,0 @@
-// Interface: findByWallet(cursor), save
