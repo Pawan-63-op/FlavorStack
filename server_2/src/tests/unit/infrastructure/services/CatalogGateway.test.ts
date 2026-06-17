@@ -1,0 +1,211 @@
+import { CatalogGateway } from '../../../../infrastructure/services/CatalogGateway';
+import { Money } from '../../../../domain/shared/Money';
+import { Result } from '../../../../domain/shared/Result';
+import { NotFoundError } from '../../../../domain/shared/errors/NotFoundError';
+import { GeoPoint } from '../../../../domain/identity/value-objects/GeoPoint.vo';
+import { RESTAURANT_STATUS } from '../../../../domain/catalog/enums/restaurant-status.enum';
+import { COMMERCE_RESTAURANT_STATUS } from '../../../../domain/commerce/enums/restaurant-status.enum';
+import {
+  ICatalogReadRepository,
+  ListRestaurantsFilter,
+} from '../../../../domain/catalog/repositories/ICatalogReadRepository';
+import {
+  RestaurantSummaryView,
+  RestaurantMenuView,
+  MenuItemView,
+  ServiceableRestaurantView,
+} from '../../../../domain/catalog/types/ReadModels';
+import { CursorPage, CursorPaginationParams } from '../../../../domain/catalog/types/CursorPagination';
+import { CheckServiceabilityDto } from '../../../../application/catalog/dtos/QueryDtos';
+
+// --- Fakes over Catalog's three published read ports (the ACL's only inputs) ---
+
+class FakeCatalogReadRepository implements ICatalogReadRepository {
+  constructor(
+    private readonly summaries: Record<string, RestaurantSummaryView> = {},
+    private readonly items: Record<string, MenuItemView> = {}
+  ) {}
+
+  async getRestaurantSummary(restaurantId: string): Promise<RestaurantSummaryView | null> {
+    return this.summaries[restaurantId] ?? null;
+  }
+  async getRestaurantSummaryBySlug(): Promise<RestaurantSummaryView | null> {
+    return null;
+  }
+  async listRestaurantSummaries(
+    _filter: ListRestaurantsFilter,
+    _params: CursorPaginationParams
+  ): Promise<CursorPage<RestaurantSummaryView>> {
+    return { items: [] };
+  }
+  async getRestaurantMenu(): Promise<RestaurantMenuView | null> {
+    return null;
+  }
+  async getMenuItemView(): Promise<MenuItemView | null> {
+    return null;
+  }
+  async getItemsSnapshot(itemIds: string[]): Promise<MenuItemView[]> {
+    return itemIds.map((id) => this.items[id]).filter((v): v is MenuItemView => v !== undefined);
+  }
+}
+
+class FakeServiceabilityQuery {
+  constructor(private readonly views: ServiceableRestaurantView[] = []) {}
+  async execute(_dto: CheckServiceabilityDto): Promise<Result<ServiceableRestaurantView[]>> {
+    return Result.ok(this.views);
+  }
+}
+
+class FakeOpeningHoursService {
+  constructor(private readonly open: boolean = true) {}
+  async isRestaurantOpen(_restaurantId: string, _at?: Date): Promise<boolean> {
+    return this.open;
+  }
+}
+
+const summary = (over: Partial<RestaurantSummaryView> = {}): RestaurantSummaryView => ({
+  id: 'rest-1',
+  name: 'Pizza Palace',
+  slug: 'pizza-palace',
+  cuisineTypes: [],
+  status: RESTAURANT_STATUS.ACTIVE,
+  isOpen: true,
+  location: { lat: 12.9, lng: 77.6 },
+  ...over,
+});
+
+const itemView = (over: Partial<MenuItemView> = {}): MenuItemView => ({
+  id: 'item-1',
+  restaurantId: 'rest-1',
+  categoryId: 'cat-1',
+  name: 'Margherita',
+  basePriceAmount: 24900,
+  currency: 'INR',
+  tags: [],
+  dietary: [],
+  isAvailable: true,
+  ...over,
+});
+
+const point = GeoPoint.create(12.9, 77.6).getValue();
+const subtotal = Money.create(50000, 'INR').getValue();
+
+describe('CatalogGateway (ACL adapter — contract over Catalog read shapes)', () => {
+  describe('getRestaurantForCheckout', () => {
+    it('maps a published restaurant summary to CheckoutRestaurant', async () => {
+      const repo = new FakeCatalogReadRepository({ 'rest-1': summary({ status: RESTAURANT_STATUS.ACTIVE }) });
+      const gateway = new CatalogGateway(repo, new FakeServiceabilityQuery(), new FakeOpeningHoursService());
+
+      const result = await gateway.getRestaurantForCheckout('rest-1');
+
+      expect(result.isSuccess).toBe(true);
+      const r = result.getValue();
+      expect(r.restaurantId).toBe('rest-1');
+      expect(r.name).toBe('Pizza Palace');
+      expect(r.status).toBe(COMMERCE_RESTAURANT_STATUS.ACTIVE);
+      expect(r.isOpen).toBe(true);
+    });
+
+    it('fails with NotFoundError when the restaurant is absent or non-PUBLIC', async () => {
+      const repo = new FakeCatalogReadRepository();
+      const gateway = new CatalogGateway(repo, new FakeServiceabilityQuery(), new FakeOpeningHoursService());
+
+      const result = await gateway.getRestaurantForCheckout('rest-1');
+
+      expect(result.isFailure).toBe(true);
+      expect(result.getError()).toBeInstanceOf(NotFoundError);
+    });
+  });
+
+  describe('getItemsSnapshot', () => {
+    it('maps MenuItemView[] to CheckoutMenuItem[] with Money base price', async () => {
+      const repo = new FakeCatalogReadRepository(
+        {},
+        { 'item-1': itemView({ basePriceAmount: 24900, currency: 'INR' }) }
+      );
+      const gateway = new CatalogGateway(repo, new FakeServiceabilityQuery(), new FakeOpeningHoursService());
+
+      const result = await gateway.getItemsSnapshot(['item-1']);
+
+      expect(result.isSuccess).toBe(true);
+      const items = result.getValue();
+      expect(items).toHaveLength(1);
+      expect(items[0].menuItemId).toBe('item-1');
+      expect(items[0].restaurantId).toBe('rest-1');
+      expect(items[0].categoryId).toBe('cat-1');
+      expect(items[0].isAvailable).toBe(true);
+      expect(items[0].basePrice.amount).toBe(24900);
+      expect(items[0].basePrice.currency).toBe('INR');
+    });
+
+    it('omits items that no longer exist (absent from the published snapshot)', async () => {
+      const repo = new FakeCatalogReadRepository({}, { 'item-1': itemView() });
+      const gateway = new CatalogGateway(repo, new FakeServiceabilityQuery(), new FakeOpeningHoursService());
+
+      const result = await gateway.getItemsSnapshot(['item-1', 'missing']);
+
+      expect(result.getValue().map((i) => i.menuItemId)).toEqual(['item-1']);
+    });
+  });
+
+  describe('checkServiceability', () => {
+    it('maps the matching ServiceableRestaurantView to a serviceable result', async () => {
+      const views: ServiceableRestaurantView[] = [
+        {
+          restaurantId: 'rest-1',
+          name: 'Pizza Palace',
+          slug: 'pizza-palace',
+          distanceMeters: 3200,
+          deliveryFee: { amount: 4000, currency: 'INR' },
+          minOrder: { amount: 20000, currency: 'INR' },
+        },
+      ];
+      const gateway = new CatalogGateway(
+        new FakeCatalogReadRepository(),
+        new FakeServiceabilityQuery(views),
+        new FakeOpeningHoursService()
+      );
+
+      const result = await gateway.checkServiceability('rest-1', point, subtotal);
+
+      expect(result.isSuccess).toBe(true);
+      const s = result.getValue();
+      expect(s.serviceable).toBe(true);
+      expect(s.distanceMeters).toBe(3200);
+      expect(s.deliveryFee.amount).toBe(4000);
+      expect(s.minOrder.amount).toBe(20000);
+    });
+
+    it('returns serviceable:false with zeroed money when the restaurant does not serve the point', async () => {
+      const gateway = new CatalogGateway(
+        new FakeCatalogReadRepository(),
+        new FakeServiceabilityQuery([]),
+        new FakeOpeningHoursService()
+      );
+
+      const result = await gateway.checkServiceability('rest-1', point, subtotal);
+
+      expect(result.isSuccess).toBe(true);
+      const s = result.getValue();
+      expect(s.serviceable).toBe(false);
+      expect(s.deliveryFee.amount).toBe(0);
+      expect(s.deliveryFee.currency).toBe('INR');
+      expect(s.minOrder.amount).toBe(0);
+    });
+  });
+
+  describe('isRestaurantOpen', () => {
+    it('delegates to IOpeningHoursService', async () => {
+      const gateway = new CatalogGateway(
+        new FakeCatalogReadRepository(),
+        new FakeServiceabilityQuery(),
+        new FakeOpeningHoursService(false)
+      );
+
+      const result = await gateway.isRestaurantOpen('rest-1');
+
+      expect(result.isSuccess).toBe(true);
+      expect(result.getValue()).toBe(false);
+    });
+  });
+});

@@ -1,0 +1,392 @@
+import { Checkout } from '../../../../application/commerce/use-cases/Checkout';
+import { CheckoutContextAssembler } from '../../../../application/commerce/services/CheckoutContextAssembler';
+import { PricingCalculator } from '../../../../infrastructure/services/PricingCalculator';
+import { PromotionService } from '../../../../infrastructure/services/PromotionService';
+import { buildDefaultCommerceCoupons } from '../../../../infrastructure/services/CommerceCouponCatalog';
+import { buildDefaultCommercePricingPolicy } from '../../../../infrastructure/services/CommercePricingConfig';
+import { Cart } from '../../../../domain/commerce/entities/Cart';
+import { LineItemSelection } from '../../../../domain/commerce/value-objects/LineItemSelection';
+import { AppliedPromotion } from '../../../../domain/commerce/value-objects/AppliedPromotion';
+import { OrderRequest } from '../../../../domain/commerce/entities/OrderRequest';
+import { IdempotencyKey } from '../../../../domain/commerce/value-objects/IdempotencyKey';
+import { PROMOTION_KIND } from '../../../../domain/commerce/enums/promotion-kind.enum';
+import { PAYMENT_METHOD } from '../../../../domain/commerce/enums/payment-method.enum';
+import { COMMERCE_RESTAURANT_STATUS } from '../../../../domain/commerce/enums/restaurant-status.enum';
+import { ORDER_REQUEST_STATUS } from '../../../../domain/commerce/enums/order-request-status.enum';
+import { Money } from '../../../../domain/shared/Money';
+import { Result } from '../../../../domain/shared/Result';
+import { DomainEvent } from '../../../../domain/shared/DomainEvent';
+import { ICartRepository } from '../../../../domain/commerce/repositories/ICartRepository';
+import { IOrderRequestRepository } from '../../../../domain/commerce/repositories/IOrderRequestRepository';
+import { ICatalogGateway } from '../../../../domain/commerce/services/ICatalogGateway';
+import { ICommerceCatalogReadRepository } from '../../../../domain/commerce/repositories/ICommerceCatalogReadRepository';
+import { IUnitOfWork } from '../../../../application/shared/ports/IUnitOfWork';
+import { IOutboxStore } from '../../../../application/shared/outbox/IOutboxStore';
+import { IEventBus } from '../../../../application/shared/events/IEventBus';
+import {
+  CheckoutRestaurant,
+  CheckoutMenuItem,
+  CheckoutServiceability,
+} from '../../../../domain/commerce/types/CatalogGatewayRead';
+import { CommerceCatalogMenuItemView } from '../../../../domain/commerce/types/CommerceCatalogView';
+import { CheckoutRequestDto } from '../../../../application/commerce/dtos/CheckoutRequestDto';
+
+const money = (amount: number, currency = 'INR') => Money.create(amount, currency).getValue();
+
+function buildCart(): Cart {
+  const cart = Cart.create('cust-1').getValue();
+  const selection = LineItemSelection.create({
+    menuItemId: 'menu-1',
+    selectedOptionIds: ['opt-large'],
+    quantity: 2,
+  }).getValue();
+  cart.addItem('rest-1', selection, money(1200));
+  cart.pullDomainEvents();
+  return cart;
+}
+
+const ADDRESS: CheckoutRequestDto['deliveryAddress'] = {
+  label: 'Home',
+  street: '1 MG Road',
+  city: 'Bengaluru',
+  state: 'Karnataka',
+  pinCode: '560001',
+  coordinates: { lat: 12.97, lng: 77.59 },
+};
+
+function dto(overrides: Partial<CheckoutRequestDto> = {}): CheckoutRequestDto {
+  return {
+    customerId: 'cust-1',
+    idempotencyKey: '11111111-1111-1111-1111-111111111111',
+    paymentMethod: PAYMENT_METHOD.UPI,
+    deliveryAddress: ADDRESS,
+    ...overrides,
+  };
+}
+
+// --- configurable fakes -------------------------------------------------------------------------
+
+function defaultRestaurant(): CheckoutRestaurant {
+  return { restaurantId: 'rest-1', name: 'Pizza Place', status: COMMERCE_RESTAURANT_STATUS.ACTIVE, isOpen: true };
+}
+
+function defaultItems(): CheckoutMenuItem[] {
+  return [
+    {
+      menuItemId: 'menu-1',
+      restaurantId: 'rest-1',
+      name: 'Margherita',
+      categoryId: 'cat-1',
+      basePrice: money(1000),
+      isAvailable: true,
+    },
+  ];
+}
+
+function defaultServiceability(): CheckoutServiceability {
+  return { serviceable: true, distanceMeters: 3000, deliveryFee: money(4000), minOrder: money(2000) };
+}
+
+interface GatewayConfig {
+  restaurant?: CheckoutRestaurant;
+  items?: CheckoutMenuItem[];
+  serviceability?: CheckoutServiceability;
+}
+
+function fakeGateway(cfg: GatewayConfig = {}): ICatalogGateway {
+  return {
+    getRestaurantForCheckout: async () => Result.ok(cfg.restaurant ?? defaultRestaurant()),
+    getItemsSnapshot: async () => Result.ok(cfg.items ?? defaultItems()),
+    checkServiceability: async () => Result.ok(cfg.serviceability ?? defaultServiceability()),
+    isRestaurantOpen: async () => Result.ok(true),
+  };
+}
+
+function defaultProjectionView(): CommerceCatalogMenuItemView {
+  return {
+    menuItemId: 'menu-1',
+    categoryId: 'cat-1',
+    name: 'Margherita',
+    basePriceAmount: 1000,
+    currency: 'INR',
+    isAvailable: true,
+    outOfStockReason: null,
+    variantGroups: [
+      {
+        groupId: 'size',
+        label: 'Size',
+        selectionType: 'single',
+        required: true,
+        minSelect: 1,
+        maxSelect: 1,
+        options: [
+          { optionId: 'opt-large', label: 'Large', priceDeltaAmount: 200, currency: 'INR', isDefault: false, isAvailable: true },
+        ],
+      },
+    ],
+  };
+}
+
+function fakeProjection(view: CommerceCatalogMenuItemView | null = defaultProjectionView()): ICommerceCatalogReadRepository {
+  return {
+    findRestaurantView: async () => null,
+    findMenuItemViews: async () => (view ? [view] : []),
+    upsertRestaurantView: async () => undefined,
+    removeRestaurantView: async () => undefined,
+    markEventProcessed: async () => true,
+  };
+}
+
+function fakeCartRepo(cart: Cart | null): { repo: ICartRepository; saved: Cart[] } {
+  const saved: Cart[] = [];
+  return {
+    saved,
+    repo: {
+      findById: async () => cart,
+      findByCustomerId: async () => cart,
+      save: async (c: Cart) => {
+        saved.push(c);
+      },
+      delete: async () => undefined,
+    },
+  };
+}
+
+function fakeOrderRepo(existing: OrderRequest | null = null): { repo: IOrderRequestRepository; saved: OrderRequest[] } {
+  const saved: OrderRequest[] = [];
+  return {
+    saved,
+    repo: {
+      findById: async () => null,
+      findByIdempotencyKey: async () => existing,
+      save: async (order: OrderRequest) => {
+        saved.push(order);
+      },
+    },
+  };
+}
+
+function fakeUnitOfWork(): IUnitOfWork {
+  return {
+    runInTransaction: async (work) => work({ session: 'fake' }),
+  };
+}
+
+function fakeOutbox(): { store: IOutboxStore; appended: DomainEvent[] } {
+  const appended: DomainEvent[] = [];
+  return {
+    appended,
+    store: {
+      append: async (events: DomainEvent[]) => {
+        appended.push(...events);
+      },
+    },
+  };
+}
+
+function fakeEventBus(): { bus: IEventBus; published: DomainEvent[] } {
+  const published: DomainEvent[] = [];
+  return {
+    published,
+    bus: {
+      subscribe: () => undefined,
+      publish: async (e: DomainEvent) => {
+        published.push(e);
+      },
+      publishAll: async (events: DomainEvent[]) => {
+        published.push(...events);
+      },
+    },
+  };
+}
+
+interface Harness {
+  useCase: Checkout;
+  orderRepo: ReturnType<typeof fakeOrderRepo>;
+  cartRepo: ReturnType<typeof fakeCartRepo>;
+  outbox: ReturnType<typeof fakeOutbox>;
+  eventBus: ReturnType<typeof fakeEventBus>;
+}
+
+function buildHarness(opts: {
+  cart?: Cart | null;
+  existingOrder?: OrderRequest | null;
+  gateway?: ICatalogGateway;
+  projection?: ICommerceCatalogReadRepository;
+  promotionService?: PromotionService;
+} = {}): Harness {
+  const promotionService = opts.promotionService ?? new PromotionService(buildDefaultCommerceCoupons());
+  const assembler = new CheckoutContextAssembler(
+    opts.gateway ?? fakeGateway(),
+    opts.projection ?? fakeProjection(),
+    promotionService,
+    buildDefaultCommercePricingPolicy()
+  );
+  const cartRepo = fakeCartRepo(opts.cart === undefined ? buildCart() : opts.cart);
+  const orderRepo = fakeOrderRepo(opts.existingOrder ?? null);
+  const outbox = fakeOutbox();
+  const eventBus = fakeEventBus();
+  const useCase = new Checkout(
+    cartRepo.repo,
+    orderRepo.repo,
+    assembler,
+    new PricingCalculator(),
+    fakeUnitOfWork(),
+    outbox.store,
+    eventBus.bus
+  );
+  return { useCase, orderRepo, cartRepo, outbox, eventBus };
+}
+
+// --- tests --------------------------------------------------------------------------------------
+
+describe('Checkout', () => {
+  describe('happy path', () => {
+    it('persists an OrderRequest, appends outbox events, and returns the summary', async () => {
+      const h = buildHarness();
+      const result = await h.useCase.execute(dto());
+
+      expect(result.isSuccess).toBe(true);
+      const summary = result.getValue();
+
+      expect(summary.restaurantId).toBe('rest-1');
+      expect(summary.restaurantName).toBe('Pizza Place');
+      expect(summary.status).toBe(ORDER_REQUEST_STATUS.REQUESTED);
+      expect(summary.paymentMethod).toBe(PAYMENT_METHOD.UPI);
+      expect(summary.idempotencyKey).toBe('11111111-1111-1111-1111-111111111111');
+
+      // single line: unit = 1000 + 200 = 1200, lineTotal = 2400
+      expect(summary.lines).toHaveLength(1);
+      expect(summary.lines[0].lineTotal).toEqual({ amount: 2400, currency: 'INR' });
+      expect(summary.lines[0].selectedOptions[0]).toEqual({
+        optionId: 'opt-large',
+        label: 'Large',
+        priceDelta: { amount: 200, currency: 'INR' },
+      });
+
+      // pricing: subtotal 2400; platform 500, packaging 300, delivery 4000; tax 360; total 7560
+      expect(summary.pricing.subtotal).toEqual({ amount: 2400, currency: 'INR' });
+      expect(summary.pricing.fees.map((f) => [f.type, f.amount.amount])).toEqual([
+        ['PLATFORM', 500],
+        ['PACKAGING', 300],
+        ['DELIVERY', 4000],
+      ]);
+      expect(summary.pricing.tax).toEqual({ amount: 360, currency: 'INR' });
+      expect(summary.pricing.total).toEqual({ amount: 7560, currency: 'INR' });
+
+      // delivery address snapshot
+      expect(summary.deliveryAddress.pinCode).toBe('560001');
+
+      // persisted exactly one order
+      expect(h.orderRepo.saved).toHaveLength(1);
+      const saved = h.orderRepo.saved[0];
+      expect(saved.id.toString()).toBe(summary.orderRequestId);
+
+      // outbox carries OrderRequested + CheckoutReadyForPayment
+      const names = h.outbox.appended.map((e) => e.eventName).sort();
+      expect(names).toEqual(['CheckoutReadyForPayment', 'OrderRequested']);
+
+      // post-commit publish includes the order events
+      const publishedNames = h.eventBus.published.map((e) => e.eventName);
+      expect(publishedNames).toContain('OrderRequested');
+      expect(publishedNames).toContain('CheckoutReadyForPayment');
+    });
+
+    it('clears the cart after a successful checkout', async () => {
+      const h = buildHarness();
+      await h.useCase.execute(dto());
+
+      expect(h.cartRepo.saved).toHaveLength(1);
+      expect(h.cartRepo.saved[0].isEmpty).toBe(true);
+    });
+
+    it('mints an idempotency key when none is supplied', async () => {
+      const h = buildHarness();
+      const result = await h.useCase.execute(dto({ idempotencyKey: undefined }));
+      expect(result.isSuccess).toBe(true);
+      expect(result.getValue().idempotencyKey).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+      );
+    });
+  });
+
+  describe('idempotent replay', () => {
+    it('returns the original OrderRequest without persisting or publishing again', async () => {
+      const existing = buildExistingOrder();
+      const h = buildHarness({ existingOrder: existing });
+
+      const result = await h.useCase.execute(dto({ idempotencyKey: existing.idempotencyKey.value }));
+
+      expect(result.isSuccess).toBe(true);
+      expect(result.getValue().orderRequestId).toBe(existing.id.toString());
+      expect(h.orderRepo.saved).toHaveLength(0);
+      expect(h.outbox.appended).toHaveLength(0);
+      expect(h.eventBus.published).toHaveLength(0);
+    });
+  });
+
+  describe('promotion re-validation', () => {
+    it('commits a re-validated promotion discount', async () => {
+      const cart = buildCart();
+      cart.applyPromotion(
+        AppliedPromotion.create({
+          code: 'SAVE10',
+          kind: PROMOTION_KIND.PERCENTAGE,
+          discount: money(1),
+          sourceRef: 'coupon:SAVE10',
+        }).getValue()
+      );
+      cart.pullDomainEvents();
+
+      const h = buildHarness({ cart });
+      const summary = (await h.useCase.execute(dto())).getValue();
+
+      // SAVE10 = 10% of 2400 = 240; total 7308
+      expect(summary.pricing.discount).toEqual({ amount: 240, currency: 'INR' });
+      expect(summary.pricing.total).toEqual({ amount: 7308, currency: 'INR' });
+    });
+  });
+
+  describe('guards', () => {
+    it('fails when the customer has no cart', async () => {
+      const h = buildHarness({ cart: null });
+      const result = await h.useCase.execute(dto());
+      expect(result.isFailure).toBe(true);
+      expect(h.orderRepo.saved).toHaveLength(0);
+    });
+
+    it('fails on an invalid idempotency key', async () => {
+      const h = buildHarness();
+      const result = await h.useCase.execute(dto({ idempotencyKey: 'not-a-uuid' }));
+      expect(result.isFailure).toBe(true);
+    });
+
+    it('fails when the restaurant is closed (no order persisted)', async () => {
+      const gateway = fakeGateway({
+        restaurant: { restaurantId: 'rest-1', name: 'x', status: COMMERCE_RESTAURANT_STATUS.ACTIVE, isOpen: false },
+      });
+      const h = buildHarness({ gateway });
+      const result = await h.useCase.execute(dto());
+      expect(result.isFailure).toBe(true);
+      expect(h.orderRepo.saved).toHaveLength(0);
+      expect(h.outbox.appended).toHaveLength(0);
+    });
+
+    it('fails when the subtotal is below the minimum order', async () => {
+      const gateway = fakeGateway({
+        serviceability: { serviceable: true, distanceMeters: 3000, deliveryFee: money(4000), minOrder: money(999999) },
+      });
+      const h = buildHarness({ gateway });
+      const result = await h.useCase.execute(dto());
+      expect(result.isFailure).toBe(true);
+    });
+  });
+});
+
+function buildExistingOrder(): OrderRequest {
+  // Re-use the integration fixture's checkout-factory construction path for a persisted-looking aggregate.
+  const { buildOrderRequest } = require('../../../integration/commerce/commerce-fixtures');
+  return buildOrderRequest('cust-1', {
+    idempotencyKey: IdempotencyKey.create('22222222-2222-2222-2222-222222222222').getValue(),
+  });
+}
