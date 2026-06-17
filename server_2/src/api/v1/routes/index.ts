@@ -17,6 +17,10 @@ import { createCheckoutRoutes } from './checkout.routes';
 import { CheckoutController } from '../controllers/CheckoutController';
 import { createOrderRequestRoutes } from './order-request.routes';
 import { OrderRequestController } from '../controllers/OrderRequestController';
+import { createFulfillmentRoutes } from './fulfillment.routes';
+import { FulfillmentController } from '../controllers/fulfillment/FulfillmentController';
+import { RiderController } from '../controllers/fulfillment/RiderController';
+import { AdminFulfillmentController } from '../controllers/fulfillment/AdminFulfillmentController';
 
 export function createApiRouter(app: AppContainer): Router {
   const router = Router();
@@ -157,6 +161,41 @@ export function createApiRouter(app: AppContainer): Router {
     '/order-requests',
     createOrderRequestRoutes({
       orderRequestController,
+      tokenService: app.auth.tokenService,
+    }),
+  );
+
+  const fulfillmentController = new FulfillmentController({
+    markPreparing: app.fulfillment.markPreparing,
+    markReadyForPickup: app.fulfillment.markReadyForPickup,
+    getRestaurantFulfillments: app.fulfillment.getRestaurantFulfillments,
+    cancelFulfillment: app.fulfillment.cancelFulfillment,
+    getLiveTracking: app.fulfillment.getLiveTracking,
+  });
+
+  const riderController = new RiderController({
+    acceptDelivery: app.fulfillment.acceptDelivery,
+    rejectDelivery: app.fulfillment.rejectDelivery,
+    confirmPickup: app.fulfillment.confirmPickup,
+    startDelivery: app.fulfillment.startDelivery,
+    completeDelivery: app.fulfillment.completeDelivery,
+    failDelivery: app.fulfillment.failDelivery,
+    getRiderQueue: app.fulfillment.getRiderQueue,
+    recordRiderLocation: app.fulfillment.recordRiderLocation!,
+  });
+
+  const adminFulfillmentController = new AdminFulfillmentController({
+    reassignRider: app.fulfillment.reassignRider,
+    cancelFulfillment: app.fulfillment.cancelFulfillment,
+    getAdminDashboard: app.fulfillment.getAdminDashboard,
+  });
+
+  router.use(
+    '/',
+    createFulfillmentRoutes({
+      fulfillmentController,
+      riderController,
+      adminFulfillmentController,
       tokenService: app.auth.tokenService,
     }),
   );

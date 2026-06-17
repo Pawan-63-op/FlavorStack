@@ -28,6 +28,12 @@ export interface NotificationWorkerDeps {
   jobLogger: JobLogger;
 }
 
+export interface FulfillmentWorkerDeps {
+  dlqQueue: Queue;
+  dlqHandler: DLQHandler;
+  jobLogger: JobLogger;
+}
+
 function buildDlqQueue(): Queue {
   return new Queue(QUEUE.dlq, {
     connection: getBullConnection(),
@@ -64,5 +70,20 @@ export function buildNotificationWorkerDeps(): NotificationWorkerDeps {
     dlqQueue,
     dlqHandler: new DLQHandler(dlqQueue),
     jobLogger: new JobLogger(QUEUE.notification),
+  };
+}
+
+/**
+ * FulfillmentWorker (Phase 5B) consumes the delayed assignment-timeout / sla-timeout jobs. Its
+ * decisioning use cases come from the full app graph (via `bootstrap()` in fulfillment.worker.ts);
+ * this builder only supplies the BullMQ DLQ + per-queue logger, mirroring the other worker deps.
+ */
+export function buildFulfillmentWorkerDeps(): FulfillmentWorkerDeps {
+  const dlqQueue = buildDlqQueue();
+
+  return {
+    dlqQueue,
+    dlqHandler: new DLQHandler(dlqQueue),
+    jobLogger: new JobLogger(QUEUE.fulfillment),
   };
 }

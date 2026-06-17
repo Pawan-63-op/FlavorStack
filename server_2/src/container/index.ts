@@ -28,6 +28,8 @@ import { connectDB, disconnectDB } from '../infrastructure/database/connection';
 import { RedisClient } from '../infrastructure/redis/client';
 import { CacheStore } from '../infrastructure/redis/CacheStore';
 import { CatalogCache } from '../infrastructure/redis/catalog/CatalogCache';
+import { FulfillmentCache } from '../infrastructure/redis/fulfillment/FulfillmentCache';
+import { getFulfillmentConfig } from '../config/fulfillment';
 import { OutboxProcessor } from '../infrastructure/outbox/OutboxProcessor';
 
 import { createIdentityContainer, IdentityContainer } from './identity.container';
@@ -36,9 +38,18 @@ import { createEventContainer, wireIdentityEventHandlers, EventContainer } from 
 import { createCatalogReadContainer, CatalogReadContainer } from './catalog.container';
 import { createCatalogWriteContainer, CatalogWriteContainer } from './catalog-write.container';
 import { createCommerceContainer, CommerceContainer } from './commerce.container';
+import { createFulfillmentContainer, FulfillmentContainer } from './fulfillment.container';
 import { TransactionContext } from '../infrastructure/database/TransactionContext';
 import { IEmailQueue } from '../application/shared/queues/IEmailQueue';
 import { EmailQueue } from '../infrastructure/workers/email/EmailQueue';
+import { INotificationQueue } from '../application/shared/queues/INotificationQueue';
+import { NotifyQueue } from '../infrastructure/workers/notification/NotifyQueue';
+import { IFulfillmentJobScheduler } from '../application/fulfillment/jobs/FulfillmentJob';
+import { FulfillmentJobQueue } from '../infrastructure/workers/fulfillment/FulfillmentJobQueue';
+import { getRealtimeConfig } from '../config/realtime';
+import { RedisLiveLocationStore } from '../infrastructure/realtime/RedisLiveLocationStore';
+import { MongoDeliveryTrackingStore } from '../infrastructure/repositories/DeliveryTrackingStore';
+import { SocketTrackingBroadcaster } from '../infrastructure/realtime/SocketTrackingBroadcaster';
 
 import { RegisterCustomer } from '../application/identity/use-cases/RegisterCustomer';
 import { RegisterDriver } from '../application/identity/use-cases/RegisterDriver';
@@ -106,8 +117,13 @@ export interface AppContainer {
   catalogRead: CatalogReadContainer;
   catalogWrite: CatalogWriteContainer;
   commerce: CommerceContainer;
+  fulfillment: FulfillmentContainer;
   outboxProcessor: OutboxProcessor;
   emailQueue: IEmailQueue;
+  notificationQueue: INotificationQueue;
+  fulfillmentJobScheduler: IFulfillmentJobScheduler;
+  /** Phase 7 — late-bound realtime broadcaster; `server.ts` attaches the Socket.IO namespace. */
+  trackingBroadcaster: SocketTrackingBroadcaster;
   useCases: IdentityUseCases;
 }
 
@@ -160,6 +176,41 @@ export async function bootstrap(opts: BootstrapOptions = {}): Promise<AppContain
       serviceabilityQuery: catalogRead.queries.checkServiceability,
       openingHoursService: catalogRead.openingHoursService,
     });
+
+    // 5d. Fulfillment write graph (Phase 1). Subscribes OnOrderRequested to the same in-process bus
+    //     BEFORE the outbox processor starts, so Commerce's drained OrderRequested rows create exactly
+    //     one Fulfillment (duplicate orderRequestId is an idempotent no-op).
+    //     Phase 5B: a BullMQ delayed-job scheduler arms assignment-timeout / SLA jobs when the
+    //     matching events are published on the bus (in whichever process runs the OutboxProcessor).
+    const fulfillmentJobScheduler = new FulfillmentJobQueue();
+
+    // Phase 7: realtime tracking infra (Redis latest-location + throttle gate, Mongo history,
+    // late-bound Socket.IO broadcaster). The broadcaster's namespace is attached in `server.ts`
+    // after the HTTP server is listening; until then status/location broadcasts are no-ops.
+    const { trackingLatestTtlSeconds } = getRealtimeConfig();
+    const trackingBroadcaster = new SocketTrackingBroadcaster();
+    // Phase 8: notification producer. Passed into the fulfillment graph so the dispatcher can turn
+    // customer/rider-facing status events into push jobs on `notification-queue`.
+    const notificationQueue = new NotifyQueue();
+    // Phase 9 (Batch 9.1): read-side cache for the hot tracking/dashboard queries. Shares the
+    // process Redis via CacheStore; TTLs come from the single fulfillment config source.
+    const { trackingCacheTtlSeconds, dashboardCacheTtlSeconds } = getFulfillmentConfig();
+    const fulfillmentCache = new FulfillmentCache(new CacheStore(redisClient), {
+      trackingSeconds: trackingCacheTtlSeconds,
+      dashboardSeconds: dashboardCacheTtlSeconds,
+    });
+    const fulfillment = createFulfillmentContainer(
+      connection,
+      event.eventBus,
+      fulfillmentJobScheduler,
+      {
+        liveLocationStore: new RedisLiveLocationStore(redisClient, trackingLatestTtlSeconds),
+        deliveryTrackingStore: new MongoDeliveryTrackingStore(),
+        broadcaster: trackingBroadcaster,
+      },
+      notificationQueue,
+      fulfillmentCache
+    );
 
     // 6. Subscribe identity handlers BEFORE the processor starts draining events.
     const emailQueue = new EmailQueue();
@@ -309,8 +360,12 @@ export async function bootstrap(opts: BootstrapOptions = {}): Promise<AppContain
       catalogRead,
       catalogWrite,
       commerce,
+      fulfillment,
       outboxProcessor,
       emailQueue,
+      notificationQueue,
+      fulfillmentJobScheduler,
+      trackingBroadcaster,
       useCases,
     };
   } catch (err) {
@@ -323,11 +378,13 @@ export async function bootstrap(opts: BootstrapOptions = {}): Promise<AppContain
 
 /**
  * Graceful teardown in reverse order of bootstrap: stop the outbox poller (drains the
- * in-flight batch), close the email queue, close Redis, then disconnect Mongo.
+ * in-flight batch), close the email + notification queues, close Redis, then disconnect Mongo.
  */
 export async function shutdown(app: AppContainer): Promise<void> {
   await app.outboxProcessor.stop();
   await app.emailQueue.close();
+  await app.notificationQueue.close();
+  await app.fulfillmentJobScheduler.close();
   await app.redisClient.shutdown();
   await disconnectDB();
 }

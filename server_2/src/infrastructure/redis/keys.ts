@@ -30,3 +30,13 @@ export function rateLimitKey(action: string, identifier: string): string {
 export function cacheKey(namespace: string, id: string): string {
   return `cache:${namespace}:${id}`;
 }
+
+/** `tracking:latest:{fulfillmentId}` — rider's latest GPS sample (O(1) read). */
+export function trackingLatestKey(fulfillmentId: string): string {
+  return `tracking:latest:${fulfillmentId}`;
+}
+
+/** `tracking:persist-gate:{fulfillmentId}` — SET NX EX throttle gate for Mongo persistence. */
+export function trackingPersistGateKey(fulfillmentId: string): string {
+  return `tracking:persist-gate:${fulfillmentId}`;
+}

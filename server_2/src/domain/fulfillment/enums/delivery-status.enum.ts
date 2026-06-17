@@ -1,0 +1,14 @@
+// Rider-leg sub-state (fulfillment_module.md §2.4 / §4.3). Defined now for the enum contract;
+// the DeliveryStatus VO + transitions are realized in Phase 4.
+export const DELIVERY_STATUS = {
+  UNASSIGNED: 'UNASSIGNED',
+  ASSIGNED: 'ASSIGNED',
+  EN_ROUTE_TO_RESTAURANT: 'EN_ROUTE_TO_RESTAURANT',
+  AT_RESTAURANT: 'AT_RESTAURANT',
+  PICKED_UP: 'PICKED_UP',
+  EN_ROUTE_TO_CUSTOMER: 'EN_ROUTE_TO_CUSTOMER',
+  DELIVERED: 'DELIVERED',
+  FAILED: 'FAILED',
+} as const;
+
+export type DeliveryStatusValue = (typeof DELIVERY_STATUS)[keyof typeof DELIVERY_STATUS];

@@ -5,6 +5,7 @@ import { getEmailConfig } from './email';
 export * from './auth';
 export * from './email';
 export * from './outbox';
+export * from './fulfillment';
 
 export function assertRequiredConfig(): void {
   const auth = getAuthConfig();

@@ -1,14 +1,16 @@
-// Worker process entrypoint — selects a worker via WORKER_TYPE (outbox|email|notification).
+// Worker process entrypoint — selects a worker via WORKER_TYPE (outbox|email|notification|fulfillment).
 // One image (`Dockerfile.worker`), env-selected process per the Phase 11 plan.
 import { logger } from '../infrastructure/observability/logger';
 import { run as runOutboxWorker } from './outbox.worker';
 import { run as runEmailWorker } from './email.worker';
 import { run as runNotificationWorker } from './notification.worker';
+import { run as runFulfillmentWorker } from './fulfillment.worker';
 
 const RUNNERS: Record<string, () => Promise<void>> = {
   outbox: runOutboxWorker,
   email: runEmailWorker,
   notification: runNotificationWorker,
+  fulfillment: runFulfillmentWorker,
 };
 
 export async function main(): Promise<void> {

@@ -48,6 +48,8 @@ export const AGGREGATE_TYPE_BY_EVENT: Record<string, string> = {
   MenuItemCreated: 'menu_item',
   MenuItemUpdated: 'menu_item',
   MenuItemAvailabilityChanged: 'menu_item',
+  // Fulfillment aggregate
+  FulfillmentCreated: 'fulfillment',
 };
 
 /** Resolve the aggregate type for an event name, defaulting to `'user'`. */
