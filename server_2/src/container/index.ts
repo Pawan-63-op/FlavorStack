@@ -39,6 +39,10 @@ import { createCatalogReadContainer, CatalogReadContainer } from './catalog.cont
 import { createCatalogWriteContainer, CatalogWriteContainer } from './catalog-write.container';
 import { createCommerceContainer, CommerceContainer } from './commerce.container';
 import { createFulfillmentContainer, FulfillmentContainer } from './fulfillment.container';
+import { createEngagementContainer, EngagementContainer } from './engagement.container';
+import { runSeeds } from '../infrastructure/database/seeds';
+import { ConflictError } from '../domain/shared/errors/ConflictError';
+import { logger } from '../infrastructure/observability/logger';
 import { TransactionContext } from '../infrastructure/database/TransactionContext';
 import { IEmailQueue } from '../application/shared/queues/IEmailQueue';
 import { EmailQueue } from '../infrastructure/workers/email/EmailQueue';
@@ -118,6 +122,7 @@ export interface AppContainer {
   catalogWrite: CatalogWriteContainer;
   commerce: CommerceContainer;
   fulfillment: FulfillmentContainer;
+  engagement: EngagementContainer;
   outboxProcessor: OutboxProcessor;
   emailQueue: IEmailQueue;
   notificationQueue: INotificationQueue;
@@ -211,6 +216,41 @@ export async function bootstrap(opts: BootstrapOptions = {}): Promise<AppContain
       notificationQueue,
       fulfillmentCache
     );
+
+    // 5e. Engagement graph (Phase 3.B). Builds the engagement object graph and — crucially —
+    //     subscribes its nine cross-context handlers onto the SAME in-process bus, BEFORE the
+    //     OutboxProcessor starts (step 7). That ordering guarantees that drained Identity/Fulfillment
+    //     events (UserRegistered, FulfillmentCreated, DeliveryCompleted, …) always have a subscriber,
+    //     so notifications/eligibility are never silently dropped. Engagement reuses the single shared
+    //     `notificationQueue` producer (DispatchNotification enqueues onto QUEUE.notification after
+    //     commit) — no second queue, so the single-poller invariant is untouched.
+    //     Route declarations live in EngagementEventRoutes.ts (consumed by the future BullMQ
+    //     OutboxPoller, like the other contexts' route tables); they are not bound to a live router
+    //     here because bootstrap runs no EventRouter today.
+    const engagement = createEngagementContainer(connection, event.eventBus, notificationQueue);
+
+    // 5f. Seed bootstrap config (idempotent, insert-if-absent). Notification templates must exist
+    //     BEFORE the OutboxProcessor (step 7) drains events and the engagement handlers dispatch —
+    //     otherwise DispatchNotification returns SKIPPED:template_unavailable. Existing rows are left
+    //     untouched, so this is a no-op on every boot after the first. Every entrypoint bootstraps,
+    //     so on a fresh DB peers can cold-start concurrently and race the unique (key,channel,locale)
+    //     index; a ConflictError just means a peer is mid-seed — log and continue (the next boot, and
+    //     the peer's own run, fill any gap). Any other error is a real failure → fail fast.
+    try {
+      const { notificationTemplatesCreated } = await runSeeds({
+        notificationTemplateRepo: engagement.templateRepository,
+      });
+      logger.info({ notificationTemplatesCreated }, '[bootstrap] seeds complete');
+    } catch (err) {
+      if (err instanceof ConflictError) {
+        logger.warn(
+          { err: String(err) },
+          '[bootstrap] notification templates are being seeded by a concurrent process — continuing'
+        );
+      } else {
+        throw err;
+      }
+    }
 
     // 6. Subscribe identity handlers BEFORE the processor starts draining events.
     const emailQueue = new EmailQueue();
@@ -361,6 +401,7 @@ export async function bootstrap(opts: BootstrapOptions = {}): Promise<AppContain
       catalogWrite,
       commerce,
       fulfillment,
+      engagement,
       outboxProcessor,
       emailQueue,
       notificationQueue,
@@ -381,6 +422,9 @@ export async function bootstrap(opts: BootstrapOptions = {}): Promise<AppContain
  * in-flight batch), close the email + notification queues, close Redis, then disconnect Mongo.
  */
 export async function shutdown(app: AppContainer): Promise<void> {
+  // NOTE: `app.engagement` owns no closable resources of its own — it reuses the shared
+  // `notificationQueue` (closed below) and its repos/use-cases are stateless — so it needs no
+  // explicit teardown step here.
   await app.outboxProcessor.stop();
   await app.emailQueue.close();
   await app.notificationQueue.close();

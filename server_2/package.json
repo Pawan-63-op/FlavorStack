@@ -9,6 +9,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "test": "jest --runInBand src/tests/unit/domain/shared/ src/tests/unit/domain/identity/ src/tests/unit/domain/catalog/ src/tests/unit/application/identity/ src/tests/unit/application/catalog/ src/tests/unit/application/shared/ src/tests/unit/infrastructure/ src/tests/unit/config/ src/tests/unit/container/ src/tests/unit/api/ src/tests/unit/workers/ src/tests/unit/server.test.ts",
+    "test:engagement": "jest --runInBand src/tests/unit/domain/engagement/ src/tests/unit/application/engagement/",
     "test:integration": "jest --config jest.integration.config.ts --runInBand",
     "test:integration:redis": "jest --config jest.integration.redis.config.ts --runInBand",
     "test:e2e": "jest --config jest.e2e.config.ts --runInBand",

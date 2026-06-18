@@ -21,6 +21,10 @@ import { createFulfillmentRoutes } from './fulfillment.routes';
 import { FulfillmentController } from '../controllers/fulfillment/FulfillmentController';
 import { RiderController } from '../controllers/fulfillment/RiderController';
 import { AdminFulfillmentController } from '../controllers/fulfillment/AdminFulfillmentController';
+import { createNotificationRoutes } from './notification.routes';
+import { NotificationController } from '../controllers/NotificationController';
+import { createReviewRoutes } from './review.routes';
+import { ReviewController } from '../controllers/ReviewController';
 
 export function createApiRouter(app: AppContainer): Router {
   const router = Router();
@@ -196,6 +200,39 @@ export function createApiRouter(app: AppContainer): Router {
       fulfillmentController,
       riderController,
       adminFulfillmentController,
+      tokenService: app.auth.tokenService,
+    }),
+  );
+
+  const notificationController = new NotificationController({
+    updateNotificationPreferences: app.engagement.updateNotificationPreferences,
+    getNotificationPreferences: app.engagement.getNotificationPreferences,
+    getNotificationHistory: app.engagement.getNotificationHistory,
+    getUnreadCount: app.engagement.getUnreadCount,
+    markNotificationRead: app.engagement.markNotificationRead,
+  });
+
+  router.use(
+    '/',
+    createNotificationRoutes({
+      controller: notificationController,
+      tokenService: app.auth.tokenService,
+    }),
+  );
+
+  const reviewController = new ReviewController({
+    submitReview: app.engagement.submitReview,
+    getMyReviews: app.engagement.getMyReviews,
+    getRestaurantReviews: app.engagement.getRestaurantReviews,
+    getRestaurantRating: app.engagement.getRestaurantRating,
+    moderateReview: app.engagement.moderateReview,
+    listPendingReviews: app.engagement.listPendingReviews,
+  });
+
+  router.use(
+    '/',
+    createReviewRoutes({
+      controller: reviewController,
       tokenService: app.auth.tokenService,
     }),
   );

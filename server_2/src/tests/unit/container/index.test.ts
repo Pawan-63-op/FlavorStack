@@ -17,6 +17,13 @@ jest.mock('../../../infrastructure/redis/client', () => ({
   RedisClient: jest.fn(() => mockRedisInstance),
 }));
 
+// Seeding runs a real Mongo query; bootstrap's Mongo connection is mocked as `{}` here, so stub the
+// seed runner. Its execution + ordering (before OutboxProcessor.start) is asserted via this mock;
+// the real seed logic (fresh-DB create + idempotency) is covered by the engagement integration test.
+jest.mock('../../../infrastructure/database/seeds', () => ({
+  runSeeds: jest.fn().mockResolvedValue({ notificationTemplatesCreated: 0 }),
+}));
+
 jest.mock('bullmq', () => ({
   Queue: jest.fn().mockImplementation(function (this: { add: jest.Mock; close: jest.Mock }) {
     this.add = jest.fn().mockResolvedValue(undefined);
@@ -31,6 +38,7 @@ import { QUEUE } from '../../../config/bullmq';
 import { connectDB, disconnectDB } from '../../../infrastructure/database/connection';
 import { RedisClient } from '../../../infrastructure/redis/client';
 import { OutboxProcessor } from '../../../infrastructure/outbox/OutboxProcessor';
+import { runSeeds } from '../../../infrastructure/database/seeds';
 import { RegisterCustomer } from '../../../application/identity/use-cases/RegisterCustomer';
 import { RegisterDriver } from '../../../application/identity/use-cases/RegisterDriver';
 import { RegisterUser } from '../../../application/identity/use-cases/RegisterUser';
@@ -85,6 +93,7 @@ beforeEach(() => {
     this.add = jest.fn().mockResolvedValue(undefined);
     this.close = jest.fn().mockResolvedValue(undefined);
   });
+  (runSeeds as jest.Mock).mockResolvedValue({ notificationTemplatesCreated: 0 });
   mockConnectDB.mockResolvedValue({} as Awaited<ReturnType<typeof connectDB>>);
   mockDisconnectDB.mockResolvedValue(undefined);
   mockRedisInstance.connect.mockResolvedValue(undefined);
@@ -150,6 +159,36 @@ describe('bootstrap', () => {
     } finally {
       await shutdown(app);
       startSpy.mockRestore();
+    }
+  });
+
+  it('runs seeds during bootstrap, before the OutboxProcessor starts', async () => {
+    const startSpy = jest.spyOn(OutboxProcessor.prototype, 'start');
+
+    const app = await bootstrap();
+
+    try {
+      expect(runSeeds).toHaveBeenCalledTimes(1);
+      // Templates must be seeded before events are drained and dispatched.
+      const seedOrder = (runSeeds as jest.Mock).mock.invocationCallOrder[0];
+      const startOrder = startSpy.mock.invocationCallOrder[0];
+      expect(seedOrder).toBeLessThan(startOrder);
+    } finally {
+      await shutdown(app);
+      startSpy.mockRestore();
+    }
+  });
+
+  it('continues startup when seeding hits a ConflictError (concurrent cold-start by a peer)', async () => {
+    const { ConflictError } = jest.requireActual('../../../domain/shared/errors/ConflictError');
+    (runSeeds as jest.Mock).mockRejectedValueOnce(new ConflictError('template already exists'));
+
+    const app = await bootstrap();
+
+    try {
+      expect(app.engagement).toBeDefined();
+    } finally {
+      await shutdown(app);
     }
   });
 

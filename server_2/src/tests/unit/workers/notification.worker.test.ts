@@ -5,6 +5,14 @@ const mockDeps = {
   jobLogger: { name: 'jobLogger' },
 };
 
+const mockApp = { notificationDispatcher: { name: 'notificationDispatcher' } };
+const mockBootstrap = jest.fn().mockResolvedValue(mockApp);
+const mockShutdown = jest.fn().mockResolvedValue(undefined);
+jest.mock('../../../container', () => ({
+  bootstrap: mockBootstrap,
+  shutdown: mockShutdown,
+}));
+
 const mockBuildNotificationWorkerDeps = jest.fn(() => mockDeps);
 jest.mock('../../../container/worker.container', () => ({
   buildNotificationWorkerDeps: mockBuildNotificationWorkerDeps,
@@ -29,24 +37,28 @@ import { run } from '../../../workers/notification.worker';
 
 describe('notification.worker', () => {
   beforeEach(() => {
+    mockBootstrap.mockResolvedValue(mockApp);
     mockBuildNotificationWorkerDeps.mockReturnValue(mockDeps);
     MockNotifyWorker.mockReturnValue(mockWorkerInstance);
     mockWorkerInstance.close.mockClear();
     mockDeps.dlqQueue.close.mockClear();
+    mockShutdown.mockClear();
   });
 
-  it('builds scoped notification worker deps and starts a BullMQ NotifyWorker', async () => {
+  it('bootstraps the graph (poller off) and starts a NotifyWorker with the app dispatcher', async () => {
     await run();
 
+    expect(mockBootstrap).toHaveBeenCalledWith({ startOutboxProcessor: false });
     expect(mockBuildNotificationWorkerDeps).toHaveBeenCalledTimes(1);
     expect(MockNotifyWorker).toHaveBeenCalledWith(
       mockDeps.pushProvider,
+      mockApp.notificationDispatcher,
       mockDeps.dlqHandler,
       mockDeps.jobLogger,
     );
   });
 
-  it('registers a shutdown handler that closes the worker and the DLQ queue', async () => {
+  it('registers a shutdown handler that closes the worker, the DLQ queue, and the app graph', async () => {
     await run();
 
     expect(mockRunWorker).toHaveBeenCalledTimes(1);
@@ -56,5 +68,6 @@ describe('notification.worker', () => {
 
     expect(mockWorkerInstance.close).toHaveBeenCalledTimes(1);
     expect(mockDeps.dlqQueue.close).toHaveBeenCalledTimes(1);
+    expect(mockShutdown).toHaveBeenCalledWith(mockApp);
   });
 });

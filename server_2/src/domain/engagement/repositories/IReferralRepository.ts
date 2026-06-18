@@ -1,1 +1,0 @@
-// Interface: findByCode, findByReferrer, save

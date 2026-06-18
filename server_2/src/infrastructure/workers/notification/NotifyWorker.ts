@@ -1,7 +1,15 @@
-// BullMQ Worker consuming `notification-queue` — maps NotificationJob.type to IPushProvider calls.
+// BullMQ Worker consuming `notification-queue`.
+//  - `push`       jobs → fire-and-forget IPushProvider call (legacy direct push, unchanged).
+//  - `engagement` jobs → NotificationDispatcher loads the persisted Notification, routes it through the
+//                        channel abstraction, and marks it SENT/FAILED (Phase 4).
+//
+// Retry/lifecycle: a transient failure throws out of `process`, so BullMQ retries the still-PENDING row.
+// Once attempts are exhausted, the `failed` handler routes the job to the DLQ and — for engagement jobs —
+// asks the dispatcher to settle the row as FAILED (markExhausted).
 import { Job, Worker } from 'bullmq';
 
 import { IPushProvider } from '../../external/push/IPushProvider';
+import { NotificationDispatcher } from '../../notifications/NotificationDispatcher';
 import { NotificationJob } from '../../../application/shared/queues/jobs';
 import { getBullConnection, QUEUE } from '../../../config/bullmq';
 import { DLQHandler } from '../shared/DLQHandler';
@@ -12,6 +20,7 @@ export class NotifyWorker {
 
   constructor(
     private readonly pushProvider: IPushProvider,
+    private readonly dispatcher: NotificationDispatcher,
     dlqHandler: DLQHandler,
     jobLogger: JobLogger,
   ) {
@@ -25,8 +34,13 @@ export class NotifyWorker {
       if (!job) return;
 
       const maxAttempts = job.opts.attempts ?? 1;
-      if (job.attemptsMade >= maxAttempts) {
-        void dlqHandler.handle(QUEUE.notification, job, err);
+      if (job.attemptsMade < maxAttempts) return;
+
+      void dlqHandler.handle(QUEUE.notification, job, err);
+
+      // Exhausted engagement job: settle the still-PENDING notification row as FAILED.
+      if (job.data?.type === 'engagement') {
+        void this.dispatcher.markExhausted(job.data.notificationId, err.message);
       }
     });
   }
@@ -37,6 +51,9 @@ export class NotifyWorker {
     switch (data.type) {
       case 'push':
         await this.pushProvider.sendPush(data.token, data.title, data.body, data.data);
+        return;
+      case 'engagement':
+        await this.dispatcher.dispatch(data.notificationId, data.channel);
         return;
     }
   }

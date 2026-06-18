@@ -10,6 +10,7 @@ const config: Config = {
     '**/integration/catalog/**/*.integration.test.ts',
     '**/integration/commerce/**/*.integration.test.ts',
     '**/integration/fulfillment/**/*.integration.test.ts',
+    '**/integration/engagement/**/*.integration.test.ts',
   ],
   transform: {
     '^.+\\.tsx?$': ['ts-jest', { tsconfig: 'tsconfig.json' }],
