@@ -3,7 +3,6 @@ import jwt from 'jsonwebtoken';
 import User from '../models/User';
 import { AuthRequest } from '@/Types/allTypes';
 
-// Protect routes
 export const protect = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   const token = req.cookies.token;
   console.log(token,"token as follows");
@@ -14,7 +13,6 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
  try {
      const decoded = jwt.verify(token, process.env.JWT_SECRET!) as jwt.JwtPayload;
     
-      // // Get user from token
       req.user = await User.findById(decoded.id).select('-password') as any;
 
       next();
@@ -25,7 +23,6 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
     }
 };
   
-// Admin only
 export const admin = (req: AuthRequest, res: Response, next: NextFunction): void => {
   if (req.user && req.user.role === 'admin') {
     next();

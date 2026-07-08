@@ -37,6 +37,10 @@ export class InMemoryRestaurantRepository implements IRestaurantRepository {
   async findAll(_params: CursorPaginationParams): Promise<CursorPage<Restaurant>> {
     return { items: [...this.byId.values()] };
   }
+
+  async count(): Promise<number> {
+    return this.byId.size;
+  }
 }
 
 export class InMemoryMenuItemRepository implements IMenuItemRepository {

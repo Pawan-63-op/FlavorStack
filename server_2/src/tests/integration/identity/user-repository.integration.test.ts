@@ -261,7 +261,6 @@ describe('MongoUserRepository', () => {
       const original = buildCustomer();
       await repo.save(original);
 
-      // Two independent loads at version 0.
       const loadA = (await repo.findById(original._id)) as Customer;
       const loadB = (await repo.findById(original._id)) as Customer;
 

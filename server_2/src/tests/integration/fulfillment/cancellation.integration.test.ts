@@ -1,7 +1,3 @@
-// Integration (real Mongo replica set + in-process bus) for Phase 5A cancellation:
-//   OrderRequested → CreateFulfillment → CancelFulfillment, asserting the aggregate reaches the
-//   terminal CANCELLED state, persists CancellationInfo, and that FulfillmentCancelled lands in the
-//   outbox exactly once. Also asserts cancellation is blocked once the order is past pickup.
 import { randomUUID } from 'crypto';
 import { DomainEvent } from '../../../domain/shared/DomainEvent';
 import { Fulfillment } from '../../../domain/fulfillment/entities/Fulfillment';

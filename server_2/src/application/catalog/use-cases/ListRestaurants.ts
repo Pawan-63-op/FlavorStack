@@ -1,6 +1,3 @@
-// Query: cursor-paginated browse list from the `restaurant_summary` projection.
-// Public reads surface only PUBLIC + ACTIVE restaurants (enforced in the read
-// repository); cuisine/open filters compose on top. `isOpen` is a derived filter.
 import { Result } from '../../../domain/shared/Result';
 import { ICatalogReadRepository } from '../../../domain/catalog/repositories/ICatalogReadRepository';
 import { CursorPage } from '../../../domain/catalog/types/CursorPagination';

@@ -1,11 +1,3 @@
-// BullMQ Worker consuming `notification-queue`.
-//  - `push`       jobs → fire-and-forget IPushProvider call (legacy direct push, unchanged).
-//  - `engagement` jobs → NotificationDispatcher loads the persisted Notification, routes it through the
-//                        channel abstraction, and marks it SENT/FAILED (Phase 4).
-//
-// Retry/lifecycle: a transient failure throws out of `process`, so BullMQ retries the still-PENDING row.
-// Once attempts are exhausted, the `failed` handler routes the job to the DLQ and — for engagement jobs —
-// asks the dispatcher to settle the row as FAILED (markExhausted).
 import { Job, Worker } from 'bullmq';
 
 import { IPushProvider } from '../../external/push/IPushProvider';
@@ -38,7 +30,6 @@ export class NotifyWorker {
 
       void dlqHandler.handle(QUEUE.notification, job, err);
 
-      // Exhausted engagement job: settle the still-PENDING notification row as FAILED.
       if (job.data?.type === 'engagement') {
         void this.dispatcher.markExhausted(job.data.notificationId, err.message);
       }

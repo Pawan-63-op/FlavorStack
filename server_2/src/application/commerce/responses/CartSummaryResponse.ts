@@ -1,9 +1,3 @@
-// Output DTO: CartSummary — lightweight { itemCount, total } for a header/badge,
-// derived from `carts` (Phase 13). `itemCount` is the sum of line quantities;
-// `total` is the cart subtotal (null for an empty/absent cart). Designed to be
-// safe to call on every page render: an absent active cart yields an empty summary
-// (cartId/total/currency null, itemCount 0) rather than a 404, since a badge is
-// always rendered.
 import { Cart } from '../../../domain/commerce/entities/Cart';
 
 export interface MoneyResponse {

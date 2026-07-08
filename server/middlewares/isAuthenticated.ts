@@ -26,7 +26,6 @@ export const isAuthenticated = async (req: Request, res: Response, next: NextFun
             })
         }
         req.id = decode.userId;
-        // return res.status(200).json({message:req.id});
         next();
     } catch (error) {
         return res.status(500).json({

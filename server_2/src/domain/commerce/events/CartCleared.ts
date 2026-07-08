@@ -1,7 +1,6 @@
 import { DomainEvent } from '../../shared/DomainEvent';
 import { randomUUID } from 'crypto';
 
-// Domain event (in-process only, not outbox-routed): cartId
 export class CartCleared implements DomainEvent {
   public readonly eventId: string;
   public readonly occurredOn: Date;

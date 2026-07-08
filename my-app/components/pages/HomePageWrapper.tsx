@@ -14,9 +14,6 @@
 //           navigate(`/restaurants/${data.id}`);
 //         }
 //         break;
-//       case "recipes":
-//         navigate("/recipes");
-//         break;
 //       default:
 //         navigate(`/${page}`);
 //     }

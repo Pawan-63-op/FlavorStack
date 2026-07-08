@@ -1,6 +1,3 @@
-// Thin HTTP delivery for the menu-item owner-write use-cases. Builds DTOs from
-// validated input + verified actor; ownership and cross-aggregate checks live in
-// the use-cases.
 import { Request, Response, NextFunction } from 'express';
 import { AddMenuItem } from '../../../../application/catalog/use-cases/AddMenuItem';
 import { UpdateMenuItem } from '../../../../application/catalog/use-cases/UpdateMenuItem';
@@ -22,7 +19,6 @@ export interface MenuControllerDeps {
 export class MenuController {
   constructor(private readonly deps: MenuControllerDeps) {}
 
-  // Items are created under a restaurant: POST /restaurants/:id/items
   addItem = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const result = await this.deps.addMenuItem.execute({
       ...actorFrom(req),

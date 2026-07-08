@@ -1,7 +1,3 @@
-// Thin HTTP delivery for admin fulfillment operations (Phase 3B + 5B + 6).
-// Manual (re)assignment via ReassignRider: when an ACCEPTED rider is on the delivery it is handed over
-// (RiderReassigned); otherwise a fresh offer is made. With a riderId the admin names the replacement;
-// without one the IDeliveryAssignmentService picks the next candidate.
 import { Request, Response, NextFunction } from 'express';
 import { ReassignRider } from '../../../../application/fulfillment/use-cases/ReassignRider';
 import { CancelFulfillment } from '../../../../application/fulfillment/use-cases/CancelFulfillment';

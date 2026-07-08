@@ -1,15 +1,8 @@
-// Shared BaseUser <-> UserDocument field mapping, reused by the per-role mappers
-// (CustomerMapper, DriverMapper, AdminMapper) to avoid duplicating the ~20 base fields.
-// Kept separate from UserMapper.ts to avoid a circular import (UserMapper dispatches
-// to the per-role mappers, which in turn need these helpers).
 import { BaseUser } from '../../../domain/identity/entities/BaseUser';
 import { UserDocument } from '../models/UserModel';
 import { Result } from '../../../domain/shared/Result';
 import { DomainError } from '../../../domain/shared/errors/DomainError';
 
-// Trusted-data policy (Phase 6 plan §6/§16): persisted documents are assumed valid.
-// If a value object's create() fails on rehydration, that's data corruption, not a
-// user-facing validation error — surface it as a DomainError.
 export function rebuildOrThrow<T>(result: Result<T>, context: string): T {
   if (result.isFailure) {
     throw new DomainError(

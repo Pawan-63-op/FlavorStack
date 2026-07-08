@@ -12,7 +12,6 @@ describe('MongoDeliveryZoneRepository.findZoneContaining', () => {
   let zoneRepo: MongoDeliveryZoneRepository;
 
   beforeAll(async () => {
-    // findZoneContaining relies on the deliveryZones.polygon 2dsphere index.
     await RestaurantModel.init();
   });
 
@@ -37,7 +36,6 @@ describe('MongoDeliveryZoneRepository.findZoneContaining', () => {
     });
     await restaurantRepo.save(restaurant);
 
-    // A point well inside the ~0.01° square around the centre.
     const inside = GeoPoint.create(centerLat, centerLng).getValue();
     const zones = await zoneRepo.findZoneContaining(inside);
 

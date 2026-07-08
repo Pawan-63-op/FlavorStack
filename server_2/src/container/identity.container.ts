@@ -1,4 +1,3 @@
-// Composition root for Identity repository and persistence-port interfaces (Phase 9, Batch 2).
 import type { Connection } from 'mongoose';
 import { IUserRepository } from '../domain/identity/repositories/IUserRepository';
 import { ICustomerRepository } from '../domain/identity/repositories/ICustomerRepository';

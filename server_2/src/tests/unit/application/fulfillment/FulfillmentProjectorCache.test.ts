@@ -1,6 +1,3 @@
-// Unit tests for FulfillmentProjector cache invalidation (Phase 9 / Batch 9.1).
-// Asserts the projector invalidates the read-side cache AFTER applying the projection write, and
-// only for events that actually mutate the cached tracking/dashboard views.
 import { randomUUID } from 'crypto';
 import { DomainEvent } from '../../../../domain/shared/DomainEvent';
 import { FulfillmentProjector } from '../../../../application/fulfillment/projector/FulfillmentProjector';
@@ -11,6 +8,7 @@ function makeRepo(): jest.Mocked<IFulfillmentProjectionRepository> {
   return {
     upsertCustomerTracking: jest.fn().mockResolvedValue(undefined),
     findCustomerTracking: jest.fn().mockResolvedValue({ restaurantId: 'rest-1', deliveryAddress: {}, total: {}, currentStatus: 'PREPARING' }),
+    findByCustomer: jest.fn().mockResolvedValue([]),
     upsertRestaurantView: jest.fn().mockResolvedValue(undefined),
     removeRestaurantView: jest.fn().mockResolvedValue(undefined),
     findRestaurantQueue: jest.fn().mockResolvedValue([]),
@@ -18,9 +16,11 @@ function makeRepo(): jest.Mocked<IFulfillmentProjectionRepository> {
     removeRiderQueueItem: jest.fn().mockResolvedValue(undefined),
     removeAllRiderQueueItemsForFulfillment: jest.fn().mockResolvedValue(undefined),
     findRiderQueue: jest.fn().mockResolvedValue([]),
+    findRiderCompletedDeliveries: jest.fn().mockResolvedValue([]),
     upsertAdminView: jest.fn().mockResolvedValue(undefined),
     patchAdminView: jest.fn().mockResolvedValue(undefined),
     findAdminDashboard: jest.fn().mockResolvedValue([]),
+    aggregateAnalytics: jest.fn(),
   };
 }
 

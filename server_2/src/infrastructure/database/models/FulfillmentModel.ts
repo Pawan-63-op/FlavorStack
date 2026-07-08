@@ -1,8 +1,3 @@
-// Mongoose schema — `fulfillments` collection (fulfillment_module.md §8.1).
-// Phase 1: orderRequestId (unique idempotency key), customerId, restaurantId, lines,
-//          deliveryAddress, pricingTotal, fulfillmentStatus, version, timestamps.
-// Phase 2: prepEstimateMinutes (optional, set by restaurant), readyAt (set when READY_FOR_PICKUP).
-// Phase 3A: currentAssignment (active rider offer/assignment) + assignmentHistory (prior attempts).
 import { Schema, model } from 'mongoose';
 
 export interface MoneyDocument {
@@ -174,13 +169,9 @@ const FulfillmentSchema = new Schema<FulfillmentDocument>(
   }
 );
 
-// Idempotency backbone: a duplicate OrderRequested fails this unique insert.
 FulfillmentSchema.index({ orderRequestId: 1 }, { unique: true });
-// Restaurant queue board / SLA sweeps.
 FulfillmentSchema.index({ restaurantId: 1, fulfillmentStatus: 1 });
-// Rider's active deliveries (queue by rider).
 FulfillmentSchema.index({ 'currentAssignment.riderId': 1, deliveryStatus: 1 });
-// Customer order history.
 FulfillmentSchema.index({ customerId: 1, createdAt: -1 });
 
 export const FulfillmentModel = model<FulfillmentDocument>('Fulfillment', FulfillmentSchema);

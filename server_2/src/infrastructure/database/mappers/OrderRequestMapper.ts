@@ -1,11 +1,3 @@
-// Maps between the OrderRequest aggregate (immutable, embedded snapshots) and OrderRequestModel documents.
-// (Commerce Phase 11, commerce_module.md §6.)
-//
-// toPersistence flattens the aggregate through each embedded VO's own toJSON (RestaurantSnapshot,
-// MenuItemSnapshot, VariantSnapshot, PricingBreakdown) so per-snapshot schemaVersion survives the round trip.
-// toDomain rebuilds every VO/entity via its create()/fromJSON factory (trusted-data: failures are corruption
-// -> DomainError via rebuildOrThrow) and rehydrates the root through OrderRequest.reconstitute, which raises
-// no events. The repository never hands a Mongoose document to the domain.
 import { OrderRequest, OrderRequestProps } from '../../../domain/commerce/entities/OrderRequest';
 import { OrderRequestLine } from '../../../domain/commerce/entities/OrderRequestLine';
 import { IdempotencyKey } from '../../../domain/commerce/value-objects/IdempotencyKey';

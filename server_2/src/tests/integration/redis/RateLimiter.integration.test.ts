@@ -4,7 +4,6 @@ import { RateLimiter, RateLimitAction, RateLimitRule } from '../../../infrastruc
 import { rateLimitKey } from '../../../infrastructure/redis/keys';
 import { startRedisContainer, StartedTestRedis } from './redis-container';
 
-// Tight rules keep the suite fast while exercising every action the limiter supports.
 const RULES: Record<RateLimitAction, RateLimitRule> = {
   login: { windowSeconds: 2, max: 5 },
   'otp-generation': { windowSeconds: 2, max: 3 },
@@ -67,7 +66,6 @@ describe('RateLimiter', () => {
     }
     expect((await limiter.check('otp-generation', 'user-1')).allowed).toBe(false);
 
-    // Wait out the sliding window so the old timestamps drop off.
     await new Promise((resolve) => setTimeout(resolve, RULES['otp-generation'].windowSeconds * 1000 + 200));
 
     const result = await limiter.check('otp-generation', 'user-1');
@@ -85,11 +83,9 @@ describe('RateLimiter', () => {
     const allowedCount = results.filter((r) => r.allowed).length;
     expect(allowedCount).toBe(max);
 
-    // The sorted set holds exactly `max` members — no overcount past the limit.
     const cardinality = await client.getClient().zcard(rateLimitKey('otp-verification', 'concurrent-user'));
     expect(cardinality).toBe(max);
 
-    // Every blocked call reports a usable retryAfter.
     for (const r of results.filter((r) => !r.allowed)) {
       expect(r.remaining).toBe(0);
       expect(r.retryAfter).toBeGreaterThan(0);
@@ -102,7 +98,6 @@ describe('RateLimiter', () => {
     }
     expect((await limiter.check('password-reset', 'user-a')).allowed).toBe(false);
 
-    // A different identifier has its own independent window.
     const other = await limiter.check('password-reset', 'user-b');
     expect(other.allowed).toBe(true);
     expect(other.remaining).toBe(RULES['password-reset'].max - 1);
@@ -114,7 +109,6 @@ describe('RateLimiter', () => {
     }
     expect((await limiter.check('otp-generation', 'user-1')).allowed).toBe(false);
 
-    // A different action does not share the otp-generation budget.
     const login = await limiter.check('login', 'user-1');
     expect(login.allowed).toBe(true);
   });

@@ -1,5 +1,3 @@
-// Domain <-> persistence mapping for the Admin aggregate (ADMIN discriminator).
-// Implements src/domain/identity/entities/Admin.ts <-> AdminDocument (AdminModel.ts).
 import { Admin } from '../../../domain/identity/entities/Admin';
 import { AdminDocument, PermissionDocument, AuditEntryDocument } from '../models/AdminModel';
 import { Permission } from '../../../domain/identity/value-objects/Permission.vo';

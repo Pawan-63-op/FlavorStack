@@ -1,4 +1,3 @@
-// Redis connection config (host, port, password, TLS)
 export interface RedisConfig {
   host: string;
   port: number;

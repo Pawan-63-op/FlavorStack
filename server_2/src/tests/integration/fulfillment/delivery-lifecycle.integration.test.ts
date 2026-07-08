@@ -1,7 +1,3 @@
-// End-to-end happy path (real Mongo replica set + in-process bus) for Phase 4:
-//   OrderRequested → CreateFulfillment → MarkPreparing → MarkReadyForPickup (auto-offer)
-//   → AcceptDelivery → ConfirmPickup → StartDelivery → CompleteDelivery → DELIVERED.
-// Asserts the aggregate reaches the terminal state and every lifecycle event lands in the outbox.
 import { randomUUID } from 'crypto';
 import { DomainEvent } from '../../../domain/shared/DomainEvent';
 import { Fulfillment } from '../../../domain/fulfillment/entities/Fulfillment';
@@ -89,7 +85,6 @@ describe('Fulfillment delivery lifecycle e2e (Phase 4): OrderRequested → Deliv
     startDelivery = new StartDelivery(repo, uow, outbox, bus);
     completeDelivery = new CompleteDelivery(repo, uow, outbox, bus);
 
-    // Cross-context + auto-offer wiring on the in-process bus.
     onOrderRequested = new OnOrderRequested(createFulfillment);
     const onReady = new OnReadyForPickup(offer);
     bus.subscribe('OrderRequested', (e) => onOrderRequested.handle(e));
@@ -104,7 +99,6 @@ describe('Fulfillment delivery lifecycle e2e (Phase 4): OrderRequested → Deliv
   it('walks the full happy path to DELIVERED, emitting every lifecycle event to the outbox', async () => {
     const orderRequestId = `order-${randomUUID().slice(0, 8)}`;
 
-    // 1) OrderRequested → Fulfillment created (CREATED).
     await onOrderRequested.handle(orderRequestedEvent(orderRequestId));
 
     const created = (await repo.findByOrderRequestId(orderRequestId)) as Fulfillment;
@@ -112,33 +106,26 @@ describe('Fulfillment delivery lifecycle e2e (Phase 4): OrderRequested → Deliv
     expect(created.fulfillmentStatus.value).toBe(FULFILLMENT_STATUS.CREATED);
     const id = created.id.toString();
 
-    // 2) Restaurant prep → PREPARING.
     expect((await markPreparing.execute({ fulfillmentId: id, restaurantId: RESTAURANT_ID })).isSuccess).toBe(true);
 
-    // 3) Ready → READY_FOR_PICKUP, auto-offers RIDER_ID.
     expect((await markReady.execute({ fulfillmentId: id, restaurantId: RESTAURANT_ID })).isSuccess).toBe(true);
 
-    // 4) Rider accepts → delivery ASSIGNED.
     const accepted = await accept.execute({ fulfillmentId: id, riderId: RIDER_ID });
     expect(accepted.isSuccess).toBe(true);
     expect(accepted.getValue().deliveryStatus).toBe(DELIVERY_STATUS.ASSIGNED);
 
-    // 5) Pickup → PICKED_UP.
     const pickup = await confirmPickup.execute({ fulfillmentId: id, riderId: RIDER_ID });
     expect(pickup.isSuccess).toBe(true);
     expect(pickup.getValue().status).toBe(FULFILLMENT_STATUS.PICKED_UP);
 
-    // 6) Out for delivery → OUT_FOR_DELIVERY.
     const out = await startDelivery.execute({ fulfillmentId: id, riderId: RIDER_ID });
     expect(out.isSuccess).toBe(true);
     expect(out.getValue().status).toBe(FULFILLMENT_STATUS.OUT_FOR_DELIVERY);
 
-    // 7) Deliver → DELIVERED (terminal).
     const delivered = await completeDelivery.execute({ fulfillmentId: id, riderId: RIDER_ID });
     expect(delivered.isSuccess).toBe(true);
     expect(delivered.getValue().status).toBe(FULFILLMENT_STATUS.DELIVERED);
 
-    // Final persisted state.
     const reloaded = (await repo.findById(id)) as Fulfillment;
     expect(reloaded.fulfillmentStatus.value).toBe(FULFILLMENT_STATUS.DELIVERED);
     expect(reloaded.deliveryStatus.value).toBe(DELIVERY_STATUS.DELIVERED);
@@ -146,7 +133,6 @@ describe('Fulfillment delivery lifecycle e2e (Phase 4): OrderRequested → Deliv
     expect(reloaded.deliveredAt).toBeInstanceOf(Date);
     expect(reloaded.pickedUpAt).toBeInstanceOf(Date);
 
-    // Every lifecycle event landed in the outbox exactly once.
     for (const eventName of [
       'FulfillmentCreated',
       'PreparationStarted',
@@ -166,16 +152,13 @@ describe('Fulfillment delivery lifecycle e2e (Phase 4): OrderRequested → Deliv
     await onOrderRequested.handle(orderRequestedEvent(orderRequestId));
     const id = ((await repo.findByOrderRequestId(orderRequestId)) as Fulfillment).id.toString();
 
-    // No prep, no rider yet → pickup must fail (no accepted assignment).
     expect((await confirmPickup.execute({ fulfillmentId: id, riderId: RIDER_ID })).isFailure).toBe(true);
 
     await markPreparing.execute({ fulfillmentId: id, restaurantId: RESTAURANT_ID });
     await markReady.execute({ fulfillmentId: id, restaurantId: RESTAURANT_ID });
 
-    // Offer exists but not accepted → still blocked.
     expect((await confirmPickup.execute({ fulfillmentId: id, riderId: RIDER_ID })).isFailure).toBe(true);
 
-    // Accept, then pickup succeeds.
     await accept.execute({ fulfillmentId: id, riderId: RIDER_ID });
     expect((await confirmPickup.execute({ fulfillmentId: id, riderId: RIDER_ID })).isSuccess).toBe(true);
   });

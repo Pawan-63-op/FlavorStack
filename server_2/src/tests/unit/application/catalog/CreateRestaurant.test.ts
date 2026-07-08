@@ -57,7 +57,6 @@ describe('CreateRestaurant use-case', () => {
   });
 
   it('ignores any ownerId in the body — owner is always the verified actor', async () => {
-    // CreateRestaurantDto has no ownerId field; force one to prove it is not used.
     const result = await useCase.execute({ ...dto(), ownerId: 'attacker' } as unknown as CreateRestaurantDto);
 
     const saved = await restaurantRepo.findById(result.getValue().id);

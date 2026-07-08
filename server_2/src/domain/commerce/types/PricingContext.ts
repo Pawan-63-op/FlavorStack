@@ -1,11 +1,3 @@
-// Input contract for IPricingCalculator (Commerce Phase 7) — a pure, Money-based
-// description of everything the pricing pipeline needs to derive a PricingBreakdown
-// for one checkout/preview. Built by the application layer (Checkout/PreviewCheckout,
-// Phase 11/13) from the Cart plus the authoritative Catalog ACL read (Phase 10).
-//
-// `promotion` (Phase 8) is the AppliedPromotion resolved by IPromotionService at
-// cart-apply time and recomputed authoritatively at checkout. When absent, the
-// PromotionStage contributes a zero discount and PricingBreakdown.discount is zero.
 
 import { Money } from '../../shared/Money';
 import { Quantity } from '../value-objects/Quantity';

@@ -12,8 +12,6 @@ describe('MongoDriverRepository', () => {
   let repo: MongoDriverRepository;
 
   beforeAll(async () => {
-    // findNearby relies on the 2dsphere index (DriverModel.ts); Mongoose builds
-    // indexes asynchronously, so build them explicitly before querying.
     await Promise.all([UserModel.createIndexes(), DriverModel.createIndexes()]);
   });
 

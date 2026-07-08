@@ -1,7 +1,3 @@
-// Query: restaurant profile card from the `restaurant_summary` projection.
-// Projection-driven read only — never touches the write aggregate. Non-public /
-// non-active / deleted restaurants are filtered by the read repository and surface
-// here as NotFound.
 import { Result } from '../../../domain/shared/Result';
 import { NotFoundError } from '../../../domain/shared/errors/NotFoundError';
 import { ICatalogReadRepository } from '../../../domain/catalog/repositories/ICatalogReadRepository';

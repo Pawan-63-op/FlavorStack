@@ -1,1 +1,0 @@
-// Stripe mock responses

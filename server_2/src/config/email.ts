@@ -1,4 +1,3 @@
-// Resend API key, from address, and app base URL for email links
 export interface EmailConfig {
   apiKey: string;
   from: string;

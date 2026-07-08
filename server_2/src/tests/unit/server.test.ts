@@ -30,7 +30,6 @@ describe('server entrypoint', () => {
     await jest.isolateModulesAsync(async () => {
       await import('../../server');
     });
-    // allow the fire-and-forget main().catch(...) chain to settle
     await new Promise((resolve) => setImmediate(resolve));
 
     expect(mockBootstrap).toHaveBeenCalledWith({ startOutboxProcessor: false });

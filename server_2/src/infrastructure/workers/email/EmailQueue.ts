@@ -1,4 +1,3 @@
-// BullMQ Queue implementation of IEmailQueue — producer side of `email-queue`.
 import { Queue } from 'bullmq';
 
 import { IEmailQueue } from '../../../application/shared/queues/IEmailQueue';

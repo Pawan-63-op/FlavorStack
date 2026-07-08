@@ -47,7 +47,6 @@ describe('MongoCartRepository', () => {
       expect(cart.items[0].quantity.value).toBe(1);
       expect(cart.items[0].unitPriceSnapshot.amount).toBe(1000);
       expect(cart.items[0].unitPriceSnapshot.currency).toBe('INR');
-      // reconstitute raises no domain events
       expect(cart.pullDomainEvents()).toEqual([]);
     });
 

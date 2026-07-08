@@ -1,5 +1,3 @@
-// Mongoose discriminator — `users` collection, role: CUSTOMER.
-// Implements the persisted shape of Customer (src/domain/identity/entities/Customer.ts).
 import { Schema } from 'mongoose';
 import { UserModel, UserDocument } from './UserModel';
 import { USER_ROLE } from '../../../domain/identity/enums/user-role.enum';
@@ -7,15 +5,17 @@ import { USER_ROLE } from '../../../domain/identity/enums/user-role.enum';
 export interface CustomerAddressDocument {
   id: string;
   label?: string;
+  recipientName?: string;
+  phone?: string;
   street: string;
   city: string;
   state: string;
   pinCode: string;
+  landmark?: string;
+  deliveryInstructions?: string;
   coordinates: { lat: number; lng: number };
 }
 
-// Mirrors WalletTransaction.vo.ts, but with `txId` as a primitive string
-// (the VO declares it as the boxed `String` type — see Phase 6 plan §16, gap 7).
 export interface WalletTransactionDocument {
   txId: string;
   type: string;
@@ -48,10 +48,14 @@ const AddressSchema = new Schema<CustomerAddressDocument>(
   {
     id: { type: String, required: true },
     label: { type: String },
+    recipientName: { type: String },
+    phone: { type: String },
     street: { type: String, required: true },
     city: { type: String, required: true },
     state: { type: String, required: true },
     pinCode: { type: String, required: true },
+    landmark: { type: String },
+    deliveryInstructions: { type: String },
     coordinates: {
       lat: { type: Number, required: true },
       lng: { type: Number, required: true },
@@ -91,7 +95,6 @@ const CustomerSchema = new Schema<CustomerDocument>({
   notificationsEnabled: { type: Boolean, default: true },
 });
 
-// referralCode is generated (8-char UUID slice) at registration — see RegisterCustomer use case.
 CustomerSchema.index({ referralCode: 1 }, { unique: true, sparse: true });
 
 export const CustomerModel = UserModel.discriminator<CustomerDocument>(USER_ROLE.CUSTOMER, CustomerSchema);

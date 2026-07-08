@@ -1,13 +1,8 @@
-// Integration verification for Batch 9.2 (Index Review & Query Optimization).
-// Boots the shared MongoMemoryReplSet (tests/setup.ts), builds the read-model indexes, and uses
-// explain('queryPlanner') to assert the hot read queries are served by an index scan with NO
-// blocking in-memory SORT stage. Mirrors the actual query shapes in MongoFulfillmentProjectionRepository.
 import { AdminDashboardViewModel } from '../../../infrastructure/database/models/AdminDashboardViewModel';
 import { RiderQueueViewModel } from '../../../infrastructure/database/models/RiderQueueViewModel';
 import { RestaurantFulfillmentViewModel } from '../../../infrastructure/database/models/RestaurantFulfillmentViewModel';
 import { CustomerTrackingViewModel } from '../../../infrastructure/database/models/CustomerTrackingViewModel';
 
-// Recursively collect every `stage` name in an explain winningPlan tree.
 function collectStages(plan: Record<string, unknown> | undefined): string[] {
   if (!plan) return [];
   const stages: string[] = [];
@@ -28,7 +23,6 @@ const money = { amount: 50000, currency: 'INR' };
 
 describe('Batch 9.2 — fulfillment read-model index coverage', () => {
   beforeAll(async () => {
-    // Build the declared indexes on the fresh in-memory DB.
     await Promise.all([
       AdminDashboardViewModel.syncIndexes(),
       RiderQueueViewModel.syncIndexes(),
@@ -36,7 +30,6 @@ describe('Batch 9.2 — fulfillment read-model index coverage', () => {
       CustomerTrackingViewModel.syncIndexes(),
     ]);
 
-    // Seed enough rows that the planner prefers an index scan over a collection scan.
     const now = Date.now();
     const statuses = ['CREATED', 'PREPARING', 'READY_FOR_PICKUP', 'OUT_FOR_DELIVERY'];
     const adminDocs = Array.from({ length: 120 }, (_, i) => ({
@@ -170,8 +163,6 @@ describe('Batch 9.2 — fulfillment read-model index coverage', () => {
 
   describe('CustomerTrackingView (findCustomerTracking)', () => {
     it('findById is served by the _id index (never a collection scan)', async () => {
-      // The fast-path stage name for an _id equality lookup varies by MongoDB version
-      // (IDHACK / IXSCAN / EXPRESS_IXSCAN); the invariant that matters is: never a COLLSCAN.
       const stages = await winningStages(CustomerTrackingViewModel.find({ _id: 'f-1' }) as never);
       expect(stages).not.toContain('COLLSCAN');
     });

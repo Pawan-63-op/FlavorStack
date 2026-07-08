@@ -1,6 +1,3 @@
-// Implements ICommerceCatalogReadRepository over CommerceCatalogViewModel — the commerce_catalog_view
-// local projection, written by CommerceCatalogProjector and read for cart-time validation. Idempotency
-// against redelivered events is tracked via CommerceCatalogProjectionCheckpointModel (unique `eventId`).
 import { ICommerceCatalogReadRepository } from '../../domain/commerce/repositories/ICommerceCatalogReadRepository';
 import {
   CommerceCatalogMenuItemView,

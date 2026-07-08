@@ -1,23 +1,9 @@
-// MongoDB implementation of IUserRepository (Phase 6, Batch 4).
-//
-// Persists the polymorphic BaseUser hierarchy (Customer/Driver/Admin) through a
-// single `users` collection discriminated on `role`. All translation goes through
-// UserMapper — the repository never accepts or returns Mongoose documents.
-//
-// Session propagation: the active Mongo ClientSession is read implicitly from the
-// shared TransactionContext (AsyncLocalStorage) and attached to every operation.
-// Outside a transaction getSession() is undefined and operations run on the
-// connection's default auto-committed session. This keeps IUserRepository free of
-// a `ctx` parameter (Phase-4/Phase-5 contracts stay frozen).
-//
-// Soft delete: every finder filters `deletedAt: null` explicitly (no pre-find
-// plugin), and softDelete sets `deletedAt`/`isActive` rather than removing rows.
-//
-// Optimistic locking: update is guarded on the domain `version` field via
-// findOneAndUpdate({ _id, version }, { $inc: { version: 1 } }); a non-match means a
-// concurrent writer won (or the row is gone) and surfaces as a ConflictError.
 import type { ClientSession, Model } from 'mongoose';
-import { IUserRepository } from '../../domain/identity/repositories/IUserRepository';
+import {
+  IUserRepository,
+  ListUsersFilter,
+  ListUsersResult,
+} from '../../domain/identity/repositories/IUserRepository';
 import { BaseUser } from '../../domain/identity/entities/BaseUser';
 import { Email } from '../../domain/identity/value-objects/Email.vo';
 import { UserRole, USER_ROLE } from '../../domain/identity/enums/user-role.enum';
@@ -37,9 +23,6 @@ export class MongoUserRepository implements IUserRepository {
     return this.txContext.getSession();
   }
 
-  // Writes go through the concrete discriminator model so role-specific fields are
-  // persisted (the base UserModel strips fields it doesn't know about). Reads use
-  // the base UserModel, which returns the full stored document for any subtype.
   private modelFor(role: UserRole): Model<AnyUserDocument> {
     switch (role) {
       case USER_ROLE.CUSTOMER:
@@ -55,13 +38,11 @@ export class MongoUserRepository implements IUserRepository {
 
   async save(user: BaseUser): Promise<void> {
     const doc = UserMapper.toPersistence(user);
-    // The array form is required when passing per-operation options (session).
     await this.modelFor(user.role).create([doc], { session: this.session });
   }
 
   async update(user: BaseUser): Promise<void> {
     const doc = UserMapper.toPersistence(user) as unknown as Record<string, unknown>;
-    // `_id` and `role` are immutable; `version` is advanced via $inc, not $set.
     const fields = { ...doc };
     delete fields._id;
     delete fields.role;
@@ -70,8 +51,6 @@ export class MongoUserRepository implements IUserRepository {
     const result = await this.modelFor(user.role).findOneAndUpdate(
       { _id: user._id, version: user.version },
       { $set: fields, $inc: { version: 1 } },
-      // We only need to know whether a row matched the version guard; the returned
-      // document itself is unused, so the default (pre-update) return is fine.
       { session: this.session },
     );
 
@@ -110,5 +89,26 @@ export class MongoUserRepository implements IUserRepository {
       this.session ?? null,
     );
     return found !== null;
+  }
+
+  async list(filter: ListUsersFilter): Promise<ListUsersResult> {
+    const query: Record<string, unknown> = { deletedAt: null };
+    if (filter.role) query.role = filter.role;
+    if (filter.search && filter.search.trim()) {
+      const safe = filter.search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const rx = new RegExp(safe, 'i');
+      query.$or = [{ name: rx }, { email: rx }];
+    }
+
+    const [docs, total] = await Promise.all([
+      UserModel.find(query, null, { session: this.session })
+        .sort({ createdAt: -1 })
+        .skip(filter.offset)
+        .limit(filter.limit)
+        .lean<AnyUserDocument[]>(),
+      UserModel.countDocuments(query).session(this.session ?? null),
+    ]);
+
+    return { items: docs.map((doc) => UserMapper.toDomain(doc)), total };
   }
 }

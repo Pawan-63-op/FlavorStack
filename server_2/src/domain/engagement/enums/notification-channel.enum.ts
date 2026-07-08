@@ -1,4 +1,3 @@
-// Delivery channels for a notification (engagement_module.md §2).
 export const NOTIFICATION_CHANNEL = {
   PUSH: 'PUSH',
   EMAIL: 'EMAIL',

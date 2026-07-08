@@ -1,4 +1,3 @@
-// SessionStore — implements ISessionStore using session:{userId}:{sessionId} + session:index:{userId}
 import { ISessionStore, SessionData } from '../../domain/identity/services/ISessionStore';
 import { RedisClient } from './client';
 import { sessionKey, sessionIndexKey } from './keys';

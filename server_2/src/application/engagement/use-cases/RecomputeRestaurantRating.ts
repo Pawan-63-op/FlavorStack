@@ -1,5 +1,3 @@
-// UC: RecomputeRestaurantRating (internal) — rebuild the RestaurantRatingView from APPROVED reviews
-// (engagement_module.md §7). Triggered by ModerateReview on approve. Only approved reviews contribute.
 import { Result } from '../../../domain/shared/Result';
 import { MODERATION_STATUS } from '../../../domain/engagement/enums/moderation-status.enum';
 import { IReviewRepository } from '../../../domain/engagement/repositories/IReviewRepository';

@@ -1,10 +1,3 @@
-// RedisLiveLocationStore — implements ILiveLocationStore (fulfillment_module.md §9, Phase 7).
-//
-//  - setLatest:  one `SET key value EX ttl` per ping → O(1) latest-location read.
-//  - getLatest:  one `GET` + JSON parse.
-//  - tryAcquirePersistSlot: a distributed throttle via `SET key 1 EX n NX`. Because Redis is shared
-//    across instances, only ONE node wins the slot per window → Mongo persistence stays write-light
-//    even with a fleet of API nodes all receiving pings for the same fulfillment (§8.1).
 import { Redis } from 'ioredis';
 import { RedisClient } from '../redis/client';
 import { trackingLatestKey, trackingPersistGateKey } from '../redis/keys';
@@ -58,7 +51,6 @@ export class RedisLiveLocationStore implements ILiveLocationStore {
   }
 
   async tryAcquirePersistSlot(fulfillmentId: string, throttleSeconds: number): Promise<boolean> {
-    // NX => only set if absent; the key auto-expires after `throttleSeconds`, reopening the gate.
     const reply = await this.client.set(
       trackingPersistGateKey(fulfillmentId),
       '1',

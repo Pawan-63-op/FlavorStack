@@ -64,6 +64,15 @@ describe('Notification lifecycle', () => {
     expect(notification.readAt).toBeInstanceOf(Date);
   });
 
+  it('markRead moves FAILED -> READ (failed-delivery notification still dismissible in-app, G10)', () => {
+    const notification = Notification.queue(validInput()).getValue();
+    notification.markFailed('no fcm token');
+    const result = notification.markRead();
+    expect(result.isSuccess).toBe(true);
+    expect(notification.status.value).toBe(NOTIFICATION_STATUS.READ);
+    expect(notification.readAt).toBeInstanceOf(Date);
+  });
+
   it('markRead fails when still PENDING', () => {
     const notification = Notification.queue(validInput()).getValue();
     expect(notification.markRead().isFailure).toBe(true);

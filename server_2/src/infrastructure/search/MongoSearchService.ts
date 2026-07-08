@@ -1,17 +1,3 @@
-// MongoSearchService — native MongoDB search/discovery behind ISearchService
-// (Catalog Phase 10). NO Elasticsearch: relevance comes from Mongo `$text`
-// scores and proximity from the `2dsphere` index via `$geoNear`.
-//
-// Searches read ONLY the denormalized projections (`restaurant_summary`,
-// `menu_item_search`) — never the write aggregates. Visibility/availability
-// policy mirrors the read repository: only PUBLIC + ACTIVE + live restaurants
-// (and their items) ever surface. `isOpen` is time-dependent so it is DERIVED at
-// query time and applied as an in-memory filter (it can't be pushed into Mongo).
-//
-// Pagination is cursor-based. For text search the cursor encodes the composite
-// `(textScore, _id)` ordering key; for `nearby` it encodes `(distanceMeters, _id)`.
-// Because the derived `isOpenNow` filter can't live in the query, those paths
-// walk forward batch-by-batch until the requested page is filled.
 import { PipelineStage } from 'mongoose';
 import {
   ISearchService,
@@ -52,12 +38,11 @@ function normalizeLimit(limit?: number): number {
   return Math.min(limit, MAX_PAGE_LIMIT);
 }
 
-// Composite cursor for relevance-ordered text search: (score, id).
 interface ScoreCursor {
   s: number;
   i: string;
+  m?: 'text' | 'regex';
 }
-// Composite cursor for proximity-ordered geo search: (distanceMeters, id).
 interface DistanceCursor {
   d: number;
   i: string;
@@ -76,6 +61,10 @@ function decodeCursor<T>(cursor?: string): T | undefined {
   }
 }
 
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 export class MongoSearchService implements ISearchService {
   async searchRestaurants(
     query: string,
@@ -83,24 +72,69 @@ export class MongoSearchService implements ISearchService {
     params: CursorPaginationParams = {}
   ): Promise<CursorPage<RestaurantSummaryView>> {
     const limit = normalizeLimit(params.limit);
-    const baseMatch: Record<string, unknown> = {
+    const cursor = decodeCursor<ScoreCursor>(params.cursor);
+
+    if (cursor?.m === 'regex') {
+      return this.walkRestaurants(this.regexMatch(query, filters), 0, 'regex', filters, limit, cursor);
+    }
+
+    const textPage = await this.walkRestaurants(
+      this.textMatch(query, filters),
+      { $meta: 'textScore' },
+      'text',
+      filters,
+      limit,
+      cursor
+    );
+
+    if (!cursor && textPage.items.length === 0) {
+      return this.walkRestaurants(this.regexMatch(query, filters), 0, 'regex', filters, limit, undefined);
+    }
+
+    return textPage;
+  }
+
+  private textMatch(query: string, filters: RestaurantSearchFilters): Record<string, unknown> {
+    const match: Record<string, unknown> = {
       $text: { $search: query },
       ...PUBLIC_RESTAURANT_FILTER,
     };
     if (filters.cuisineTypes && filters.cuisineTypes.length > 0) {
-      baseMatch.cuisineTypes = { $in: filters.cuisineTypes };
+      match.cuisineTypes = { $in: filters.cuisineTypes };
     }
+    return match;
+  }
 
+  private regexMatch(query: string, filters: RestaurantSearchFilters): Record<string, unknown> {
+    const rx = { $regex: escapeRegex(query), $options: 'i' };
+    const match: Record<string, unknown> = {
+      ...PUBLIC_RESTAURANT_FILTER,
+      $or: [{ name: rx }, { cuisineTypes: rx }],
+    };
+    if (filters.cuisineTypes && filters.cuisineTypes.length > 0) {
+      match.cuisineTypes = { $in: filters.cuisineTypes };
+    }
+    return match;
+  }
+
+  private async walkRestaurants(
+    baseMatch: Record<string, unknown>,
+    scoreExpr: unknown,
+    mode: 'text' | 'regex',
+    filters: RestaurantSearchFilters,
+    limit: number,
+    startCursor?: ScoreCursor
+  ): Promise<CursorPage<RestaurantSummaryView>> {
     const now = new Date();
     const wantsOpenFilter = filters.isOpenNow !== undefined;
     const collected: Array<{ view: RestaurantSummaryView; cursor: ScoreCursor }> = [];
-    let cursor = decodeCursor<ScoreCursor>(params.cursor);
+    let cursor = startCursor;
     let exhausted = false;
 
     while (collected.length <= limit && !exhausted) {
       const pipeline: PipelineStage[] = [
         { $match: baseMatch },
-        { $addFields: { _score: { $meta: 'textScore' } } },
+        { $addFields: { _score: scoreExpr } },
       ];
       if (cursor) {
         pipeline.push({
@@ -124,7 +158,7 @@ export class MongoSearchService implements ISearchService {
       }
 
       for (const doc of docs) {
-        cursor = { s: doc._score, i: doc._id };
+        cursor = { s: doc._score, i: doc._id, m: mode };
         const view = this.toSummaryView(doc, now);
         if (wantsOpenFilter && view.isOpen !== filters.isOpenNow) continue;
         collected.push({ view, cursor });
@@ -150,7 +184,6 @@ export class MongoSearchService implements ISearchService {
       restaurantVisibility: CATALOG_VISIBILITY.PUBLIC,
       restaurantStatus: RESTAURANT_STATUS.ACTIVE,
     };
-    // `$all`: an item must carry every requested dietary tag (e.g. VEG + HALAL).
     if (filters.dietary && filters.dietary.length > 0) {
       baseMatch.dietary = { $all: filters.dietary };
     }

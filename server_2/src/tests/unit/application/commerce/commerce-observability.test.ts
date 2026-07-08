@@ -1,8 +1,3 @@
-// Commerce Phase 14 — use-case observability instrumentation tests. Asserts that the workflow
-// use cases emit the documented metrics/logs through an injected RecordingTelemetry (§11):
-//   AddToCart  → cart-add counter
-//   GetCart    → validation-rejection counter (per ERROR issue)
-//   Checkout   → checkout success/failure/idempotent-replay counters + pricing latency + span
 import { AddToCart } from '../../../../application/commerce/use-cases/AddToCart';
 import { GetCart } from '../../../../application/commerce/use-cases/GetCart';
 import { Checkout } from '../../../../application/commerce/use-cases/Checkout';
@@ -103,7 +98,6 @@ describe('GetCart observability', () => {
     const result = await useCase.execute({ customerId: 'c1' });
 
     expect(result.isSuccess).toBe(true);
-    // ERROR counted, WARNING ignored
     expect(rec.counter(COMMERCE_METRICS.validationRejectionTotal, { reason: VALIDATION_ISSUE_CODE.ITEM_UNAVAILABLE })).toBe(1);
     expect(rec.counter(COMMERCE_METRICS.validationRejectionTotal, { reason: VALIDATION_ISSUE_CODE.MIN_ORDER_NOT_MET })).toBe(0);
   });

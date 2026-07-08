@@ -1,9 +1,3 @@
-// Seed registry — runs all registered seeds in order (idempotently). Each seed is safe to
-// re-run on every boot.
-//
-// Engagement (Phase 3.B) registers the notification-template seed here. The permissions seed
-// (permissions.seed.ts) is still a stub and is intentionally NOT wired yet — it joins this
-// aggregator when Identity implements it.
 import { INotificationTemplateRepository } from '../../../domain/engagement/repositories/INotificationTemplateRepository';
 import { seedNotificationTemplates } from './notification-templates.seed';
 

@@ -1,10 +1,3 @@
-// Commerce Phase 14 — published cross-context event payload contract tests (commerce_module.md §8.1).
-//
-// The two events Commerce publishes at checkout (OrderRequested → future Ordering,
-// CheckoutReadyForPayment → future Payments) are raised by the REAL OrderRequest.createFromCheckout
-// path, then serialized exactly as MongoOutboxStore does (`JSON.parse(JSON.stringify(event))`) and
-// validated against their frozen Zod contracts. A field rename or type drift breaks here before it
-// can break a downstream consumer when services split.
 import {
   COMMERCE_EVENT_SCHEMAS,
   COMMERCE_EVENT_NAMES,

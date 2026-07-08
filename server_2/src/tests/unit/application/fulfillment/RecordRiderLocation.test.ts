@@ -1,5 +1,3 @@
-// Unit tests for RecordRiderLocation (Phase 7). Ownership guard, no-aggregate-write, Redis latest,
-// broadcast-every-ping, and the throttled-persist gate are all covered with mocked ports.
 import { RecordRiderLocation } from '../../../../application/fulfillment/use-cases/RecordRiderLocation';
 import { ILiveLocationStore } from '../../../../application/fulfillment/ports/ILiveLocationStore';
 import { IDeliveryTrackingStore } from '../../../../application/fulfillment/ports/IDeliveryTrackingStore';
@@ -56,7 +54,6 @@ describe('RecordRiderLocation', () => {
     expect(bus.broadcastLocation.mock.calls[0][1]).toMatchObject({ riderId: 'rider-1', lat: 12.97, lng: 77.59 });
     expect(live.tryAcquirePersistSlot).toHaveBeenCalledWith(f.id.toString(), THROTTLE);
     expect(track.append).toHaveBeenCalledTimes(1);
-    // No aggregate write.
     expect(repo.update).not.toHaveBeenCalled();
     expect(repo.save).not.toHaveBeenCalled();
   });

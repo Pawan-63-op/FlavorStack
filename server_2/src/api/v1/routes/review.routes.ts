@@ -1,4 +1,3 @@
-// Engagement: review submission, listing, rating, and admin moderation API routes (engagement_module.md §5).
 import { Router } from 'express';
 import { ReviewController } from '../controllers/ReviewController';
 import { authenticate } from '../middleware/authenticate';
@@ -26,7 +25,6 @@ export function createReviewRoutes(deps: ReviewRoutesDeps): Router {
   const ctrl = deps.controller;
   const auth = authenticate(deps.tokenService);
 
-  // ── Customer ───────────────────────────────────────────────────────────
   router.post(
     '/restaurants/:restaurantId/reviews',
     auth,
@@ -38,7 +36,6 @@ export function createReviewRoutes(deps: ReviewRoutesDeps): Router {
 
   router.get('/me/reviews', auth, validate(myReviewsQuery, 'query'), ctrl.getMine);
 
-  // ── Public ─────────────────────────────────────────────────────────────
   router.get(
     '/restaurants/:restaurantId/reviews',
     validate(restaurantIdParam, 'params'),
@@ -48,7 +45,6 @@ export function createReviewRoutes(deps: ReviewRoutesDeps): Router {
 
   router.get('/restaurants/:restaurantId/rating', validate(restaurantIdParam, 'params'), ctrl.getRating);
 
-  // ── Admin (moderation) ─────────────────────────────────────────────────
   router.get(
     '/admin/reviews',
     auth,

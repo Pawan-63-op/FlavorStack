@@ -1,10 +1,3 @@
-// Checkout transactional-heart integration test (Commerce Phase 11 Batch 4, commerce_module.md §4.4/§11).
-//
-// Exercises the committing checkout against a REAL Mongo (in-memory replica set, tests/setup.ts) through the
-// real MongoUnitOfWork + MongoOrderRequestRepository + MongoOutboxStore + MongoCartRepository — the highest-risk
-// piece. The Catalog ACL/projection/promotion ports are faked (those are external boundaries proven elsewhere);
-// the real CheckoutContextAssembler + PricingCalculator run. Asserts: a confirmed checkout persists the
-// OrderRequest AND its outbox rows AND clears the cart atomically, and that a failing commit rolls all of it back.
 import { randomUUID } from 'crypto';
 
 import { Checkout } from '../../../application/commerce/use-cases/Checkout';
@@ -194,21 +187,17 @@ describe('Checkout (integration)', () => {
     expect(summary.status).toBe(ORDER_REQUEST_STATUS.REQUESTED);
     expect(summary.pricing.total).toEqual({ amount: 7560, currency: 'INR' });
 
-    // OrderRequest persisted and rehydratable
     const persisted = await orderRepo.findById(summary.orderRequestId);
     expect(persisted).toBeInstanceOf(OrderRequest);
     expect((persisted as OrderRequest).idempotencyKey.value).toBe(summary.idempotencyKey);
 
-    // Outbox rows persisted in the same transaction
     const rows = await OutboxEventModel.find({ aggregateId: summary.orderRequestId }).lean();
     const names = rows.map((r) => r.eventName).sort();
     expect(names).toEqual(['CheckoutReadyForPayment', 'OrderRequested']);
 
-    // Cart cleared
     const cart = await cartRepo.findByCustomerId(customerId);
     expect(cart?.isEmpty).toBe(true);
 
-    // Post-commit publish happened
     expect(eventBus.published.map((e) => e.eventName).sort()).toEqual(['CartCleared', 'CheckoutReadyForPayment', 'OrderRequested']);
   });
 
@@ -223,7 +212,6 @@ describe('Checkout (integration)', () => {
     const first = await checkout.execute(dto(customerId, key));
     expect(first.isSuccess).toBe(true);
 
-    // Replay with the same key — the cart is already empty, but the guard short-circuits before any read.
     const replay = await checkout.execute(dto(customerId, key));
     expect(replay.isSuccess).toBe(true);
     expect(replay.getValue().orderRequestId).toBe(first.getValue().orderRequestId);
@@ -235,7 +223,6 @@ describe('Checkout (integration)', () => {
     const customerId = uniqueCustomerId();
     await cartRepo.save(buildCart(customerId));
 
-    // Force the transactional work to throw AFTER the order + outbox writes by stubbing the cart save.
     const failingCartRepo = Object.create(cartRepo) as MongoCartRepository;
     (failingCartRepo as unknown as { save: () => Promise<void> }).save = async () => {
       throw new Error('forced commit failure');
@@ -249,7 +236,6 @@ describe('Checkout (integration)', () => {
     expect(await OrderRequestModel.countDocuments({})).toBe(0);
     expect(await OutboxEventModel.countDocuments({})).toBe(0);
     expect(eventBus.published).toHaveLength(0);
-    // Cart untouched (still has its item)
     const cart = await cartRepo.findByCustomerId(customerId);
     expect(cart?.isEmpty).toBe(false);
   });

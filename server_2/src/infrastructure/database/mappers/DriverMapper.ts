@@ -1,5 +1,3 @@
-// Domain <-> persistence mapping for the Driver aggregate (DRIVER discriminator).
-// Implements src/domain/identity/entities/Driver.ts <-> DriverDocument (DriverModel.ts).
 import { Driver } from '../../../domain/identity/entities/Driver';
 import { DriverDocument, GeoJsonPointDocument } from '../models/DriverModel';
 import { VehicleInfo } from '../../../domain/identity/value-objects/VehicleInfo.vo';

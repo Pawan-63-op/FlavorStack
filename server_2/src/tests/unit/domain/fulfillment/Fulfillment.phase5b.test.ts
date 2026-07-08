@@ -1,4 +1,3 @@
-// Phase 5B domain tests: failDelivery(), reassign(), expireCurrentOffer().
 import { Fulfillment } from '../../../../domain/fulfillment/entities/Fulfillment';
 import { FulfillmentLine } from '../../../../domain/fulfillment/value-objects/FulfillmentLine';
 import { DeliveryAddress } from '../../../../domain/fulfillment/value-objects/DeliveryAddress';
@@ -141,11 +140,9 @@ describe('Fulfillment.reassign (Phase 5B)', () => {
     const result = f.reassign(RIDER_2, future());
 
     expect(result.isSuccess).toBe(true);
-    // The dropped rider is in history as REASSIGNED.
     expect(f.assignmentHistory).toHaveLength(1);
     expect(f.assignmentHistory[0].riderId).toBe(RIDER_1);
     expect(f.assignmentHistory[0].status.value).toBe(RIDER_ASSIGNMENT_STATUS.REASSIGNED);
-    // The new rider is the live ACCEPTED assignment, attempt 2, delivery back to ASSIGNED.
     expect(f.currentAssignment!.riderId).toBe(RIDER_2);
     expect(f.currentAssignment!.status.value).toBe(RIDER_ASSIGNMENT_STATUS.ACCEPTED);
     expect(f.currentAssignment!.attempt).toBe(2);

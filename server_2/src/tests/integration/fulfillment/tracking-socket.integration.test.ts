@@ -1,9 +1,3 @@
-// End-to-end integration test for the realtime `/tracking` namespace (Phase 7).
-//
-// Boots a real Socket.IO server + real socket.io-client over an ephemeral HTTP port (no Redis
-// adapter needed for single-instance fan-out). The token service + use cases are stubbed so the
-// test isolates the realtime wiring: handshake JWT auth, ownership-checked room join, rider GPS
-// push, and room broadcast delivery (the DoD: "customer in a room receives location + status").
 import { createServer, Server as HttpServer } from 'http';
 import { AddressInfo } from 'net';
 import { Server } from 'socket.io';
@@ -21,7 +15,6 @@ import { GetLiveTracking } from '../../../application/fulfillment/use-cases/GetL
 
 const FULFILLMENT_ID = 'ful-1';
 
-// Stub token service: maps opaque tokens to roles.
 const tokenService: ITokenService = {
   generateAccessToken: () => '',
   generateRefreshToken: () => '',
@@ -106,7 +99,6 @@ describe('tracking namespace (Phase 7)', () => {
     expect(subscribed.fulfillmentId).toBe(FULFILLMENT_ID);
     expect(getLiveTracking.execute).toHaveBeenCalledWith({ fulfillmentId: FULFILLMENT_ID, customerId: 'cust-1' });
 
-    // A server-side broadcast (as RecordRiderLocation would issue) reaches the room member.
     const locationPromise = waitFor<{ lat: number; lng: number }>(customer, 'tracking:location');
     broadcaster.broadcastLocation(FULFILLMENT_ID, {
       fulfillmentId: FULFILLMENT_ID,

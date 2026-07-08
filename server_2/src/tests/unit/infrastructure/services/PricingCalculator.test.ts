@@ -37,17 +37,12 @@ describe('PricingCalculator (full pipeline)', () => {
     expect(result.isSuccess).toBe(true);
     const b = result.getValue();
 
-    // subtotal = (10000 + 2000) * 2 = 24000
     expect(b.subtotal.amount).toBe(24000);
-    // fees = platform 3000 + packaging 1000 + delivery 4000 (3000m -> 5000m tier)
     const sumFees = b.fees.reduce((acc, f) => acc + f.amount.amount, 0);
     expect(sumFees).toBe(8000);
     expect(b.fees.map((f) => f.type)).toEqual([FEE_TYPE.PLATFORM, FEE_TYPE.PACKAGING, FEE_TYPE.DELIVERY]);
-    // discount = 0 (Phase 8 placeholder)
     expect(b.discount.amount).toBe(0);
-    // taxable base = 24000 + 8000 - 0 = 32000; tax = 32000 * 0.05 = 1600
     expect(b.tax.amount).toBe(1600);
-    // total = 24000 + 8000 - 0 + 1600 = 33600
     expect(b.total.amount).toBe(33600);
   });
 
@@ -114,7 +109,6 @@ describe('PricingCalculator (full pipeline)', () => {
       })
     );
 
-    // subtotal currency USD, but fee inputs are INR -> taxable base add fails
     expect(result.isFailure).toBe(true);
   });
 });

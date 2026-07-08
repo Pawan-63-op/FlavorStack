@@ -1,11 +1,3 @@
-// RiderAssignment — an entity INSIDE the Fulfillment aggregate (fulfillment_module.md §2.2 / §4.2).
-//
-// One attempt to put a rider on a delivery: it is offered with a TTL (expiresAt), then accepted or
-// rejected by that rider. It is NOT a separate aggregate — its status is tightly coupled to
-// fulfillment invariants and is always mutated as part of a Fulfillment transition.
-//
-// Phase 3A realizes offer / accept / reject. accept() respects the offer TTL: an accept at/after
-// expiresAt fails rather than transitioning.
 import { Entity } from '../../shared/Entity';
 import { Result } from '../../shared/Result';
 import { Guard } from '../../shared/Guard';

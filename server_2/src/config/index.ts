@@ -1,4 +1,3 @@
-// Re-exports config modules and asserts required env vars at startup (fail-fast)
 import { getAuthConfig } from './auth';
 import { getEmailConfig } from './email';
 

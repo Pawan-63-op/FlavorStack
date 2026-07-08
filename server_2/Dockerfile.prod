@@ -1,0 +1,36 @@
+# Phase 12, Batch 12.3 — `server_2` API production image.
+#
+# Packaging only — NO application/domain source changes (the backend stays
+# frozen per the Phase 12 hard constraint). This is the explicit production
+# Dockerfile the deploy/docker-compose.prod.yml stack builds the `api` service
+# from. It mirrors the existing dev `Dockerfile` (multi-stage tsc → node dist)
+# but is prod-pinned: `NODE_ENV=production` (so server_2's auth cookies are
+# flagged `Secure`, cookies.ts), prod-only deps, non-root user.
+#
+# The 4 workers reuse the existing `Dockerfile.worker` (already a prod image).
+
+# ── builder ──────────────────────────────────────────────────────────────────
+FROM node:22-alpine AS builder
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci
+
+COPY . .
+RUN npm run build
+
+# ── production ───────────────────────────────────────────────────────────────
+FROM node:22-alpine AS production
+WORKDIR /app
+ENV NODE_ENV=production
+
+COPY package*.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+
+COPY --from=builder /app/dist ./dist
+
+RUN addgroup -S app && adduser -S app -G app
+USER app
+
+EXPOSE 3000
+CMD ["node", "dist/server.js"]

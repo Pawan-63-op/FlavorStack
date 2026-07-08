@@ -2,9 +2,6 @@ import { AuthRequest } from '@/Types/allTypes';
 import Recipe from '../models/Recipe';
 import { Response } from 'express';
 
-// @desc    Get all recipes
-// @route   GET /api/recipes
-// @access  Public
 export const getRecipes = async (req:AuthRequest, res:Response) => {
   try {
     const { category, difficulty } = req.query;
@@ -20,9 +17,6 @@ export const getRecipes = async (req:AuthRequest, res:Response) => {
   }
 };
 
-// @desc    Get recipe by ID
-// @route   GET /api/recipes/:id
-// @access  Public
 export const getRecipeById = async (req:AuthRequest, res:Response) => {
   try {
     const recipe = await Recipe.findById(req.params.id)
@@ -38,9 +32,6 @@ export const getRecipeById = async (req:AuthRequest, res:Response) => {
   }
 };
 
-// @desc    Create recipe
-// @route   POST /api/recipes
-// @access  Private/Admin
 export const createRecipe = async (req:AuthRequest, res:Response) => {
   try {
     const recipe = await Recipe.create({
@@ -53,9 +44,6 @@ export const createRecipe = async (req:AuthRequest, res:Response) => {
   }
 };
 
-// @desc    Update recipe
-// @route   PUT /api/recipes/:id
-// @access  Private/Admin
 export const updateRecipe = async (req:AuthRequest, res:Response) => {
   try {
     const recipe = await Recipe.findById(req.params.id);
@@ -72,9 +60,6 @@ export const updateRecipe = async (req:AuthRequest, res:Response) => {
   }
 };
 
-// @desc    Delete recipe
-// @route   DELETE /api/recipes/:id
-// @access  Private/Admin
 export const deleteRecipe = async (req:AuthRequest, res:Response) => {
   try {
     const recipe = await Recipe.findById(req.params.id);

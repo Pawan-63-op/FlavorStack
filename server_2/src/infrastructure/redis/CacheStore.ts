@@ -1,4 +1,3 @@
-// CacheStore — generic cache-aside abstraction over Redis (get/set/del/invalidate/getOrSet, JSON-serialized, optional TTL)
 import { RedisClient } from './client';
 
 export class CacheStore {

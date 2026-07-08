@@ -6,8 +6,6 @@ import { ValidationError } from '../../shared/errors/ValidationError';
 import { Money } from '../../shared/Money';
 import { Quantity } from '../value-objects/Quantity';
 
-// Entity: menuItemId, quantity: Quantity, selectedOptionIds: string[], unitPriceSnapshot: Money
-// (cached at add-time for display; re-derived authoritatively at checkout)
 export interface CartItemProps {
   menuItemId: string;
   quantity: Quantity;

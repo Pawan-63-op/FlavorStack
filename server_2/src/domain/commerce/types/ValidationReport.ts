@@ -1,10 +1,3 @@
-// Result shape produced by ICartValidator (Commerce Phase 6) — a multi-issue report
-// over a Cart validated against a CommerceCatalogRestaurantView (commerce_catalog_view).
-//
-// `isValid` reflects only ERROR-severity issues; WARNING issues (e.g. a possible
-// min-order shortfall) are surfaced for the client but never block cart-time use.
-// The authoritative, address-aware checks (serviceability, true min-order) run at
-// checkout via the ICatalogGateway ACL (Phase 10/11).
 
 export const VALIDATION_ISSUE_CODE = {
   RESTAURANT_NOT_FOUND: 'RESTAURANT_NOT_FOUND',

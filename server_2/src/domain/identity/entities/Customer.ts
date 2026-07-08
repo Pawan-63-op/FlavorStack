@@ -1,4 +1,3 @@
-// src/modules/user/domain/entities/Customer.ts
 
 import { BaseUser } from './BaseUser'
 import { USER_ROLE } from "../enums/user-role.enum";
@@ -8,10 +7,10 @@ import { randomUUID } from 'crypto';
 import { WalletTransaction } from '../value-objects/WalletTransaction.vo';
 import { CreateCustomerInput } from '../types/CreateCustomerInput';
 
-// Imports added for Batch 3
 import { Money } from '../../shared/Money';
 import { DomainError } from '../../shared/errors/DomainError';
 import { ValidationError } from '../../shared/errors/ValidationError';
+import { NotFoundError } from '../../shared/errors/NotFoundError';
 import { UserRegistered } from '../events/UserRegistered';
 
 export interface CustomerAddress {
@@ -21,31 +20,24 @@ export interface CustomerAddress {
 
 export class Customer extends BaseUser {
 
-    // ── Customer-specific fields 
-    //Addresses──────────────────────────
     addresses!: CustomerAddress[]
     defaultAddressId!: string | null
 
-    // wallet
     walletBalance!: number
     walletCurrency!: string
     walletTransactions!: WalletTransaction[]
 
-    // Loyalty 
     loyaltyPoints!: number
     totalLifetimeSpend!: number
 
-    // Referral
     referralCode!: string
     referredBy!: string | null
     referralCount!: number
 
-    // Preferences
     savedRestaurants!: string[]
     dietaryPreferences!: string[]
     defaultPaymentMethod!: string | null
 
-    // Notifications
     fcmTokens!: string[]
     notificationsEnabled!: boolean
 
@@ -68,12 +60,10 @@ export class Customer extends BaseUser {
         this.notificationsEnabled = data.notificationsEnabled ?? true
     }
 
-    // ── Abstract implementation ───────────────────────────
     get displayName(): string {
         return this.name
     }
 
-    // ── Virtuals ──────────────────────────────────────────
     get loyaltyTier(): LoyaltyTier {
         if (this.totalLifetimeSpend >= 15000) return LOYALTY_TIER.PLATINUM
         if (this.totalLifetimeSpend >= 5000) return LOYALTY_TIER.GOLD
@@ -91,13 +81,21 @@ export class Customer extends BaseUser {
         return `₹${(this.walletBalance / 100).toFixed(2)}`
     }
 
-    // ── Address methods  ────────────────────────────────────
-    addAddress(addr: Address): void {
+    addAddress(addr: Address): string {
         const id = randomUUID();
         this.addresses.push({ id, address: addr });
         if (!this.defaultAddressId) {
             this.defaultAddressId = id;
         }
+        return id;
+    }
+
+    updateAddress(addrId: string, addr: Address): void {
+        const entry = this.addresses.find(a => a.id === addrId);
+        if (!entry) {
+            throw new NotFoundError('address_not_found');
+        }
+        entry.address = addr;
     }
 
     removeAddress(addrId: string): void {
@@ -114,7 +112,6 @@ export class Customer extends BaseUser {
         }
     }
 
-    // wallet methods
     deductwallet(amount: number): void {
         const currentBalanceResult = Money.create(this.walletBalance, this.walletCurrency);
         const deductAmountResult = Money.create(amount, this.walletCurrency);
@@ -137,7 +134,6 @@ export class Customer extends BaseUser {
         this.walletBalance = newBalanceResult.getValue().amount;
     }
 
-    // Loyalty methods
     creditLoyaltyPoints(pts: number): void {
         if (pts < 0) {
             throw new ValidationError('Loyalty points to credit cannot be negative');
@@ -155,12 +151,10 @@ export class Customer extends BaseUser {
         this.loyaltyPoints -= pts;
     }
 
-    // review methods 
     canReview() {
 
     }
     
-    // notifications methods
     registerFcmToken(token: string) { 
         if (!this.fcmTokens.includes(token)) this.fcmTokens.push(token) 
     }
@@ -175,8 +169,6 @@ export class Customer extends BaseUser {
         if (input.defaultAddress) {
             addresses.push({ id: defaultAddressId!, address: input.defaultAddress });
         }
-        // Destructure to exclude defaultAddress from the spread — Customer has a getter
-        // named defaultAddress which conflicts with Object.assign in the constructor.
         const { defaultAddress: _addr, ...inputWithoutAddress } = input;
         const customer = new Customer({
             ...inputWithoutAddress,

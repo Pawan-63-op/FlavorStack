@@ -1,6 +1,3 @@
-// Output DTO: ValidatePromotion — the resolved AppliedPromotion preview returned before the
-// customer commits it to the cart. `applicable` is always true on success (a non-applicable
-// code fails with a domain error mapped to HTTP by the error middleware).
 import { AppliedPromotion } from '../../../domain/commerce/value-objects/AppliedPromotion';
 import { AppliedPromotionResponse } from './CartResponseDto';
 

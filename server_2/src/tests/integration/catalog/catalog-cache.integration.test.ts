@@ -1,7 +1,3 @@
-// Catalog caching integration (Phase 13). Exercises the real flow with Mongo
-// (mongodb-memory-server via tests/setup.ts) AND Redis (a disposable testcontainer):
-// cache hit/miss on the hot read paths, event-driven invalidation through the
-// projector, and the no-stale-read guarantee after a write.
 import { StartedRedisContainer } from '@testcontainers/redis';
 import { randomUUID } from 'crypto';
 
@@ -72,7 +68,6 @@ describe('Catalog caching (Phase 13)', () => {
     deliveryZoneRepo = new MongoDeliveryZoneRepository(txContext);
     mongoReadRepo = new MongoCatalogReadRepository();
     cachedReadRepo = new CachedCatalogReadRepository(mongoReadRepo, cache);
-    // Projector wired WITH the cache → rebuilds projections then invalidates caches.
     projector = new CatalogProjector(
       restaurantRepo,
       menuItemRepo,
@@ -168,8 +163,6 @@ describe('Catalog caching (Phase 13)', () => {
       const before = await cachedReadRepo.getRestaurantSummary(id);
       expect(before?.name).toBe('Original Name');
 
-      // Reload (so the optimistic-lock version is in sync), mutate + persist, then
-      // publish the event so the projector rebuilds the projection and invalidates.
       const fresh = (await restaurantRepo.findById(id))!;
       fresh.updateProfile({ name: 'Renamed Bistro' });
       await restaurantRepo.update(fresh);
@@ -203,7 +196,6 @@ describe('Catalog caching (Phase 13)', () => {
       const firstPage = await cachedReadRepo.listRestaurantSummaries({}, { limit: 50 });
       expect(firstPage.items).toHaveLength(1);
 
-      // Publishing a second restaurant bumps the cache generation via the projector.
       await seed();
 
       const secondPage = await cachedReadRepo.listRestaurantSummaries({}, { limit: 50 });
@@ -226,7 +218,6 @@ describe('Catalog caching (Phase 13)', () => {
       expect(second.getValue()).toEqual(first.getValue());
       expect(zoneSpy).toHaveBeenCalledTimes(1); // second was a cache hit
 
-      // A restaurant event bumps the generation → next lookup recomputes.
       const fresh = (await restaurantRepo.findById(restaurant.id.toString()))!;
       fresh.updateProfile({ name: 'Zone Bistro' });
       await restaurantRepo.update(fresh);

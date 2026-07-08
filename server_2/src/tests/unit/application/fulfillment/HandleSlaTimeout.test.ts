@@ -56,7 +56,6 @@ describe('HandleSlaTimeout', () => {
     const cancel = mockCancel();
     const uc = new HandleSlaTimeout(repo, cancel);
 
-    // The SLA timer was armed at READY_FOR_PICKUP but the order has progressed → nothing to do.
     const result = await uc.execute({ fulfillmentId: f.id.toString(), stage: FULFILLMENT_STATUS.READY_FOR_PICKUP });
 
     expect(result.isSuccess).toBe(true);

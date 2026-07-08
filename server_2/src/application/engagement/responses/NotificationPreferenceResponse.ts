@@ -1,4 +1,3 @@
-// Read shape returned by notification-preference use cases (engagement_module.md §4/§5).
 import { NotificationPreference } from '../../../domain/engagement/entities/NotificationPreference';
 import { NOTIFICATION_CATEGORY, NotificationCategoryValue } from '../../../domain/engagement/enums/notification-category.enum';
 import { NOTIFICATION_CHANNEL } from '../../../domain/engagement/enums/notification-channel.enum';

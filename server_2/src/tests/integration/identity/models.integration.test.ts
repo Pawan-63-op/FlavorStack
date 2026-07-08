@@ -107,8 +107,6 @@ function adminFields(overrides: Partial<AdminDocument> = {}): AdminDocument {
 
 describe('Identity Mongo models — registration & indexes', () => {
   beforeAll(async () => {
-    // createIndexes() (not syncIndexes) — discriminators share the `users`
-    // collection, and syncIndexes would drop indexes belonging to sibling schemas.
     await Promise.all([
       UserModel.createIndexes(),
       CustomerModel.createIndexes(),
@@ -231,7 +229,6 @@ describe('Identity Mongo models — registration & indexes', () => {
     await CustomerModel.create(customerFields({ email }));
     await expect(CustomerModel.create(customerFields({ email }))).rejects.toThrow(/E11000/);
 
-    // Soft-delete the original, then re-registering the same email succeeds.
     await UserModel.updateOne({ email }, { $set: { deletedAt: new Date(), isActive: false } });
     await expect(CustomerModel.create(customerFields({ email }))).resolves.toBeDefined();
   });

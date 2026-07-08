@@ -1,5 +1,3 @@
-// VO: { menuItemId, name, basePrice: Money, categoryId, schemaVersion } — immutable copy of a menu
-// item taken at checkout (Commerce Phase 9, commerce_module.md §3.3/§6.4).
 import { ValueObject } from '../../../shared/ValueObject';
 import { Result } from '../../../shared/Result';
 import { ValidationError } from '../../../shared/errors/ValidationError';

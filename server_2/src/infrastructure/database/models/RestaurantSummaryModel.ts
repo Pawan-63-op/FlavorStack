@@ -1,10 +1,3 @@
-// Read-model projection — `restaurant_summary` collection (Catalog Phase 9).
-//
-// Denormalized browse/list card for a restaurant, rebuilt by the CatalogProjector
-// from the Restaurant aggregate. `status` + `openingHours` are stored raw so the
-// read repository can DERIVE `isOpen` at query time (it is time-dependent and must
-// never be persisted stale). `location` is GeoJSON for the 2dsphere index used by
-// nearby/serviceability discovery.
 import { Schema, model } from 'mongoose';
 import { GeoJsonPoint, OpeningHoursDocument } from './RestaurantModel';
 
@@ -56,8 +49,10 @@ RestaurantSummarySchema.index({ status: 1, visibility: 1 });
 RestaurantSummarySchema.index({ cuisineTypes: 1 });
 RestaurantSummarySchema.index({ deletedAt: 1 }, { sparse: true });
 RestaurantSummarySchema.index({ location: '2dsphere' });
-// Text index for restaurant name search (Catalog Phase 10 — MongoSearchService).
-RestaurantSummarySchema.index({ name: 'text' });
+RestaurantSummarySchema.index(
+  { name: 'text', cuisineTypes: 'text' },
+  { weights: { name: 5, cuisineTypes: 1 }, name: 'restaurant_search_text' }
+);
 
 export const RestaurantSummaryModel = model<RestaurantSummaryDocument>(
   'RestaurantSummary',

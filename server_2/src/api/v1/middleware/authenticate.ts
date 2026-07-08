@@ -1,4 +1,3 @@
-// Verify JWT → attach req.user (does not load the DB user; kept light)
 import { Request, Response, NextFunction, RequestHandler } from 'express';
 import { ITokenService } from '../../../domain/identity/services/ITokenService';
 import { ForbiddenError } from '../../../domain/shared/errors/ForbiddenError';
@@ -29,8 +28,6 @@ export function authenticate(tokenService: ITokenService): RequestHandler {
 
     const result = tokenService.verify(token);
     if (result.isFailure) {
-      // Both an expired and a malformed/invalid token are surfaced identically
-      // so the errorHandler's auth-message override maps them to 401.
       next(new ForbiddenError('invalid_token'));
       return;
     }

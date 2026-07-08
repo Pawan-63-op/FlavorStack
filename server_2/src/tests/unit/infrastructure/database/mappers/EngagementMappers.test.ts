@@ -1,7 +1,3 @@
-// Phase 6.C — direct unit coverage for the four engagement mappers (engagement_module.md §6).
-// The repository integration tests exercise these via Mongo round-trips; these unit tests pin the pure
-// mapping logic (incl. the null/present branches and lifecycle states) and the trusted-data error policy
-// (rebuildOrThrow → DomainError on corrupt persisted values) without a database.
 import { NotificationMapper } from '../../../../../infrastructure/database/mappers/NotificationMapper';
 import { ReviewMapper } from '../../../../../infrastructure/database/mappers/ReviewMapper';
 import { NotificationPreferenceMapper } from '../../../../../infrastructure/database/mappers/NotificationPreferenceMapper';

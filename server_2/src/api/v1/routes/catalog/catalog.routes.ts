@@ -1,7 +1,3 @@
-// Mounts the Catalog API under /v1/catalog. Two surfaces on one router:
-//   • Public reads  — no auth, search/nearby rate-limited (keyed by IP).
-//   • Owner writes  — `authenticate` gate; ownership is RE-checked inside every
-//                     use-case against `restaurant.ownerId` (defense in depth).
 import { Router, raw } from 'express';
 import { RestaurantController } from '../../controllers/catalog/RestaurantController';
 import { MenuController } from '../../controllers/catalog/MenuController';
@@ -22,6 +18,7 @@ import {
   updateCategorySchema,
   reorderCategoriesSchema,
   manageZoneSchema,
+  mineRestaurantsQuery,
 } from '../../validators/catalog/restaurant.catalog.validator';
 import {
   itemIdParam,
@@ -58,7 +55,8 @@ export function createCatalogRoutes(deps: CatalogRoutesDeps): Router {
   const search = rateLimit(deps.rateLimiter, 'catalog-search');
   const rawImage = raw({ type: '*/*', limit: IMAGE_LIMIT });
 
-  // ── Public discovery ──────────────────────────────────────────────────
+  router.get('/restaurants/mine', auth, validate(mineRestaurantsQuery, 'query'), r.mine);
+
   router.get('/restaurants', validate(listRestaurantsQuery, 'query'), d.list);
   router.get('/search/restaurants', search, validate(searchRestaurantsQuery, 'query'), d.searchRestaurants);
   router.get('/search/items', search, validate(searchMenuItemsQuery, 'query'), d.searchItems);
@@ -69,7 +67,6 @@ export function createCatalogRoutes(deps: CatalogRoutesDeps): Router {
   router.get('/restaurants/:id', validate(restaurantIdParam, 'params'), d.getOne);
   router.get('/restaurants/:id/menu', validate(restaurantIdParam, 'params'), d.getMenu);
 
-  // ── Owner writes: restaurant profile / lifecycle ──────────────────────
   router.post('/restaurants', auth, validate(createRestaurantSchema), r.create);
   router.patch('/restaurants/:id', auth, validate(restaurantIdParam, 'params'), validate(updateRestaurantSchema), r.update);
   router.delete('/restaurants/:id', auth, validate(restaurantIdParam, 'params'), r.remove);
@@ -80,16 +77,13 @@ export function createCatalogRoutes(deps: CatalogRoutesDeps): Router {
   router.put('/restaurants/:id/opening-hours', auth, validate(restaurantIdParam, 'params'), validate(setOpeningHoursSchema), r.setOpeningHours);
   router.post('/restaurants/:id/image', auth, validate(restaurantIdParam, 'params'), rawImage, r.uploadImage);
 
-  // ── Owner writes: categories ──────────────────────────────────────────
   router.post('/restaurants/:id/categories', auth, validate(restaurantIdParam, 'params'), validate(addCategorySchema), r.addCategory);
   router.post('/restaurants/:id/categories/reorder', auth, validate(restaurantIdParam, 'params'), validate(reorderCategoriesSchema), r.reorderCategories);
   router.patch('/restaurants/:id/categories/:categoryId', auth, validate(categoryIdParam, 'params'), validate(updateCategorySchema), r.updateCategory);
   router.delete('/restaurants/:id/categories/:categoryId', auth, validate(categoryIdParam, 'params'), r.removeCategory);
 
-  // ── Owner writes: delivery zones ──────────────────────────────────────
   router.post('/restaurants/:id/zones', auth, validate(restaurantIdParam, 'params'), validate(manageZoneSchema), r.manageZone);
 
-  // ── Owner writes: menu items ──────────────────────────────────────────
   router.post('/restaurants/:id/items', auth, validate(restaurantIdParam, 'params'), validate(addMenuItemSchema), m.addItem);
   router.patch('/items/:id', auth, validate(itemIdParam, 'params'), validate(updateMenuItemSchema), m.updateItem);
   router.delete('/items/:id', auth, validate(itemIdParam, 'params'), m.removeItem);

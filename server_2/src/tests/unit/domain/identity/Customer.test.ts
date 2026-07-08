@@ -3,6 +3,19 @@ import { USER_ROLE } from '../../../../domain/identity/enums/user-role.enum';
 import { UserRegistered } from '../../../../domain/identity/events/UserRegistered';
 import { DomainError } from '../../../../domain/shared/errors/DomainError';
 import { ValidationError } from '../../../../domain/shared/errors/ValidationError';
+import { Address } from '../../../../domain/identity/value-objects/Address.vo';
+import { GeoPoint } from '../../../../domain/identity/value-objects/GeoPoint.vo';
+
+function makeAddress(label = 'Home'): Address {
+  return Address.create({
+    label,
+    street: '100 Feet Road',
+    city: 'Bangalore',
+    state: 'Karnataka',
+    pinCode: '560038',
+    coordinates: GeoPoint.create(12.97, 77.59).getValue(),
+  }).getValue();
+}
 
 describe('Customer Entity', () => {
   const validCustomerInput = {
@@ -27,7 +40,6 @@ describe('Customer Entity', () => {
       expect(customer.totalLifetimeSpend).toBe(0);
       expect(customer.referralCount).toBe(0);
 
-      // Check domain event was recorded
       const events = customer.pullDomainEvents();
       expect(events.length).toBe(1);
       const event = events[0] as UserRegistered;
@@ -133,6 +145,68 @@ describe('Customer Entity', () => {
       }).toThrow(ValidationError);
 
       expect(customer.loyaltyPoints).toBe(100); // unchanged
+    });
+  });
+
+  describe('address operations', () => {
+    it('addAddress returns the new id and makes the first address the default', () => {
+      const customer = Customer.create(validCustomerInput);
+
+      const id = customer.addAddress(makeAddress('Home'));
+
+      expect(typeof id).toBe('string');
+      expect(customer.addresses).toHaveLength(1);
+      expect(customer.addresses[0].id).toBe(id);
+      expect(customer.defaultAddressId).toBe(id);
+    });
+
+    it('addAddress keeps the existing default when adding a second address', () => {
+      const customer = Customer.create(validCustomerInput);
+      const firstId = customer.addAddress(makeAddress('Home'));
+      const secondId = customer.addAddress(makeAddress('Work'));
+
+      expect(customer.addresses).toHaveLength(2);
+      expect(customer.defaultAddressId).toBe(firstId);
+      expect(secondId).not.toBe(firstId);
+    });
+
+    it('updateAddress replaces the address for an existing id and preserves default', () => {
+      const customer = Customer.create(validCustomerInput);
+      const id = customer.addAddress(makeAddress('Home'));
+
+      customer.updateAddress(id, makeAddress('Work'));
+
+      expect(customer.addresses).toHaveLength(1);
+      expect(customer.addresses[0].id).toBe(id);
+      expect(customer.addresses[0].address.label).toBe('Work');
+      expect(customer.defaultAddressId).toBe(id);
+    });
+
+    it('updateAddress throws NotFoundError for an unknown id', () => {
+      const customer = Customer.create(validCustomerInput);
+
+      expect(() => customer.updateAddress('nope', makeAddress())).toThrow();
+    });
+
+    it('removeAddress drops the address and reassigns default when the default was removed', () => {
+      const customer = Customer.create(validCustomerInput);
+      const firstId = customer.addAddress(makeAddress('Home'));
+      const secondId = customer.addAddress(makeAddress('Work'));
+
+      customer.removeAddress(firstId);
+
+      expect(customer.addresses).toHaveLength(1);
+      expect(customer.defaultAddressId).toBe(secondId);
+    });
+
+    it('setDefaultAddress switches the default to an existing id', () => {
+      const customer = Customer.create(validCustomerInput);
+      customer.addAddress(makeAddress('Home'));
+      const secondId = customer.addAddress(makeAddress('Work'));
+
+      customer.setDefaultAddress(secondId);
+
+      expect(customer.defaultAddressId).toBe(secondId);
     });
   });
 });

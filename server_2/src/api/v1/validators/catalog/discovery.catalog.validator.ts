@@ -1,6 +1,3 @@
-// Zod validators for the public discovery surface (list / search / nearby /
-// serviceability / snapshot). Query params are strings, so numbers are coerced
-// and comma-separated enum lists are split into arrays.
 import { z } from 'zod';
 import {
   uuid,

@@ -1,6 +1,3 @@
-// RecordingTelemetry — an in-memory ITelemetry for unit tests (Commerce Phase 14).
-// Captures every log line, counter increment, histogram observation, and span lifecycle
-// so use-case observability can be asserted without touching pino or the real registry.
 import { ITelemetry, ISpan, LogFields, MetricLabels } from '../../application/shared/observability/ITelemetry';
 import { metricKey } from '../../infrastructure/observability/metrics';
 
@@ -67,7 +64,6 @@ export class RecordingTelemetry implements ITelemetry {
     };
   }
 
-  // ── assertion helpers ────────────────────────────────────────────
   counter(metric: string, labels?: MetricLabels): number {
     return this.counters.get(metricKey(metric, labels)) ?? 0;
   }

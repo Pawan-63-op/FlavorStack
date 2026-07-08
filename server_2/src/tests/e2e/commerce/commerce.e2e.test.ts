@@ -1,17 +1,3 @@
-// Commerce Cart API e2e (Phase 4) — black-box over the real HTTP API (supertest +
-// createApp) against MongoMemoryReplSet (tests/setup.ts) + a disposable Redis.
-//
-// Exercises the cart lifecycle end to end:
-//   unauthenticated access rejected (401)
-//   GET /cart before any items -> 404 (no active cart yet)
-//   POST /cart/items -> creates cart, adds item (200)
-//   POST /cart/items with same selection -> merges quantity
-//   POST /cart/items from a different restaurant -> 409 (single-restaurant invariant)
-//   PATCH /cart/items/:itemId -> updates quantity
-//   PATCH /cart/items/:itemId with quantity 0 -> removes the line
-//   DELETE /cart/items/:itemId -> removes a line item (404 for unknown id)
-//   DELETE /cart -> clears the cart
-//   GET /cart/summary -> empty summary before any item, count+subtotal after (Phase 13)
 import { generateKeyPairSync, randomUUID } from 'crypto';
 import request from 'supertest';
 import type { Express } from 'express';

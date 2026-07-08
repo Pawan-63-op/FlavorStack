@@ -1,4 +1,3 @@
-// Engagement: notification preferences + history API routes (engagement_module.md §5).
 import { Router } from 'express';
 import { NotificationController } from '../controllers/NotificationController';
 import { authenticate } from '../middleware/authenticate';

@@ -1,6 +1,3 @@
-// Mongoose schema — `reviews` collection (engagement_module.md §6).
-// Indexes: unique customerId+fulfillmentId (one review per delivered order);
-// restaurantId+moderationStatus+createdAt (public/admin listing).
 import { Schema, model } from 'mongoose';
 
 export interface ReviewDocument {

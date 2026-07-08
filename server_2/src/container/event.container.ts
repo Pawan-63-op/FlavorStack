@@ -1,4 +1,3 @@
-// Composition root for the Identity in-process event bus and handler wiring (Phase 9, Batch 3).
 import { IEventBus } from '../application/shared/events/IEventBus';
 import { InMemoryEventBus } from '../application/shared/events/InMemoryEventBus';
 import { IEmailQueue } from '../application/shared/queues/IEmailQueue';

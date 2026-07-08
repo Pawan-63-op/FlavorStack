@@ -1,8 +1,3 @@
-// Unit tests for FulfillmentNotificationDispatcher (Fulfillment Phase 8, §5.2 / §5.3).
-//
-// Verifies: one job per recipient with token = recipientId + jobId = `${eventId}-${role}`; fan-out to
-// customer + rider on one event without jobId collision; replay/dedup (jobId + in-memory guard);
-// internal/out-of-scope events enqueue nothing.
 import { FulfillmentNotificationDispatcher } from '../../../../application/fulfillment/event-handlers/FulfillmentNotificationDispatcher';
 import { INotificationQueue } from '../../../../application/shared/queues/INotificationQueue';
 import { DomainEvent } from '../../../../domain/shared/DomainEvent';

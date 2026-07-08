@@ -1,4 +1,3 @@
-// Global Express error handler — maps DomainErrors → HTTP codes
 import { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
 import { DomainError } from '../../../domain/shared/errors/DomainError';
@@ -11,8 +10,6 @@ const CODE_STATUS_MAP: Record<string, number> = {
   FORBIDDEN: 403,
 };
 
-// ForbiddenError instances carrying these messages are authentication
-// failures, not authorization failures — surface them as 401.
 const AUTH_MESSAGE_OVERRIDES = new Set([
   'invalid_credentials',
   'invalid_token',
@@ -47,7 +44,6 @@ function resolveDomainErrorStatus(err: DomainError): number {
     case 'CONFLICT':
       return 409;
     case 'NOT_FOUND':
-      // No user enumeration: a missing-user login failure reads as 401, not 404.
       return err.message === 'invalid_credentials' ? 401 : 404;
     case 'FORBIDDEN':
       return AUTH_MESSAGE_OVERRIDES.has(err.message) ? 401 : 403;

@@ -20,7 +20,6 @@ export class BanUser {
   ) {}
 
   async execute(dto: BanUserDto): Promise<Result<void>> {
-    // 1. Load actor and target
     const actor = await this.userRepo.findById(dto.actorId);
     if (!actor) return Result.fail(new NotFoundError('actor_not_found'));
     if (!(actor instanceof Admin)) return Result.fail(new ForbiddenError('actor_not_admin'));
@@ -28,7 +27,6 @@ export class BanUser {
     const target = await this.userRepo.findById(dto.targetUserId);
     if (!target) return Result.fail(new NotFoundError('user_not_found'));
 
-    // 2. Authorize: only super-admins may ban admins
     try {
       actor.assertCanBan(target.role);
     } catch (e) {
@@ -36,20 +34,16 @@ export class BanUser {
       throw e;
     }
 
-    // 3. Ban target (raises UserBanned) and revoke its sessions/tokens
     target.ban(dto.reason);
     target.invalidateAllSessions();
 
-    // 4. Pull events
     const events = target.pullDomainEvents();
 
-    // 5. Atomic transaction: persist target + outbox
     await this.unitOfWork.runInTransaction(async (ctx) => {
       await this.userRepo.update(target);
       await this.outboxStore.append(events, ctx);
     });
 
-    // 6. Post-commit: publish events + clear Redis sessions
     await this.eventBus.publishAll(events);
     await this.sessionStore.invalidateAll(target._id);
 

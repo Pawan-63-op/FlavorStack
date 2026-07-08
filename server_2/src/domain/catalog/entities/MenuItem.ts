@@ -43,10 +43,6 @@ function validateDietary(values: string[]): Result<DietaryTag[]> {
 }
 
 export class MenuItem extends AggregateRoot<MenuItemProps> {
-  // The `version` present when this aggregate was loaded from persistence (0 for a
-  // freshly created one). `touch()` advances `props.version` past this on each
-  // mutation; the repository uses it as the optimistic-lock guard while writing the
-  // new `version`. See MongoMenuItemRepository.update.
   private readonly _persistedVersion: number;
 
   private constructor(props: MenuItemProps, id?: UniqueEntityId) {

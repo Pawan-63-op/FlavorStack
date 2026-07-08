@@ -1,4 +1,3 @@
-// Thin HTTP delivery for review submission, listing, rating, and moderation use-cases. Zero business logic.
 import { Request, Response, NextFunction } from 'express';
 import { SubmitReview } from '../../../application/engagement/use-cases/SubmitReview';
 import { GetMyReviews } from '../../../application/engagement/use-cases/GetMyReviews';

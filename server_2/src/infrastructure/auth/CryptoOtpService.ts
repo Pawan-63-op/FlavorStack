@@ -1,4 +1,3 @@
-// CSPRNG numeric OTP — randomInt(0, 10) per digit avoids modulo bias.
 import { randomInt } from 'crypto';
 import { IOtpGenerator } from '../../domain/identity/services/IOtpGenerator';
 

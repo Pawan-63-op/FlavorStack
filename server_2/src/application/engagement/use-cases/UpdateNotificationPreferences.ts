@@ -1,5 +1,3 @@
-// UC: UpdateNotificationPreferences — set per-category channel toggles for a user
-// (engagement_module.md §4). Creates a default preference on first write. No domain event is raised.
 import { Result } from '../../../domain/shared/Result';
 import { NotificationPreference } from '../../../domain/engagement/entities/NotificationPreference';
 import { INotificationPreferenceRepository } from '../../../domain/engagement/repositories/INotificationPreferenceRepository';

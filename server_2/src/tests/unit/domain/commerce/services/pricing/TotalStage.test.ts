@@ -19,7 +19,6 @@ describe('TotalStage', () => {
     expect(result.isSuccess).toBe(true);
     const breakdown = result.getValue();
     expect(breakdown).toBeInstanceOf(PricingBreakdown);
-    // 20000 + 5000 + 3000 - 0 + 1400
     expect(breakdown.total.amount).toBe(29400);
   });
 
@@ -42,7 +41,6 @@ describe('TotalStage', () => {
       tax: money(0),
     });
 
-    // 20000 + 5000 - 2000
     expect(result.getValue().total.amount).toBe(23000);
   });
 

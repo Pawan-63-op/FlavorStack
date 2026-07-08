@@ -1,12 +1,8 @@
-// Commerce Phase 14 — PinoTelemetry unit tests. Verifies the concrete telemetry delegates
-// logging to pino, metrics to the registry, and that spans record an elapsed-duration
-// histogram on end/fail (the tracing primitive for the checkout flow, §11).
 import pino from 'pino';
 import { PinoTelemetry } from '../../../../infrastructure/observability/PinoTelemetry';
 import { MetricsRegistry } from '../../../../infrastructure/observability/metrics';
 
 function silentLogger() {
-  // level 'silent' suppresses output but still exercises the pino call paths.
   return pino({ level: 'silent' });
 }
 

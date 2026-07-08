@@ -15,7 +15,6 @@ class TestValueObject extends ValueObject<TestVoProps> {
     return new TestValueObject(props);
   }
 
-  // expose props for testing immutability
   get testProps() {
     return this.props;
   }

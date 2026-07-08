@@ -20,7 +20,6 @@ describe('TaxStage', () => {
   });
 
   it('rounds to the nearest paise', () => {
-    // 19999 * 0.05 = 999.95 -> 1000
     const result = TaxStage.run(money(19999), { rate: 0.05 });
 
     expect(result.getValue().amount).toBe(1000);

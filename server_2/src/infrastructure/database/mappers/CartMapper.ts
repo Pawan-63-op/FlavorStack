@@ -1,11 +1,3 @@
-// Domain <-> persistence mapping for the Cart aggregate (Commerce Phase 3).
-//
-// Cart (src/domain/commerce/entities/Cart.ts) <-> CartDocument. toPersistence
-// flattens the aggregate and its CartItem entities (Money/Quantity VOs -> plain
-// fields). toDomain rebuilds every value object/entity via its create() factory
-// (trusted-data: failures are corruption -> DomainError, see rebuildOrThrow) and
-// rehydrates the root through Cart.reconstitute, which raises no events. The
-// repository never hands a Mongoose document to the domain.
 import { Cart, CartProps } from '../../../domain/commerce/entities/Cart';
 import { CartItem, CartItemProps } from '../../../domain/commerce/entities/CartItem';
 import { Quantity } from '../../../domain/commerce/value-objects/Quantity';

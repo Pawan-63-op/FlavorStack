@@ -1,22 +1,3 @@
-// Return contracts for ICatalogGateway (Commerce Phase 10) — the Commerce-owned,
-// authoritative read shapes produced by the synchronous, query-only Catalog ACL at the
-// checkout moment (commerce_module.md §3.4/§4.3/§4.4).
-//
-// SCOPE (reconciled in Phase 10 Batch 2): the ACL is limited to Catalog's three published
-// read ports — ICatalogReadRepository, the CheckServiceability use case, and
-// IOpeningHoursService. These contracts therefore carry ONLY what those ports authoritatively
-// expose:
-//   - restaurant existence / status / fresh open-state          (getRestaurantSummary + opening hours)
-//   - item existence / base price / availability                (getItemsSnapshot -> MenuItemView)
-//   - serviceability / resolved delivery fee / min order        (CheckServiceability)
-//
-// Deliberately NOT here (sourced elsewhere at checkout, NOT from the ACL):
-//   - variant option price-deltas and validity, delivery-fee TIERS -> Commerce-local projection
-//     (commerce_catalog_view, Phase 5)
-//   - platform / packaging fees -> Commerce pricing config (PricingContext.restaurantFeeInputs)
-//
-// Types are Commerce-owned and decoupled from Catalog's read models (the infra adapter maps
-// Catalog shapes -> these). Money is the shared VO; status is the Commerce-local mirror enum.
 
 import { Money } from '../../shared/Money';
 import { CommerceRestaurantStatus } from '../enums/restaurant-status.enum';

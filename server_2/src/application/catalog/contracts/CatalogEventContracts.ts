@@ -1,15 +1,3 @@
-// Catalog Phase 12 — cross-context event payload contracts.
-//
-// These Zod schemas describe the *serialized* shape of every catalog domain event
-// as it lands in the shared `outbox` collection (i.e. `JSON.parse(JSON.stringify(event))`)
-// and is therefore the exact shape downstream contexts (Commerce, Fulfillment,
-// Search re-indexer, Notification) consume off BullMQ. They are the published
-// contract — guarded by contract tests so the cross-context boundary can't drift
-// as services split later.
-//
-// Domain stays framework-free (CLAUDE.md): the event classes live under
-// `src/domain/catalog/events/` with no validation deps; these schemas live in the
-// application layer where Zod is already an allowed dependency.
 import { z } from 'zod';
 import { RESTAURANT_STATUS } from '../../../domain/catalog/enums/restaurant-status.enum';
 
@@ -18,8 +6,6 @@ const eventEnvelope = z.object({
   eventId: z.string().uuid(),
   eventName: z.string().min(1),
   aggregateId: z.string().min(1),
-  // `occurredOn` is a Date in-process; JSON serialization (the outbox payload)
-  // turns it into an ISO-8601 string.
   occurredOn: z.string().datetime(),
 });
 
@@ -33,7 +19,6 @@ const restaurantStatusValue = z.enum([
 const categoryChangeAction = z.enum(['UPDATED', 'REORDERED', 'REMOVED']);
 const deliveryZoneChangeAction = z.enum(['ADDED', 'UPDATED', 'REMOVED']);
 
-// ── Restaurant-aggregate events (aggregateId === restaurantId) ───────────────
 
 export const RestaurantCreatedSchema = eventEnvelope.extend({
   eventName: z.literal('RestaurantCreated'),
@@ -71,7 +56,6 @@ export const DeliveryZoneChangedSchema = eventEnvelope.extend({
   action: deliveryZoneChangeAction,
 });
 
-// ── MenuItem-aggregate events (aggregateId === menuItemId) ───────────────────
 
 export const MenuItemCreatedSchema = eventEnvelope.extend({
   eventName: z.literal('MenuItemCreated'),
@@ -89,8 +73,6 @@ export const MenuItemAvailabilityChangedSchema = eventEnvelope.extend({
   eventName: z.literal('MenuItemAvailabilityChanged'),
   restaurantId: z.string().min(1),
   isAvailable: z.boolean(),
-  // `undefined` is dropped by JSON serialization, so the field is simply absent
-  // when there's no reason — hence `.optional()`, not `.nullable()`.
   outOfStockReason: z.string().optional(),
 });
 

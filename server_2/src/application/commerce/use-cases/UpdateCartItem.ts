@@ -6,9 +6,6 @@ import { IUnitOfWork } from '../../shared/ports/IUnitOfWork';
 import { UpdateCartItemDto } from '../dtos/UpdateCartItemDto';
 import { CartResponseDto, toCartResponse } from '../dtos/CartResponseDto';
 
-// UC: UpdateCartItem — changes the quantity of a line item. A quantity of 0
-// removes the line item entirely (mirrors typical cart-widget UX where the
-// stepper decrements to zero and the row disappears).
 export class UpdateCartItem {
   constructor(
     private readonly cartRepo: ICartRepository,

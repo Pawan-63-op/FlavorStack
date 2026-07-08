@@ -19,7 +19,6 @@ export function createEventBusSpy(): EventBusSpy {
 
   const originalPublishAll = bus.publishAll.bind(bus);
   bus.publishAll = async (events: DomainEvent[]): Promise<void> => {
-    // publishAll calls this.publish for each event; the spy publish tracks them individually
     return originalPublishAll(events);
   };
 

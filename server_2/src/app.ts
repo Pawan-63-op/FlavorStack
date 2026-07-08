@@ -1,4 +1,3 @@
-// Creates Express app — mounts middleware, routes, error handler (no listen here)
 import express, { Express } from 'express';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';

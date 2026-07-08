@@ -1,5 +1,3 @@
-// NotificationTemplate — admin/seeded config aggregate (engagement_module.md §2).
-// Key: templateKey + channel + locale. No domain events.
 import { AggregateRoot } from '../../shared/AggregateRoot';
 import { Result } from '../../shared/Result';
 import { Guard } from '../../shared/Guard';

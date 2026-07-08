@@ -6,13 +6,7 @@ import cookieParser from 'cookie-parser';
 import { Response } from 'express';
 import {IUser} from "@/Types/allTypes";
 dotenv.config();
-// export const generateToken = (id:any) => {
    
-//   const token=  jwt.sign({ id: id.toString() }, process.env.JWT_SECRET!, {
-//     expiresIn: '7d'
-//   });
-//   return token;
-// }
 
 
 

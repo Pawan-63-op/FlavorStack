@@ -1,18 +1,3 @@
-// Lua script for RateLimiter.check — atomic sorted-set sliding-window counter.
-// The single EVAL is the sole writer per call, so concurrent requests sharing
-// the same key cannot overshoot `max` (no check-then-act race).
-//
-// KEYS[1] = rate:{action}:{identifier}  — sorted set of in-window request timestamps
-// ARGV[1] = now            — current time in ms (unix epoch)
-// ARGV[2] = windowMs       — window length in ms
-// ARGV[3] = max            — max requests allowed per window
-// ARGV[4] = windowSeconds  — window length in seconds (for EXPIRE)
-// ARGV[5] = member         — unique member for this request's ZADD
-//
-// Returns a 3-element array: { allowed, remaining, retryAfter }
-//   allowed     — 1 if this request is permitted, 0 if it exceeds the limit
-//   remaining   — requests left in the window after this call (0 when blocked)
-//   retryAfter  — seconds until the oldest in-window entry expires (0 when allowed)
 export const SLIDING_WINDOW_SCRIPT = `
 local key = KEYS[1]
 local now = tonumber(ARGV[1])

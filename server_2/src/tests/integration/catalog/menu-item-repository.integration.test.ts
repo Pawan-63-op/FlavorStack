@@ -42,7 +42,6 @@ describe('MongoMenuItemRepository', () => {
       expect(group.options).toHaveLength(2);
       expect(group.id.toString()).toBe(original.variantGroups[0].id.toString());
 
-      // price resolution survives the round-trip
       const fullOptionId = group.options.find((o) => o.label === 'Full')!.id.toString();
       const priced = item.priceFor([fullOptionId]);
       expect(priced.isSuccess).toBe(true);

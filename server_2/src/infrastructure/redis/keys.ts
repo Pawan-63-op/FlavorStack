@@ -1,5 +1,3 @@
-// Centralized Redis key builders — pure, side-effect-free prefix conventions
-// shared by SessionStore, OtpStore, CacheStore, and RateLimiter.
 
 /** `session:{userId}:{sessionId}` — session payload. */
 export function sessionKey(userId: string, sessionId: string): string {

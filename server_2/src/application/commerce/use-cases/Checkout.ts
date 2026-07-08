@@ -1,14 +1,3 @@
-// UC: Checkout — the core committing flow (§4.4): idempotency check → load Cart → ACL authoritative re-read →
-// recompute prices via IPricingCalculator → recompute promotion → build immutable snapshots →
-// OrderRequest.createFromCheckout() → unitOfWork.runInTransaction(orderRequestRepo.save + outboxStore.append)
-// → post-commit eventBus.publishAll(OrderRequested, CheckoutReadyForPayment). Replay of the same
-// IdempotencyKey returns the original OrderRequest unchanged.
-//
-// Checkout reuses the SHARED CheckoutContextAssembler + IPricingCalculator that PreviewCheckout (Batch 3)
-// runs, so the priced result a customer previews is reproduced exactly at commit. The only additions here are
-// the idempotency guard (§4.4 step 0), turning the assembled context into immutable snapshots, and the atomic
-// persist-and-outbox + post-commit publish. The delivery point used for serviceability is the address's own
-// coordinates, keeping preview (bare point) and checkout (full address) on the same pricing.
 import { Result } from '../../../domain/shared/Result';
 import { Money } from '../../../domain/shared/Money';
 import { NotFoundError } from '../../../domain/shared/errors/NotFoundError';
@@ -47,8 +36,6 @@ export class Checkout {
   ) {}
 
   async execute(dto: CheckoutRequestDto): Promise<Result<OrderRequestSummaryResponse>> {
-    // Phase 14: span the whole committing flow (load→ACL→price→persist→publish, §11). `fail` records the
-    // failure metric + reason and closes the span at every early-return; `succeed` does the success path.
     const span = this.telemetry.startCheckoutSpan({ customerId: dto.customerId });
     const fail = (error: string | DomainError, span: ISpan): Result<OrderRequestSummaryResponse> => {
       const reason = error instanceof DomainError ? error.code : 'CHECKOUT_ERROR';
@@ -57,14 +44,12 @@ export class Checkout {
       return Result.fail<OrderRequestSummaryResponse>(error);
     };
 
-    // Step 0 — idempotency. A supplied key is validated to its canonical shape; an absent one is minted.
     const keyResult = dto.idempotencyKey
       ? IdempotencyKey.create(dto.idempotencyKey)
       : Result.ok<IdempotencyKey>(IdempotencyKey.generate());
     if (keyResult.isFailure) return fail(keyResult.getError(), span);
     const idempotencyKey = keyResult.getValue();
 
-    // Replay: a previously-committed key returns the original OrderRequest unchanged (no persist/publish).
     const existing = await this.orderRequestRepo.findByIdempotencyKey(idempotencyKey.value);
     if (existing) {
       this.telemetry.checkoutReplayed({
@@ -96,7 +81,6 @@ export class Checkout {
     const cart = await this.cartRepo.findByCustomerId(dto.customerId);
     if (!cart) return fail(new NotFoundError('cart_not_found'), span);
 
-    // Steps 1-7 — shared authoritative read + recompute (restaurant/items/serviceability/promotion).
     const assemblyResult = await this.assembler.assemble(cart, pointResult.getValue());
     if (assemblyResult.isFailure) return fail(assemblyResult.getError(), span);
     const assembly = assemblyResult.getValue();
@@ -106,7 +90,6 @@ export class Checkout {
     this.telemetry.recordPricingLatency(Date.now() - pricingStartedAt, { mode: 'checkout' });
     if (breakdownResult.isFailure) return fail(breakdownResult.getError(), span);
 
-    // Turn the recomputed context into immutable snapshots + lines.
     const restaurantResult = this.buildRestaurantSnapshot(assembly);
     if (restaurantResult.isFailure) return fail(restaurantResult.getError(), span);
 
@@ -127,22 +110,18 @@ export class Checkout {
 
     const orderEvents = order.pullDomainEvents();
 
-    // Empty the cart in the same transaction so a confirmed checkout cannot be re-priced from a stale cart.
     const clearResult = cart.clear();
     if (clearResult.isFailure) return fail(clearResult.getError(), span);
     const cartEvents = cart.pullDomainEvents();
 
-    // Atomic commit: the OrderRequest, its outbox rows, and the cleared cart all persist together.
     await this.unitOfWork.runInTransaction(async (ctx) => {
       await this.orderRequestRepo.save(order);
       await this.outboxStore.append(orderEvents, ctx);
       await this.cartRepo.save(cart);
     });
 
-    // Post-commit publish: outbox-routed order events (also onto the in-process bus) + the in-process cart event.
     await this.eventBus.publishAll([...orderEvents, ...cartEvents]);
 
-    // Audit + success metric: the OrderRequest is the immutable audit artifact (§11); emit a correlatable trail.
     const orderRequestId = order.id.toString();
     this.telemetry.orderRequestCreated({
       orderRequestId,
@@ -161,8 +140,6 @@ export class Checkout {
   }
 
   private buildRestaurantSnapshot(assembly: CheckoutAssembly): Result<RestaurantSnapshot> {
-    // The assembler models the ACL's resolved delivery fee as a single covering tier on the PricingContext;
-    // the snapshot preserves the same tier so the pricing pipeline can be re-run from the persisted order.
     return RestaurantSnapshot.create({
       restaurantId: assembly.restaurant.restaurantId,
       name: assembly.restaurant.name,

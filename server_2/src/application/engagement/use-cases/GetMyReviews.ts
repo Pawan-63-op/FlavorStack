@@ -1,4 +1,3 @@
-// UC: GetMyReviews — the authenticated customer's own reviews, paginated (engagement_module.md §5).
 import { Result } from '../../../domain/shared/Result';
 import { IReviewRepository } from '../../../domain/engagement/repositories/IReviewRepository';
 import { GetMyReviewsDto } from '../dtos/ReviewDtos';

@@ -1,4 +1,3 @@
-// Input DTOs for Review/Rating use cases (engagement_module.md §4).
 import { ModerationStatusValue } from '../../../domain/engagement/enums/moderation-status.enum';
 
 export interface SubmitReviewDto {

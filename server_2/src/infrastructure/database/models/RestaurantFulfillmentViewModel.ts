@@ -1,5 +1,3 @@
-// Mongoose model — `restaurant_fulfillment_views` collection (fulfillment_module.md §11, Phase 6).
-// One document per active fulfillment keyed by fulfillmentId; rows are removed on terminal events.
 import { Schema, model } from 'mongoose';
 
 export interface RestaurantFulfillmentViewLineDocument {
@@ -60,7 +58,6 @@ const RestaurantFulfillmentViewSchema = new Schema<RestaurantFulfillmentViewDocu
   }
 );
 
-// Restaurant queue board: active fulfillments for a restaurant ordered by creation.
 RestaurantFulfillmentViewSchema.index({ restaurantId: 1, status: 1, createdAt: -1 });
 
 export const RestaurantFulfillmentViewModel = model<RestaurantFulfillmentViewDocument>(

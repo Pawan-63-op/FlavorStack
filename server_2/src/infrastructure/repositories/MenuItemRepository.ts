@@ -1,13 +1,3 @@
-// MongoDB implementation of IMenuItemRepository (Catalog Phase 8).
-//
-// Persists the MenuItem aggregate (with embedded variant groups/options) to the
-// `menu_items` collection — a separate aggregate/collection from `restaurants`,
-// referencing `restaurantId` + `categoryId`. All translation goes through
-// MenuItemMapper; the repository never accepts or returns Mongoose documents.
-//
-// Session propagation, soft delete and optimistic locking follow the same patterns
-// as MongoRestaurantRepository (session via TransactionContext, finders filter
-// `deletedAt: null`, update guards on the domain `persistedVersion`).
 import type { ClientSession } from 'mongoose';
 import { IMenuItemRepository } from '../../domain/catalog/repositories/IMenuItemRepository';
 import { MenuItem } from '../../domain/catalog/entities/MenuItem';

@@ -25,9 +25,6 @@ router.post(
   ],
   register
 );
-// router.get('/register_x', (req:Request, res:Response ) => {
-//    res.status(400).json({ status: 'OK', message: 'Server is running' });
-// });
 
 router.post('/verify-email', verifyEmail);
 router.post('/resend-otp', resendOTP);

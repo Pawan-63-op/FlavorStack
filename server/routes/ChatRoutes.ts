@@ -1,15 +1,7 @@
 import express from "express";
 import { protect, admin } from "../middleware/authMiddleware";
-// import { Conversation, Message } from "../models/Chat"
 import { Conversation,Message } from "@/models/Message";
 export const chatRouter = express.Router();
-// ── REST routes for chat ──────────────────────────────────────────────────────
-// Add these to a chatRoutes.ts file:
-//
-// GET  /api/chat/conversations        — list all conversations (admin)
-// GET  /api/chat/messages/:roomId     — get message history
-// PATCH /api/chat/:roomId/resolve     — resolve conversation
-// Get all conversations — admin only
 chatRouter.get("/conversations", protect, admin, async (req, res) => {
   try {
     const convos = await Conversation.find()
@@ -20,7 +12,6 @@ chatRouter.get("/conversations", protect, admin, async (req, res) => {
   }
 });
 
-// Get messages for a room
 chatRouter.get("/messages/:roomId", protect, async (req, res) => {
   try {
     const messages = await Message.find({ room: req.params.roomId })
@@ -32,7 +23,6 @@ chatRouter.get("/messages/:roomId", protect, async (req, res) => {
   }
 });
 
-// Resolve a conversation
 chatRouter.patch("/:roomId/resolve", protect, admin, async (req, res) => {
   try {
     await Conversation.findOneAndUpdate(

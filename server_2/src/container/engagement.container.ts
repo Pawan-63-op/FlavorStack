@@ -1,18 +1,3 @@
-// Composition root for the Engagement bounded context (engagement_module.md §4 / §6 / Phase 3.B).
-//
-// This is the single place the Engagement object graph is assembled: the six Mongo repositories, the
-// shared persistence ports (UnitOfWork + OutboxStore on a context-local TransactionContext), the
-// internal DispatchNotification flow, the 13 command/query use-cases, and the nine cross-context event
-// handlers. After construction it subscribes the handlers onto the in-process bus via
-// registerEngagementEventHandlers.
-//
-// Mirrors fulfillment.container.ts: takes the Mongo Connection + shared in-process bus + the
-// INotificationQueue producer (DispatchNotification enqueues onto QUEUE.notification after commit).
-// Each context owns its own TransactionContext so repository session binding never crosses contexts.
-//
-// IMPORTANT (bootstrap ordering): the handlers are subscribed here, synchronously, as part of building
-// the container. container/index.ts builds this container BEFORE the OutboxProcessor starts, so every
-// drained cross-context event (UserRegistered / FulfillmentCreated / …) already has a subscriber.
 import type { Connection } from 'mongoose';
 
 import { TransactionContext } from '../infrastructure/database/TransactionContext';
@@ -67,18 +52,15 @@ import {
 } from '../application/engagement/event-handlers/EngagementEventRegistry';
 
 export interface EngagementContainer {
-  // Repositories.
   notificationRepository: INotificationRepository;
   preferenceRepository: INotificationPreferenceRepository;
   templateRepository: INotificationTemplateRepository;
   reviewRepository: IReviewRepository;
   ratingViewRepository: IRestaurantRatingViewRepository;
   eligibilityRepository: IReviewEligibilityRepository;
-  // Shared persistence ports.
   unitOfWork: IUnitOfWork;
   outboxStore: IOutboxStore;
   txContext: TransactionContext;
-  // Use-cases (DispatchNotification is internal; the rest back the API in Phase 5).
   dispatchNotification: DispatchNotification;
   updateNotificationPreferences: UpdateNotificationPreferences;
   markNotificationRead: MarkNotificationRead;
@@ -93,7 +75,6 @@ export interface EngagementContainer {
   getRestaurantRating: GetRestaurantRating;
   getMyReviews: GetMyReviews;
   listPendingReviews: ListPendingReviews;
-  // Cross-context event handlers (already subscribed on the bus).
   handlers: EngagementEventHandlers;
 }
 
@@ -107,12 +88,10 @@ export function createEngagementContainer(
   eventBus: IEventBus,
   notificationQueue: INotificationQueue
 ): EngagementContainer {
-  // Context-local transaction context — bound to repos + UoW + outbox so they share one session.
   const txContext = new TransactionContext();
   const unitOfWork = new MongoUnitOfWork(connection, txContext);
   const outboxStore = new MongoOutboxStore(txContext);
 
-  // Repositories.
   const notificationRepository = new MongoNotificationRepository(txContext);
   const preferenceRepository = new MongoNotificationPreferenceRepository(txContext);
   const templateRepository = new MongoNotificationTemplateRepository(txContext);
@@ -120,7 +99,6 @@ export function createEngagementContainer(
   const ratingViewRepository = new MongoRestaurantRatingViewRepository(txContext);
   const eligibilityRepository = new MongoReviewEligibilityRepository(txContext);
 
-  // Internal dispatch flow shared by every notification handler.
   const dispatchNotification = new DispatchNotification(
     notificationRepository,
     preferenceRepository,
@@ -131,7 +109,6 @@ export function createEngagementContainer(
     notificationQueue
   );
 
-  // Command use-cases.
   const updateNotificationPreferences = new UpdateNotificationPreferences(preferenceRepository);
   const markNotificationRead = new MarkNotificationRead(notificationRepository);
   const submitReview = new SubmitReview(reviewRepository, eligibilityRepository, unitOfWork, outboxStore, eventBus);
@@ -145,7 +122,6 @@ export function createEngagementContainer(
     recomputeRestaurantRating
   );
 
-  // Query use-cases.
   const getNotificationPreferences = new GetNotificationPreferences(preferenceRepository);
   const getNotificationHistory = new GetNotificationHistory(notificationRepository);
   const getUnreadCount = new GetUnreadCount(notificationRepository);
@@ -154,7 +130,6 @@ export function createEngagementContainer(
   const getMyReviews = new GetMyReviews(reviewRepository);
   const listPendingReviews = new ListPendingReviews(reviewRepository);
 
-  // Cross-context event handlers (each idempotent + best-effort; see EngagementEventRegistry).
   const handlers: EngagementEventHandlers = {
     onUserRegistered: new OnUserRegistered(dispatchNotification, preferenceRepository),
     onPasswordChanged: new OnPasswordChanged(dispatchNotification),
@@ -167,7 +142,6 @@ export function createEngagementContainer(
     onFulfillmentCancelled: new OnFulfillmentCancelled(dispatchNotification, eligibilityRepository),
   };
 
-  // Subscribe BEFORE the OutboxProcessor starts (enforced by build order in container/index.ts).
   registerEngagementEventHandlers(eventBus, handlers);
 
   return {

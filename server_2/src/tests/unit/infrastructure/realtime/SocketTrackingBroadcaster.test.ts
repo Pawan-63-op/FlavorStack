@@ -1,5 +1,3 @@
-// Unit tests for SocketTrackingBroadcaster (Phase 7). Verifies late-binding (no-op before attach)
-// and room-scoped emits after a namespace is attached. Socket.IO Namespace is stubbed.
 import { SocketTrackingBroadcaster } from '../../../../infrastructure/realtime/SocketTrackingBroadcaster';
 import { trackingRoom, TRACKING_LOCATION_EVENT, TRACKING_STATUS_EVENT } from '../../../../infrastructure/realtime/rooms';
 import type { Namespace } from 'socket.io';

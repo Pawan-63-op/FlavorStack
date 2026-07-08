@@ -1,4 +1,3 @@
-// BullMQ Queue implementation of INotificationQueue — producer side of `notification-queue`.
 import { Queue } from 'bullmq';
 
 import { INotificationQueue } from '../../../application/shared/queues/INotificationQueue';

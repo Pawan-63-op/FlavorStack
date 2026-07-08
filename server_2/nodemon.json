@@ -1,1 +1,5 @@
-// Nodemon watch config for dev
+{
+  "watch": ["src"],
+  "ext": "ts,json",
+  "ignore": ["src/**/*.test.ts", "src/**/*.spec.ts", "dist", "node_modules"]
+}

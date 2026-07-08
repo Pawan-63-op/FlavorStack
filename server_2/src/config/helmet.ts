@@ -1,4 +1,3 @@
-// Helmet directive config
 import { HelmetOptions } from 'helmet';
 
 export function getHelmetOptions(): HelmetOptions {

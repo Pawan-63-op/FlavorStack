@@ -52,7 +52,6 @@ export class JwtTokenService implements ITokenService {
       if (err instanceof jwt.TokenExpiredError) {
         return Result.fail('token_expired');
       }
-      // JsonWebTokenError, NotBeforeError, and anything else → opaque invalid.
       return Result.fail('invalid_token');
     }
   }

@@ -1,4 +1,3 @@
-// Integer rating 1..5 (engagement_module.md §2). Used by Review for restaurantRating/deliveryRating.
 import { ValueObject } from '../../shared/ValueObject';
 import { Result } from '../../shared/Result';
 import { ValidationError } from '../../shared/errors/ValidationError';

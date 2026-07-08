@@ -1,10 +1,3 @@
-// Domain event (outbox-routed → future Ordering, publish-and-park): orderRequestId, customerId, restaurantId,
-// lines: [{ menuItemId, name, quantity, selectedOptions: [{optionId,label,priceDelta}], lineTotal }],
-// pricing: { subtotal, fees: [{type,amount}], discount, tax, total }, deliveryAddress,
-// paymentIntent: { method }, idempotencyKey, schemaVersion (Commerce Phase 11, commerce_module.md §8.1).
-//
-// The outbox serializes events via JSON.parse(JSON.stringify(event)) (see MongoOutboxStore.toOutboxRow),
-// so every field below is plain, JSON-safe data built by OrderRequest.createFromCheckout — never a VO instance.
 import { DomainEvent } from '../../shared/DomainEvent';
 import { MoneyJSON } from '../value-objects/snapshots/snapshot-serialization';
 import { randomUUID } from 'crypto';

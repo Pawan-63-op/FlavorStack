@@ -1,7 +1,3 @@
-// Event handler: consumes Identity's PasswordChanged → a SECURITY email notification
-// (engagement_module.md §3/§4). Reads only the published ACL payload (aggregateId = userId); never an
-// Identity aggregate/repo. Idempotent (in-memory eventId guard + DispatchNotification dedupeKey),
-// best-effort (logs + leaves the eventId unmarked on failure so the outbox can retry).
 import { DomainEvent } from '../../../domain/shared/DomainEvent';
 import { NOTIFICATION_CATEGORY } from '../../../domain/engagement/enums/notification-category.enum';
 import { NOTIFICATION_CHANNEL } from '../../../domain/engagement/enums/notification-channel.enum';

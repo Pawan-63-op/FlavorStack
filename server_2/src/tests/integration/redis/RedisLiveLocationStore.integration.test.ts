@@ -1,5 +1,3 @@
-// Integration test for RedisLiveLocationStore (Phase 7) against a real Redis container.
-// Verifies latest-location round-trip, TTL, and the distributed throttle gate (SET NX EX).
 import { StartedRedisContainer } from '@testcontainers/redis';
 import { RedisClient } from '../../../infrastructure/redis/client';
 import { RedisLiveLocationStore } from '../../../infrastructure/realtime/RedisLiveLocationStore';

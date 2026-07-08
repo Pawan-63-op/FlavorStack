@@ -1,11 +1,12 @@
+import { Suspense } from "react";
 import VerifyEmail from "@/auth/VerifyEmail";
-import React from 'react'
 
 const Page = () => {
   return (
-    // <div>Page</div>
-    <VerifyEmail />
-  )
-}
+    <Suspense fallback={null}>
+      <VerifyEmail />
+    </Suspense>
+  );
+};
 
-export default Page
+export default Page;

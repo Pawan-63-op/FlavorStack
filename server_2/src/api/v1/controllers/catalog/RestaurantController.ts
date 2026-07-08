@@ -1,8 +1,6 @@
-// Thin HTTP delivery for the restaurant owner-write use-cases. Builds the use-case
-// DTO from validated body/params + the verified actor, maps Result → HTTP, and
-// delegates ALL business logic (incl. ownership) to the use-cases. Zero logic here.
 import { Request, Response, NextFunction } from 'express';
 import { CreateRestaurant } from '../../../../application/catalog/use-cases/CreateRestaurant';
+import { ListOwnerRestaurants } from '../../../../application/catalog/use-cases/ListOwnerRestaurants';
 import { UpdateRestaurant } from '../../../../application/catalog/use-cases/UpdateRestaurant';
 import { PublishRestaurant } from '../../../../application/catalog/use-cases/PublishRestaurant';
 import { PauseRestaurant } from '../../../../application/catalog/use-cases/PauseRestaurant';
@@ -20,6 +18,7 @@ import { actorFrom } from './actor';
 
 export interface RestaurantControllerDeps {
   createRestaurant: CreateRestaurant;
+  listOwnerRestaurants: ListOwnerRestaurants;
   updateRestaurant: UpdateRestaurant;
   publishRestaurant: PublishRestaurant;
   pauseRestaurant: PauseRestaurant;
@@ -42,6 +41,17 @@ export class RestaurantController {
     const result = await this.deps.createRestaurant.execute({ ...actorFrom(req), ...req.body });
     if (result.isFailure) return next(result.getError());
     res.status(201).json(result.getValue());
+  };
+
+  mine = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const q = req.query as Record<string, unknown>;
+    const result = await this.deps.listOwnerRestaurants.execute({
+      ...actorFrom(req),
+      cursor: q.cursor as string | undefined,
+      limit: q.limit as number | undefined,
+    });
+    if (result.isFailure) return next(result.getError());
+    res.status(200).json(result.getValue());
   };
 
   update = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -163,8 +173,6 @@ export class RestaurantController {
     res.status(200).json(result.getValue());
   };
 
-  // Upload binary → IImageStorage, then persist the returned URL on the restaurant
-  // via the ownership-checked UpdateRestaurant use-case. Domain stores only the URL.
   uploadImage = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const buffer = req.body as Buffer;
     if (!Buffer.isBuffer(buffer) || buffer.length === 0) {

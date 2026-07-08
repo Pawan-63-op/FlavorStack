@@ -45,7 +45,6 @@ describe('Driver Entity', () => {
       expect(driver.totalDeliveries).toBe(0);
       expect(driver.totalRatings).toBe(0);
 
-      // Verify UserRegistered event is recorded
       const events = driver.pullDomainEvents();
       expect(events.length).toBe(1);
       const event = events[0] as UserRegistered;

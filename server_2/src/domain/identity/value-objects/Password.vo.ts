@@ -29,23 +29,19 @@ export class Password extends ValueObject<PasswordProps> {
 
     const passwordStr = String(value);
 
-    // Min 8 characters
     const lengthCheck = Guard.againstAtLeast(8, passwordStr.length, 'Password length');
     if (lengthCheck.isFailure) {
       return Result.fail<Password>(lengthCheck.getError());
     }
 
-    // Must contain at least one uppercase letter
     if (!/[A-Z]/.test(passwordStr)) {
       return Result.fail<Password>(new ValidationError('Password must contain at least one uppercase letter'));
     }
 
-    // Must contain at least one number
     if (!/[0-9]/.test(passwordStr)) {
       return Result.fail<Password>(new ValidationError('Password must contain at least one digit'));
     }
 
-    // Must contain at least one special character
     if (!/[!@#$%^&*(),.?":{}|<>]/.test(passwordStr)) {
       return Result.fail<Password>(new ValidationError('Password must contain at least one special character'));
     }

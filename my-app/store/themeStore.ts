@@ -13,7 +13,6 @@ export const useThemeStore = create<ThemeState>((set) => ({
   theme: "light",
 
   initializeTheme: () => {
-    // Check localStorage or system preference
     const saved = localStorage.getItem("theme") as Theme;
     let initialTheme: Theme = "light";
 

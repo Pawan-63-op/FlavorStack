@@ -14,14 +14,10 @@ import {
 import { AuthRequest} from "@/Types/allTypes.js";
 import mongoose from 'mongoose';
 import { _cidrv6 } from 'zod/v4/core';
-// Generate 6-digit OTP
 const generateOTP = (): string => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
-// @desc    Register user
-// @route   POST /api/auth/register
-// @access  Public
 export const register = async (req: Request, res: Response): Promise<void> => {
   try {
     const errors = validationResult(req);
@@ -32,14 +28,12 @@ export const register = async (req: Request, res: Response): Promise<void> => {
 
     const { name, email, password } = req.body;
 
-    // Check if user exists
     const userExists = await User.findOne({ email });
     if (userExists) {
       res.status(400).json({ message: 'User already exists with this email' });
       return;
     }
 
-    // Create user (not verified yet)
     const user = await User.create({
       name,
       email,
@@ -47,7 +41,6 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       isVerified: false
     });
 
-    // Generate OTP
     const otp = generateOTP();
     await OTP.create({
       email: user.email,
@@ -55,7 +48,6 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       type: 'verification'
     });
 
-    // Send verification email
     try {
       await sendEmail({
         email: user.email,
@@ -76,9 +68,6 @@ export const register = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
-// @desc    Verify email with OTP
-// @route   POST /api/auth/verify-email
-// @access  Public
 export const verifyEmail = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, otp } = req.body;
@@ -88,7 +77,6 @@ console.log(email,otp);
       return;
     }
 
-    // Find OTP
     const otpDoc = await OTP.findOne({
       email: email.toLowerCase(),
       otp,
@@ -101,7 +89,6 @@ console.log(email,otp);
       return;
     }
 
-    // Verify user
     const user = await User.findOne({ email: email.toLowerCase() });
     if (!user) {
       res.status(404).json({ message: 'User not found' });
@@ -111,10 +98,8 @@ console.log(email,otp);
     user.isVerified = true;
     await user.save();
 
-    // Delete OTP
     await OTP.deleteMany({ email: email.toLowerCase(), type: 'verification' });
 
-    // Send welcome email
     try {
       await sendEmail({
         email: user.email,
@@ -124,9 +109,7 @@ console.log(email,otp);
     } catch (emailError) {
       console.error('Email send failed:', emailError);
     }
-   // generateToken(user._id);
 const curr= await generateToken(res,user);
-// console.log("curr",curr);
 
     res.json({
       message: 'Email verified successfully!',
@@ -141,14 +124,10 @@ const curr= await generateToken(res,user);
       },
     });
   } catch (error) {
-    // res.status(500).json({ message: (error as Error).message });
     res.status(500).json({message:'here only'});
   }
 };
 
-// @desc    Resend verification OTP
-// @route   POST /api/auth/resend-otp
-// @access  Public
 export const resendOTP = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email } = req.body;
@@ -169,10 +148,8 @@ export const resendOTP = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // Delete old OTPs
     await OTP.deleteMany({ email: email.toLowerCase(), type: 'verification' });
 
-    // Generate new OTP
     const otp = generateOTP();
     await OTP.create({
       email: user.email,
@@ -180,7 +157,6 @@ export const resendOTP = async (req: Request, res: Response): Promise<void> => {
       type: 'verification'
     });
 
-    // Send verification email
     await sendEmail({
       email: user.email,
       subject: 'Verify Your Email - Delicious Bites',
@@ -193,9 +169,6 @@ export const resendOTP = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
-// @desc    Login user
-// @route   POST /api/auth/login
-// @access  Public
 export const login = async (req: Request, res: Response): Promise<void> => {
   try {
     const errors = validationResult(req);
@@ -206,7 +179,6 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
     const { email, password } = req.body;
 console.log(email,password);
-    // Check for user
     const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
 console.log(user);
     if (!user || !(await user.matchPassword(password))) {
@@ -215,7 +187,6 @@ console.log(user);
       return;
     }
 
-    // Check if email is verified
     if (!user.isVerified) {
       console.log("verify email first");
       res.status(403).json({ 
@@ -251,13 +222,9 @@ occupation:user.occupation,
      
      res.status(500).json({ message: (error as Error).message });
         
-    //  res.status(500).json({ message: "op" });
   }
 };
 
-// @desc    Forgot password
-// @route   POST /api/auth/forgot-password
-// @access  Public
 export const forgotPassword = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email } = req.body;
@@ -273,7 +240,6 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
       return;
     }
 
-    // Generate reset token
     const resetToken = crypto.randomBytes(32).toString('hex');
     const hashedToken = crypto.createHash('sha256').update(resetToken).digest('hex');
 
@@ -281,7 +247,6 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
     user.resetPasswordExpire = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
     await user.save();
 
-    // Send password reset email
     try {
       await sendEmail({
         email: user.email,
@@ -303,9 +268,6 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
   }
 };
 
-// @desc    Reset password
-// @route   POST /api/auth/reset-password
-// @access  Public
 export const resetPassword = async (req: Request, res: Response): Promise<void> => {
   try {
     const { token, password } = req.body;
@@ -320,10 +282,8 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
-    // Hash token
     const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
 
-    // Find user with valid token
     const user = await User.findOne({
       resetPasswordToken: hashedToken,
       resetPasswordExpire: { $gt: new Date() }
@@ -334,13 +294,11 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
-    // Set new password
     user.password = password;
     user.resetPasswordToken = undefined;
     user.resetPasswordExpire = undefined;
     await user.save();
 
-    // Send success email
     try {
       await sendEmail({
         email: user.email,
@@ -359,9 +317,6 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
   }
 };
 
-// @desc    Check authentication status
-// @route   GET /api/auth/check-auth
-// @access  Private
 export const checkAuth = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const user = await User.findById(req.user?._id);
@@ -389,9 +344,6 @@ export const checkAuth = async (req: AuthRequest, res: Response): Promise<void> 
   }
 };
 
-// @desc    Get current user
-// @route   GET /api/auth/me
-// @access  Private
 export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const user = await User.findById(req.user?._id);
@@ -401,16 +353,9 @@ export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
   }
 };
 
-// @desc    Logout user
-// @route   POST /api/auth/logout
-// @access  Public
 export const logout = async (req: Request, res: Response) => {
     try {
      const token = req.cookies.token;
-    //  if(!token){
-    //     res.status(401).json({ message: ', no token but still log out ' });
-    // return;
-    //  }
         return res.clearCookie("token").status(200).json({
             success: true,
             message: "Logged out successfully."
@@ -427,7 +372,6 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    // ✅ Only allow specific fields to be updated
     const allowedFields = ["name",  "phone", "location", "bio", "birthday", "occupation"];
     const updates: any = {};
 
@@ -441,7 +385,6 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ message: "No valid fields provided for update" });
     }
 
-    // ✅ Use $set for partial update
     const user = await User.findByIdAndUpdate(
       userId,
       { $set: updates },
@@ -451,7 +394,6 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
     res.status(200).json({
       message: "Profile updated successfully",
       user,
-      // op:user?.password
     });
   } catch (err) {
     console.error("Update profile error:", err);

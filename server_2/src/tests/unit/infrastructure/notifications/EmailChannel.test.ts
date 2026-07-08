@@ -1,7 +1,3 @@
-// Batch 4A — EmailChannel resolves the recipient email through INotificationRecipientResolver and
-// delegates the actual send to the existing IEmailProvider (Resend). Missing email → deterministic
-// Result.fail('no_recipient') (NOT an exception). Provider/transport errors propagate (so the worker
-// can retry); the channel never swallows them.
 import { EmailChannel } from '../../../../infrastructure/notifications/EmailChannel';
 import { INotificationRecipientResolver } from '../../../../infrastructure/notifications/INotificationRecipientResolver';
 import { IEmailProvider } from '../../../../domain/identity/services/IEmailProvider';

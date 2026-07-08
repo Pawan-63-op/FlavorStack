@@ -1,13 +1,3 @@
-// Mongoose schema — order_requests collection: immutable, append-only document embedding the
-// RestaurantSnapshot, OrderRequestLine[] (with MenuItemSnapshot/VariantSnapshot), PricingSnapshot,
-// deliveryAddress, paymentIntent, status, schemaVersion. Unique index on idempotencyKey.
-// (Commerce Phase 11, commerce_module.md §6.1/§6.4.)
-//
-// The embedded subtrees reuse the domain snapshot JSON shapes (RestaurantSnapshotJSON etc.) so the
-// mapper round-trips through each snapshot's own toJSON/fromJSON, preserving per-snapshot schemaVersion.
-// OrderRequest is write-once: no `version` field (no optimistic concurrency) and the aggregate's own
-// `createdAt` is persisted authoritatively (timestamps disabled). The unique index on idempotencyKey is
-// the persistence-level duplicate-checkout guard.
 import { Schema, model } from 'mongoose';
 import { RestaurantSnapshotJSON } from '../../../domain/commerce/value-objects/snapshots/RestaurantSnapshot';
 import { MenuItemSnapshotJSON } from '../../../domain/commerce/value-objects/snapshots/MenuItemSnapshot';

@@ -1,20 +1,15 @@
-// Mongoose discriminator — `users` collection, role: ADMIN.
-// Implements the persisted shape of Admin (src/domain/identity/entities/Admin.ts).
 import { Schema } from 'mongoose';
 import { UserModel, UserDocument } from './UserModel';
 import { USER_ROLE } from '../../../domain/identity/enums/user-role.enum';
 import { PERMISSION_RESOURCE, PermissionResource } from '../../../domain/identity/enums/permission-resource.enum';
 import { PERMISSION_ACTION, PermissionAction } from '../../../domain/identity/enums/permission-action.enum';
 
-// Mirrors Permission.vo.ts.
 export interface PermissionDocument {
   resource: PermissionResource;
   action: PermissionAction;
   scope?: string;
 }
 
-// Mirrors AuditEntry.vo.ts, but only `action`/`meta`/`performedAt` are guaranteed —
-// Admin.logAction() only populates those (Phase 6 plan §16, gap 6).
 export interface AuditEntryDocument {
   action: string;
   targetModel?: string;

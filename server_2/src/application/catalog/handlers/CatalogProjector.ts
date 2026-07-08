@@ -1,13 +1,3 @@
-// CatalogProjector — in-process read-model projector (Catalog Phase 9).
-//
-// Subscribes to catalog domain events on the InMemoryEventBus (sync, same process,
-// run AFTER the write transaction commits). On any restaurant- or item-affecting
-// event it rebuilds that restaurant's projections WHOLESALE from the now-committed
-// source aggregates. Events are thin (ids only), so reloading the aggregates is
-// simpler and more robust than patching projections field-by-field.
-//
-// If the restaurant aggregate is gone (soft-deleted), its projections are
-// tombstoned instead.
 import { DomainEvent } from '../../../domain/shared/DomainEvent';
 import { IRestaurantRepository } from '../../../domain/catalog/repositories/IRestaurantRepository';
 import { IMenuItemRepository } from '../../../domain/catalog/repositories/IMenuItemRepository';
@@ -22,13 +12,9 @@ export class CatalogProjector {
     private readonly restaurantRepo: IRestaurantRepository,
     private readonly menuItemRepo: IMenuItemRepository,
     private readonly projectionWriter: ICatalogProjectionWriter,
-    // Phase 13: optional cache invalidator. When present, every projection rebuild
-    // (or tombstone) drops that restaurant's hot caches and rotates collection
-    // caches, so reads never serve data that predates the just-committed write.
     private readonly cacheInvalidator?: ICatalogCacheInvalidator
   ) {}
 
-  // ── event reactions ──────────────────────────────────────────
 
   /** RestaurantCreated/Updated/StatusChanged, CategoryAdded/Updated, DeliveryZoneChanged. */
   async onRestaurantEvent(event: DomainEvent): Promise<void> {
@@ -47,7 +33,6 @@ export class CatalogProjector {
     await this.rebuild(item.restaurantId);
   }
 
-  // ── rebuild core ─────────────────────────────────────────────
 
   /**
    * Rebuild every projection for a restaurant from source aggregates, or tombstone
@@ -62,8 +47,6 @@ export class CatalogProjector {
     }
     const items = await this.loadAllItems(restaurantId);
     await this.projectionWriter.rebuildRestaurant(restaurant, items);
-    // Invalidate AFTER the projection is committed so a concurrent read repopulates
-    // from fresh data, never the pre-write state.
     await this.invalidateCache(restaurantId);
   }
 
@@ -77,7 +60,6 @@ export class CatalogProjector {
   private async loadAllItems(restaurantId: string): Promise<MenuItem[]> {
     const items: MenuItem[] = [];
     let cursor: string | undefined;
-    // Walk the cursor-paginated repo to collect the full (non-deleted) item set.
     for (;;) {
       const page = await this.menuItemRepo.findByRestaurant(restaurantId, {
         cursor,

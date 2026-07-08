@@ -222,10 +222,10 @@ function MyForm() {
 ## 🔌 Connecting to Your Backend
 
 ### Step 1: Create API Endpoints
-Follow the guide in `/API_INTEGRATION_GUIDE.md` to set up:
-- MongoDB database
-- Express.js routes
-- Image upload endpoint
+> **Legacy note:** the standalone MongoDB/axios backend guide was retired in
+> Phase 12. The admin console now targets `server_2`'s catalog owner-write API —
+> see `my-app/docs/API_CONTRACT_MAP.md` for the current FE-call → `/api/v1`
+> endpoint → adapter map.
 
 ### Step 2: Test Endpoints
 Use Postman or Thunder Client to test:
@@ -343,7 +343,7 @@ We've created several guides:
 
 1. **GETTING_STARTED.md** (this file) - Quick overview
 2. **ADMIN_DASHBOARD_README.md** - Detailed component docs
-3. **API_INTEGRATION_GUIDE.md** - Backend setup guide
+3. **`my-app/docs/API_CONTRACT_MAP.md`** - Current `server_2` contract map (replaces the retired legacy backend integration guide)
 4. **REFACTORING_SUMMARY.md** - What changed and why
 
 ---

@@ -1,45 +1,61 @@
 import { create } from "zustand";
 import { toast } from "sonner";
 import { persist } from "zustand/middleware";
+import {
+  type ProfileExtras,
+  type User as ServerUser,
+  mergeProfile,
+} from "@/lib/api/adapters/user";
+import { authService } from "@/lib/api/services/auth";
+import { type RegisterInput } from "@/lib/api/adapters/register";
+import { onAuthExpired } from "@/lib/api/client/authEvents";
 
-interface User {
-  _id: string;
-  name: string;
-  email: string;
-  role?: string;
+/**
+ * FE auth user view-model. Extends the server-backed {@link ServerUser}
+ * (Phase 1 `userAdapter` shape: `_id,id,name,email,role,isVerified,avatar,
+ * isAdmin,createdAt`) with the local-only {@link ProfileExtras} fields plus a
+ * couple of legacy loyalty fields the server does not model yet. Kept wide so
+ * existing consumers (header/profile/guard) compile untouched (Phase_1.md
+ * §Key Decision 1 & 2).
+ */
+interface User extends ServerUser, ProfileExtras {
   loyaltyPoints?: number;
   loyaltyTier?: string;
-  isVerified?: boolean;
-  phone?: string;
-  location?: string;
-  bio?: string;
-  birthday?: string;
-  occupation?: string;
-  avatar?: string;
-  isAdmin?: boolean;
 }
 
 interface AuthState {
   user: User | null;
+  /** Email captured during the register journey (verify-email display). */
   curr_email?: string;
+  /** Phone captured at register; needed for `phone-otp/send` (absent from `/users/me`). */
+  curr_phone?: string;
   isAuthenticated: boolean;
   isLoading: boolean;
+  /** Device-local profile fields server_2 doesn't model; persisted, never sent. */
+  profileExtras: ProfileExtras;
 
   setUser: (user: User | null) => void;
   setLoading: (loading: boolean) => void;
   checkAuth: () => Promise<void>;
   fetchUserProfile: () => Promise<void>;
   updateProfile: (updates: Partial<User>) => Promise<void>;
-  register: (name: string, email: string, password: string) => Promise<void>;
+  register: (input: RegisterInput) => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  verifyEmail: (email: string, otp: string) => Promise<void>;
-  resendOtp: (email: string) => Promise<void>;
+  verifyEmail: (code: string) => Promise<void>;
+  resendOtp: () => Promise<void>;
+  sendPhoneOtp: (phone: string) => Promise<void>;
+  verifyPhoneOtp: (code: string) => Promise<void>;
   forgotPassword: (email: string) => Promise<void>;
-  resetPassword: (email: string, otp: string, newPassword: string) => Promise<void>;
+  resetPassword: (email: string, code: string, newPassword: string) => Promise<void>;
 }
 
-const BASE = "http://localhost:8000/api";
+/** Removes the persisted zustand slice (logout / auth:expired). */
+function clearPersistedSession() {
+  if (typeof window !== "undefined") {
+    localStorage.removeItem("auth-session-storage");
+  }
+}
 
 export const useAuthStore = create<AuthState>()(
   persist(
@@ -48,6 +64,8 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       isLoading: true,
       curr_email: undefined,
+      curr_phone: undefined,
+      profileExtras: {},
 
       setUser: (user) => set({ user, isAuthenticated: !!user }),
       setLoading: (loading) => set({ isLoading: loading }),
@@ -55,48 +73,49 @@ export const useAuthStore = create<AuthState>()(
       checkAuth: async () => {
         set({ isLoading: true });
         try {
-          const res = await fetch(`${BASE}/auth/check-auth`, {
-            credentials: "include",
+          const serverUser = await authService.me();
+          set({
+            user: mergeProfile(serverUser, get().profileExtras),
+            isAuthenticated: true,
+            isLoading: false,
           });
-          if (res.ok) {
-            const data = await res.json();
-            set({ user: data.user, isAuthenticated: true, isLoading: false });
-          } else {
-            set({ user: null, isAuthenticated: false, isLoading: false });
-          }
         } catch {
           set({ user: null, isAuthenticated: false, isLoading: false });
         }
       },
 
       fetchUserProfile: async () => {
-        set({ isLoading: true });
         try {
-          const res = await fetch(`${BASE}/users/profile`, {
-            credentials: "include",
+          const serverUser = await authService.me();
+          set({
+            user: mergeProfile(serverUser, get().profileExtras),
+            isAuthenticated: true,
           });
-          if (res.ok) {
-            const data = await res.json();
-            set({ user: data.user, isAuthenticated: true, isLoading: false });
-          } else {
-            set({ user: null, isAuthenticated: false, isLoading: false });
-          }
-        } catch (err: any) {
-          set({ user: null, isAuthenticated: false, isLoading: false });
+        } catch {
         }
       },
 
       updateProfile: async (updates) => {
         try {
-          const res = await fetch(`${BASE}/auth/update-profile`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
-            body: JSON.stringify(updates),
+          const nextExtras: ProfileExtras = { ...get().profileExtras };
+          if (updates.phone !== undefined) nextExtras.phone = updates.phone;
+          if (updates.bio !== undefined) nextExtras.bio = updates.bio;
+          if (updates.birthday !== undefined) nextExtras.birthday = updates.birthday;
+          if (updates.occupation !== undefined) nextExtras.occupation = updates.occupation;
+          if (updates.location !== undefined) nextExtras.location = updates.location;
+
+          let serverUser: ServerUser | null = get().user;
+          if (updates.name !== undefined || updates.avatar !== undefined) {
+            serverUser = await authService.updateMe({
+              name: updates.name,
+              avatarUrl: updates.avatar,
+            });
+          }
+
+          set({
+            profileExtras: nextExtras,
+            user: serverUser ? mergeProfile(serverUser, nextExtras) : get().user,
           });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.message || "Failed to update profile");
-          set({ user: data.user });
           toast.success("Profile updated!");
         } catch (error: any) {
           toast.error(error.message || "Failed to update profile");
@@ -104,31 +123,24 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      register: async (name, email, password) => {
+      register: async (input) => {
         set({ isLoading: true });
         try {
-          // FIX: validate email format before sending
-          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-            toast.error("Please enter a valid email address");
-            set({ isLoading: false });
-            return;
-          }
-          set({ curr_email: email });
-          const res = await fetch(`${BASE}/auth/register`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name, email, password }),
+          await authService.register(input);
+          const serverUser = await authService.login({
+            email: input.email,
+            password: input.password,
           });
-          const data = await res.json();
-          if (!res.ok) {
-            // FIX: show real server error
-            toast.error(data.message || "Registration failed");
-            set({ isLoading: false });
-            throw new Error(data.message || "Registration failed");
-          }
-          toast.success("Account created! Please check your email for the verification code.");
-          set({ isLoading: false });
+          set({
+            user: mergeProfile(serverUser, get().profileExtras),
+            isAuthenticated: true,
+            isLoading: false,
+            curr_email: input.email,
+            curr_phone: input.phone,
+          });
+          toast.success("Account created! Let's verify your email.");
         } catch (error: any) {
+          toast.error(error?.message || "Registration failed");
           set({ isLoading: false });
           throw error;
         }
@@ -137,22 +149,15 @@ export const useAuthStore = create<AuthState>()(
       login: async (email, password) => {
         set({ isLoading: true });
         try {
-          const res = await fetch(`${BASE}/auth/login`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email, password }),
-            credentials: "include",
+          const serverUser = await authService.login({ email, password });
+          set({
+            user: mergeProfile(serverUser, get().profileExtras),
+            isAuthenticated: true,
+            isLoading: false,
           });
-          const data = await res.json();
-          if (!res.ok) {
-            // FIX: show real server error
-            toast.error(data.message || "Login failed");
-            set({ isLoading: false });
-            throw new Error(data.message || "Login failed");
-          }
-          set({ user: data.user, isAuthenticated: true, isLoading: false });
-          toast.success(`Welcome back, ${data.user.name}!`);
+          toast.success(`Welcome back, ${serverUser.name}!`);
         } catch (error: any) {
+          toast.error(error?.message || "Login failed");
           set({ isLoading: false });
           throw error;
         }
@@ -161,75 +166,67 @@ export const useAuthStore = create<AuthState>()(
       logout: async () => {
         set({ isLoading: true });
         try {
-          const res = await fetch(`${BASE}/auth/logout`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
-          });
-          const data = await res.json();
-          // FIX: clear persisted storage on logout
-          set({ user: null, isAuthenticated: false, isLoading: false, curr_email: undefined });
-          // Clear zustand persisted storage
-          if (typeof window !== "undefined") {
-            localStorage.removeItem("auth-session-storage");
-          }
-          toast.success(data.message || "Logged out successfully");
+          await authService.logout();
         } catch {
-          // FIX: still clear local state even if server call fails
-          set({ user: null, isAuthenticated: false, isLoading: false, curr_email: undefined });
-          if (typeof window !== "undefined") {
-            localStorage.removeItem("auth-session-storage");
-          }
-          toast.success("Logged out");
+        } finally {
+          set({
+            user: null,
+            isAuthenticated: false,
+            isLoading: false,
+            curr_email: undefined,
+            curr_phone: undefined,
+          });
+          clearPersistedSession();
         }
+        toast.success("Logged out successfully");
       },
 
-      verifyEmail: async (email, otp) => {
+      verifyEmail: async (code) => {
         set({ isLoading: true });
         try {
-          const res = await fetch(`${BASE}/auth/verify-email`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email, otp }),
+          await authService.verifyEmailOtp(code);
+          const serverUser = await authService.me();
+          set({
+            user: mergeProfile(serverUser, get().profileExtras),
+            isAuthenticated: true,
+            isLoading: false,
           });
-          const data = await res.json();
-          if (!res.ok) {
-            toast.error(data.message || "Verification failed");
-            // FIX: was setting isLoading:true on error — now false
-            set({ isLoading: false });
-            throw new Error(data.message || "Verification failed");
-          }
-          set({ isLoading: false, user: data.user, isAuthenticated: true });
-          toast.success("Email verified successfully! Welcome aboard!");
+          toast.success("Email verified!");
         } catch (error: any) {
+          toast.error(error?.message || "Verification failed");
           set({ isLoading: false });
           throw error;
         }
       },
 
-      resendOtp: async (email) => {
+      resendOtp: async () => {
+        try {
+          await authService.sendEmailOtp();
+          toast.success("Verification code sent! Please check your email.");
+        } catch (error: any) {
+          toast.error(error?.message || "Failed to send code");
+          throw error;
+        }
+      },
+
+      sendPhoneOtp: async (phone) => {
+        try {
+          await authService.sendPhoneOtp(phone);
+          toast.success("Verification code sent! Please check your phone.");
+        } catch (error: any) {
+          toast.error(error?.message || "Failed to send code");
+          throw error;
+        }
+      },
+
+      verifyPhoneOtp: async (code) => {
         set({ isLoading: true });
         try {
-          // FIX: validate email before sending — prevents calling with placeholder
-          if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-            toast.error("Invalid email address");
-            set({ isLoading: false });
-            return;
-          }
-          const res = await fetch(`${BASE}/auth/resend-otp`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email }),
-          });
-          const data = await res.json();
-          if (!res.ok) {
-            toast.error(data.message || "Failed to resend OTP");
-            set({ isLoading: false });
-            throw new Error(data.message || "Failed to resend OTP");
-          }
-          toast.success("Verification code sent! Please check your email.");
-          set({ isLoading: false });
+          await authService.verifyPhoneOtp(code);
+          set({ curr_phone: undefined, isLoading: false });
+          toast.success("Phone verified!");
         } catch (error: any) {
+          toast.error(error?.message || "Verification failed");
           set({ isLoading: false });
           throw error;
         }
@@ -238,43 +235,24 @@ export const useAuthStore = create<AuthState>()(
       forgotPassword: async (email) => {
         set({ isLoading: true });
         try {
-          const res = await fetch(`${BASE}/auth/forgot-password`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email }),
-          });
-          const data = await res.json();
-          if (!res.ok) {
-            toast.error(data.message || "Failed to send reset email");
-            set({ isLoading: false });
-            throw new Error(data.message || "Failed to send reset email");
-          }
+          await authService.forgotPassword(email);
           set({ isLoading: false });
-          toast.success("Password reset code sent! Check your email.");
+          toast.success("If that email exists, a password reset code has been sent.");
         } catch (error: any) {
+          toast.error(error?.message || "Failed to send reset email");
           set({ isLoading: false });
           throw error;
         }
       },
 
-      resetPassword: async (email, otp, newPassword) => {
+      resetPassword: async (email, code, newPassword) => {
         set({ isLoading: true });
         try {
-          const res = await fetch(`${BASE}/auth/reset-password`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email, otp, newPassword }),
-          });
-          const data = await res.json();
-          if (!res.ok) {
-            // FIX: show real server error
-            toast.error(data.message || "Password reset failed");
-            set({ isLoading: false });
-            throw new Error(data.message || "Password reset failed");
-          }
+          await authService.resetPassword({ email, code, newPassword });
           set({ isLoading: false });
           toast.success("Password reset successfully! You can now sign in.");
         } catch (error: any) {
+          toast.error(error?.message || "Password reset failed");
           set({ isLoading: false });
           throw error;
         }
@@ -286,7 +264,33 @@ export const useAuthStore = create<AuthState>()(
         user: state.user,
         isAuthenticated: state.isAuthenticated,
         curr_email: state.curr_email,
+        curr_phone: state.curr_phone,
+        profileExtras: state.profileExtras,
       }),
     }
   )
 );
+
+let authExpirySubscribed = false;
+
+/**
+ * Subscribe (once) to the client's `auth:expired` signal and clear the session
+ * when it fires — mirrors {@link logout} without the network call. Bootstrap
+ * (ClientInit, Phase 1.3) calls this; idempotent so repeat calls are no-ops.
+ */
+export function subscribeAuthExpiry(): void {
+  if (authExpirySubscribed) return;
+  authExpirySubscribed = true;
+  onAuthExpired(() => {
+    useAuthStore.setState({
+      user: null,
+      isAuthenticated: false,
+      isLoading: false,
+      curr_email: undefined,
+      curr_phone: undefined,
+    });
+    clearPersistedSession();
+  });
+}
+
+subscribeAuthExpiry();

@@ -46,14 +46,12 @@ describe('MongoOrderRequestRepository', () => {
       expect(order.idempotencyKey.value).toBe(original.idempotencyKey.value);
       expect(order.createdAt.getTime()).toBe(original.createdAt.getTime());
 
-      // restaurant snapshot
       expect(order.restaurant.restaurantId).toBe('restaurant-1');
       expect(order.restaurant.status).toBe(COMMERCE_RESTAURANT_STATUS.ACTIVE);
       expect(order.restaurant.openAtCheckout).toBe(true);
       expect(order.restaurant.deliveryFeeInputs.feeTiers[0].fee.amount).toBe(40);
       expect(order.restaurant.deliveryFeeInputs.freeAboveSubtotal?.amount).toBe(50000);
 
-      // lines (with embedded item/variant snapshots)
       expect(order.lines).toHaveLength(2);
       expect(order.lines[0].menuItem.menuItemId).toBe('menu-1');
       expect(order.lines[0].menuItem.basePrice.amount).toBe(1000);
@@ -64,19 +62,16 @@ describe('MongoOrderRequestRepository', () => {
       expect(order.lines[0].selectedOptions[0].priceDelta.amount).toBe(200);
       expect(order.lines[1].selectedOptions).toHaveLength(0);
 
-      // pricing breakdown
       expect(order.pricing.subtotal.amount).toBe(2900);
       expect(order.pricing.fees).toHaveLength(1);
       expect(order.pricing.discount.amount).toBe(100);
       expect(order.pricing.tax.amount).toBe(150);
       expect(order.pricing.total.amount).toBe(3000);
 
-      // delivery address + payment intent
       expect(order.deliveryAddress.pinCode).toBe('560001');
       expect(order.deliveryAddress.coordinates.lat).toBeCloseTo(12.97);
       expect(order.paymentIntent.method).toBe(PAYMENT_METHOD.UPI);
 
-      // reconstitute raises no domain events
       expect(order.pullDomainEvents()).toEqual([]);
     });
 

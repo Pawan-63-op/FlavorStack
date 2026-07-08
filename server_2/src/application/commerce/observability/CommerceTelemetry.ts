@@ -1,10 +1,3 @@
-// CommerceTelemetry (Commerce Phase 14, commerce_module.md §11) — the domain-named façade over
-// the generic ITelemetry port. Use cases call intention-revealing methods (cartAdded, checkoutSucceeded,
-// recordPricingLatency, …) instead of scattering raw metric strings, so the metric vocabulary stays
-// in ONE place (COMMERCE_METRICS) and contract/observability tests can assert against it.
-//
-// It composes an ITelemetry (defaulting to NoopTelemetry) — keeping the application layer free of any
-// infrastructure import. The container injects a PinoTelemetry-backed instance.
 import { ITelemetry, ISpan, LogFields } from '../../shared/observability/ITelemetry';
 import { NoopTelemetry } from '../../shared/observability/NoopTelemetry';
 
@@ -34,25 +27,21 @@ export const COMMERCE_CHECKOUT_SPAN = 'commerce.checkout';
 export class CommerceTelemetry {
   constructor(private readonly t: ITelemetry = new NoopTelemetry()) {}
 
-  // ── cart ────────────────────────────────────────────────────────
   cartAdded(fields?: LogFields): void {
     this.t.increment(COMMERCE_METRICS.cartAddTotal);
     this.t.info('commerce.cart.item_added', fields);
   }
 
-  // ── validation ──────────────────────────────────────────────────
   validationRejected(reason: string, fields?: LogFields): void {
     this.t.increment(COMMERCE_METRICS.validationRejectionTotal, { reason });
     this.t.debug('commerce.cart.validation_rejected', { reason, ...fields });
   }
 
-  // ── pricing ─────────────────────────────────────────────────────
   recordPricingLatency(ms: number, fields?: LogFields): void {
     this.t.observe(COMMERCE_METRICS.pricingLatencyMs, ms);
     if (fields) this.t.debug('commerce.pricing.calculated', { durationMs: ms, ...fields });
   }
 
-  // ── checkout ────────────────────────────────────────────────────
   startCheckoutSpan(fields?: LogFields): ISpan {
     return this.t.startSpan(COMMERCE_CHECKOUT_SPAN, fields);
   }
@@ -81,7 +70,6 @@ export class CommerceTelemetry {
     this.t.info('commerce.order_request.created', { audit: true, ...fields });
   }
 
-  // ── projection ──────────────────────────────────────────────────
   recordProjectionLag(ms: number, fields?: LogFields): void {
     this.t.observe(COMMERCE_METRICS.projectionLagMs, ms);
     this.t.debug('commerce.projection.applied', { lagMs: ms, ...fields });

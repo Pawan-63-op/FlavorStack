@@ -10,102 +10,65 @@ import { Separator } from "./ui/separator";
 import { motion } from "motion/react";
 import {
   MapPin, Phone, Mail, Edit, Check, X,
-  Cake, Briefcase, Star, Trophy, Loader2,
+  Cake, Briefcase, Loader2, ShieldCheck, ShieldAlert, Bell,
+  Sparkles, CalendarDays, User as UserIcon,
 } from "lucide-react";
+import Link from "next/link";
 import { useState, useEffect } from "react";
-import { toast } from "sonner";
 import { useAuthStore } from "@/store/authStore";
+import { isEnabled } from "@/lib/config/featureFlags";
+import { emptyProfileForm, toProfileForm, type ProfileFormValues } from "./ProfileCard.helpers";
 
-// ── Tier helper — derived purely from DB loyaltyPoints ────────────────────────
-function getTierFromPoints(points: number) {
-  if (points >= 5000) return { name: "Platinum", color: "bg-purple-500/10 text-purple-700 border-purple-500/20" };
-  if (points >= 1500) return { name: "Gold",     color: "bg-yellow-500/10 text-yellow-700 border-yellow-500/20" };
-  if (points >= 500)  return { name: "Silver",   color: "bg-gray-400/10 text-gray-600 border-gray-400/20" };
-  return               { name: "Bronze",  color: "bg-amber-700/10 text-amber-700 border-amber-700/20" };
+// ── "Member since" — from the server-backed `createdAt` (only real date we have) ─
+function formatMemberSince(createdAt?: string): string | null {
+  if (!createdAt) return null;
+  const d = new Date(createdAt);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
 }
-
-function getPointsToNextTier(points: number) {
-  if (points >= 5000) return null;
-  if (points >= 1500) return { next: "Platinum", remaining: 5000 - points, total: 5000, from: 1500 };
-  if (points >= 500)  return { next: "Gold",     remaining: 1500 - points, total: 1500, from: 500 };
-  return               { next: "Silver",  remaining: 500  - points, total: 500,  from: 0 };
-}
-
-interface Profile {
-  name: string;
-  email: string;
-  phone: string;
-  location: string;
-  bio: string;
-  birthday: string;
-  occupation: string;
-}
-
-const empty: Profile = {
-  name: "", email: "", phone: "",
-  location: "", bio: "", birthday: "", occupation: "",
-};
 
 export function ProfileCard() {
-  const { user, fetchUserProfile } = useAuthStore();
+  const { user, fetchUserProfile, updateProfile } = useAuthStore();
 
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [profile, setProfile] = useState<Profile>(empty);
-  const [editedProfile, setEditedProfile] = useState<Profile>(empty);
+  const [profile, setProfile] = useState<ProfileFormValues>(emptyProfileForm);
+  const [editedProfile, setEditedProfile] = useState<ProfileFormValues>(emptyProfileForm);
 
-  // Fetch fresh user (with loyaltyPoints) from DB on mount
+  // Refresh the server-backed user (name/avatar/verification/createdAt) on mount
   useEffect(() => {
     fetchUserProfile();
   }, []);
 
   // Sync local state when user loads / changes
   useEffect(() => {
-    if (!user) return;
-    const p: Profile = {
-      name:       user.name       || "",
-      email:      user.email      || "",
-      phone:      user.phone      || "",
-      location:   user.location   || "",
-      bio:        user.bio        || "",
-      birthday:   user.birthday   || "",
-      occupation: user.occupation || "",
-    };
+    const p = toProfileForm(user);
     setProfile(p);
     setEditedProfile(p);
   }, [user]);
 
-  // Points straight from DB — no store arithmetic, no welcome bonus inflation
-  const loyaltyPoints = user?.loyaltyPoints ?? 0;
-  const tier = getTierFromPoints(loyaltyPoints);
-  const progress = getPointsToNextTier(loyaltyPoints);
+  // Loyalty is a backend stub (out of scope) — no points are served, so the
+  // profile shows a "coming soon" placeholder instead of a misleading 0/Bronze.
+  const memberSince = formatMemberSince(user?.createdAt);
 
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      const res = await fetch("http://localhost:8000/api/auth/update-profile", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        // Email never sent — cannot be changed
-        body: JSON.stringify({
-          name:       editedProfile.name,
-          phone:      editedProfile.phone,
-          location:   editedProfile.location,
-          bio:        editedProfile.bio,
-          birthday:   editedProfile.birthday,
-          occupation: editedProfile.occupation,
-        }),
+      // Server-backed (name/avatar) vs local-only (rest) split happens inside
+      // authStore.updateProfile — only name/avatarUrl reach server_2.
+      await updateProfile({
+        name: editedProfile.name,
+        avatar: editedProfile.avatar,
+        phone: editedProfile.phone,
+        location: editedProfile.location,
+        bio: editedProfile.bio,
+        birthday: editedProfile.birthday,
+        occupation: editedProfile.occupation,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Failed to update profile");
-
       setProfile(editedProfile);
       setIsEditing(false);
-      useAuthStore.getState().setUser(data.user);
-      toast.success("Profile updated successfully!");
-    } catch (err: any) {
-      toast.error(err.message || "Failed to update profile");
+    } catch {
+      // authStore.updateProfile already toasts the error.
     } finally {
       setIsSaving(false);
     }
@@ -139,8 +102,9 @@ export function ProfileCard() {
           <div className="h-36 bg-gradient-to-r from-primary via-purple-600 to-pink-600 relative">
             <div className="absolute -bottom-16 left-8">
               <Avatar className="h-32 w-32 border-4 border-card shadow-lg">
-                {/* <AvatarImage src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=200" /> */}
-               <AvatarImage src={`https://api.multiavatar.com/${user?.name || "user"}.svg`} />
+                <AvatarImage
+                  src={profile.avatar || `https://api.multiavatar.com/${user?.name || "user"}.svg`}
+                />
                 <AvatarFallback className="text-4xl bg-primary text-primary-foreground">
                   {profile.name.charAt(0).toUpperCase() || "?"}
                 </AvatarFallback>
@@ -152,11 +116,19 @@ export function ProfileCard() {
             <div className="flex items-start justify-between gap-4 flex-wrap">
               <div className="space-y-2">
                 {isEditing ? (
-                  <Input
-                    value={editedProfile.name}
-                    onChange={(e) => setEditedProfile({ ...editedProfile, name: e.target.value })}
-                    className="text-xl font-semibold w-64"
-                  />
+                  <div className="space-y-2">
+                    <Input
+                      value={editedProfile.name}
+                      onChange={(e) => setEditedProfile({ ...editedProfile, name: e.target.value })}
+                      className="text-xl font-semibold w-64"
+                    />
+                    <Input
+                      value={editedProfile.avatar}
+                      onChange={(e) => setEditedProfile({ ...editedProfile, avatar: e.target.value })}
+                      placeholder="Avatar image URL"
+                      className="w-64 text-sm"
+                    />
+                  </div>
                 ) : (
                   <CardTitle className="text-3xl">{profile.name}</CardTitle>
                 )}
@@ -164,22 +136,37 @@ export function ProfileCard() {
                   <Badge variant="secondary" className="capitalize">
                     {user.role || "member"}
                   </Badge>
-                  <Badge variant="outline" className={tier.color}>
-                    <Trophy className="h-3 w-3 mr-1" />
-                    {tier.name} Tier
-                  </Badge>
-                  <Badge variant="outline" className="gap-1">
-                    <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                    {loyaltyPoints.toLocaleString()} pts
-                  </Badge>
+                  {user.isVerified ? (
+                    <Badge variant="outline" className="gap-1 text-green-700 border-green-500/30">
+                      <ShieldCheck className="h-3 w-3" /> Verified
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="gap-1 text-amber-700 border-amber-500/30">
+                      <ShieldAlert className="h-3 w-3" /> Unverified
+                    </Badge>
+                  )}
+                  {memberSince && (
+                    <Badge variant="outline" className="gap-1 text-muted-foreground">
+                      <CalendarDays className="h-3 w-3" /> Member since {memberSince}
+                    </Badge>
+                  )}
                 </div>
               </div>
 
               <div className="flex gap-2">
                 {!isEditing ? (
-                  <Button onClick={() => setIsEditing(true)} className="gap-2">
-                    <Edit className="h-4 w-4" /> Edit Profile
-                  </Button>
+                  <>
+                    {isEnabled("notifications") && (
+                      <Button variant="outline" className="gap-2" asChild>
+                        <Link href="/profile/preferences">
+                          <Bell className="h-4 w-4" /> Notifications
+                        </Link>
+                      </Button>
+                    )}
+                    <Button onClick={() => setIsEditing(true)} className="gap-2">
+                      <Edit className="h-4 w-4" /> Edit Profile
+                    </Button>
+                  </>
                 ) : (
                   <>
                     <Button onClick={handleSave} disabled={isSaving} className="gap-2">
@@ -199,40 +186,25 @@ export function ProfileCard() {
 
           <CardContent className="space-y-6">
 
-            {/* Points progress bar */}
-            {progress && (
-              <div className="p-4 bg-accent rounded-xl space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">
-                    Progress to <span className="font-medium text-foreground">{progress.next}</span>
-                  </span>
-                  <span className="font-medium">{progress.remaining.toLocaleString()} pts needed</span>
+            {/* Loyalty — backend stub (out of scope); shown as a coming-soon teaser */}
+            <div className="p-4 rounded-xl border bg-gradient-to-r from-primary/5 via-purple-500/5 to-pink-500/5">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+                    <Sparkles className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="font-semibold leading-tight">Loyalty &amp; rewards</p>
+                    <p className="text-xs text-muted-foreground">
+                      Earn points on every order and unlock tiers.
+                    </p>
+                  </div>
                 </div>
-                <div className="w-full bg-muted rounded-full h-2">
-                  <div
-                    className="bg-primary h-2 rounded-full transition-all duration-500"
-                    style={{
-                      width: `${Math.min(
-                        100,
-                        ((loyaltyPoints - progress.from) / (progress.total - progress.from)) * 100
-                      )}%`,
-                    }}
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {loyaltyPoints.toLocaleString()} / {progress.total.toLocaleString()} pts
-                </p>
+                <Badge variant="secondary" className="gap-1">
+                  <Sparkles className="h-3 w-3" /> Coming soon
+                </Badge>
               </div>
-            )}
-
-            {progress === null && (
-              <div className="p-4 bg-purple-500/10 border border-purple-500/20 rounded-xl text-center">
-                <Trophy className="h-6 w-6 text-purple-600 mx-auto mb-1" />
-                <p className="text-sm font-medium text-purple-700">
-                  You've reached Platinum — the highest tier!
-                </p>
-              </div>
-            )}
+            </div>
 
             {/* Bio */}
             <div>
@@ -267,6 +239,15 @@ export function ProfileCard() {
                   <div className="flex items-center gap-2 pl-6">
                     <p className="text-sm">{profile.email}</p>
                     <Badge variant="outline" className="text-xs">cannot change</Badge>
+                    {user.isVerified ? (
+                      <Badge variant="outline" className="text-xs gap-1 text-green-700 border-green-500/30">
+                        <ShieldCheck className="h-3 w-3" /> Verified
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-xs gap-1 text-amber-700 border-amber-500/30">
+                        <ShieldAlert className="h-3 w-3" /> Unverified
+                      </Badge>
+                    )}
                   </div>
                 </div>
 
@@ -345,25 +326,28 @@ export function ProfileCard() {
 
             <Separator />
 
-            {/* Stats */}
+            {/* Account — real, server-backed details */}
             <div>
-              <h3 className="mb-4 font-semibold">Loyalty Stats</h3>
+              <h3 className="mb-4 font-semibold">Account</h3>
               <div className="grid grid-cols-3 gap-4">
-                <div className="text-center p-4 bg-accent rounded-xl">
-                  <p className="text-2xl font-bold mb-1 text-primary">
-                    {loyaltyPoints.toLocaleString()}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Total Points</p>
+                <div className="flex flex-col items-center gap-1 p-4 bg-accent rounded-xl text-center">
+                  <CalendarDays className="h-5 w-5 text-primary" />
+                  <p className="text-lg font-bold">{memberSince || "—"}</p>
+                  <p className="text-xs text-muted-foreground">Member Since</p>
                 </div>
-                <div className="text-center p-4 bg-accent rounded-xl">
-                  <p className="text-2xl font-bold mb-1">{tier.name}</p>
-                  <p className="text-xs text-muted-foreground">Current Tier</p>
-                </div>
-                <div className="text-center p-4 bg-accent rounded-xl">
-                  <p className="text-2xl font-bold mb-1 capitalize">
-                    {user.role || "Member"}
-                  </p>
+                <div className="flex flex-col items-center gap-1 p-4 bg-accent rounded-xl text-center">
+                  <UserIcon className="h-5 w-5 text-primary" />
+                  <p className="text-lg font-bold capitalize">{user.role || "Member"}</p>
                   <p className="text-xs text-muted-foreground">Account Role</p>
+                </div>
+                <div className="flex flex-col items-center gap-1 p-4 bg-accent rounded-xl text-center">
+                  {user.isVerified ? (
+                    <ShieldCheck className="h-5 w-5 text-green-600" />
+                  ) : (
+                    <ShieldAlert className="h-5 w-5 text-amber-600" />
+                  )}
+                  <p className="text-lg font-bold">{user.isVerified ? "Verified" : "Unverified"}</p>
+                  <p className="text-xs text-muted-foreground">Email Status</p>
                 </div>
               </div>
             </div>

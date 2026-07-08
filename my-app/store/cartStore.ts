@@ -1,6 +1,12 @@
 import { create } from "zustand";
-import { toast } from "sonner";
 
+/**
+ * Cart lines, quantities, totals and checkout are now owned by the server cart
+ * (Batch 5.2) — see `lib/api/hooks/useCart.ts` / `lib/api/services/cart.ts`.
+ * The local cart array and its total math were removed here; the only state
+ * retained is the mock `orders` list, a Phase 6/7 placeholder (client-tracked
+ * order history lands in Phase 7) left untouched so nothing downstream breaks.
+ */
 export interface CartItem {
   id: string;
   restaurantId?: number;
@@ -10,6 +16,7 @@ export interface CartItem {
   quantity: number;
   image: string;
 }
+
 export interface Order {
   id: string;
   date: string;
@@ -21,20 +28,10 @@ export interface Order {
 }
 
 interface CartState {
-  cart: CartItem[];
   orders: Order[];
-  // addToCart: (item: Omit<CartItem, "quantity">) => void;
-   addToCart: (item: CartItem) => void;
-  removeFromCart: (id: string) => void;
-  updateQuantity: (id: string, quantity: number) => void;
-  clearCart: () => void;
-  getCartTotal: () => number;
-  getCartCount: () => number;
-  checkout: (restaurantName: string) => void;
 }
 
-export const useCartStore = create<CartState>((set, get) => ({
-  cart: [],
+export const useCartStore = create<CartState>(() => ({
   orders: [
     {
       id: "ORD-001",
@@ -75,91 +72,4 @@ export const useCartStore = create<CartState>((set, get) => ({
       status: "Delivered",
     },
   ],
-
-  // addToCart: (item) =>
-  //   set((state) => {
-  //     const existingItem = state.cart.find((i) => i.id === item.id);
-  //     if (existingItem) {
-  //       toast.success("Quantity updated in cart!");
-  //       return {
-  //         cart: state.cart.map((i) =>
-  //           i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i
-  //         ),
-  //       };
-  //     }
-  //     toast.success(`${item.name} added to cart!`);
-  //     return { cart: [...state.cart, { ...item, quantity: 1 }] };
-  //   }),
-
-
-addToCart: (item) =>
-  set((state) => {
-    const existingItem = state.cart.find((i) => i.id === item.id);
-    const qtyToAdd = item.quantity ??1 ; // user-selected quantity (default 1)
-
-    if (existingItem) {
-      const updatedCart = state.cart.map((i) =>
-        i.id === item.id
-          ? { ...i, quantity: i.quantity + qtyToAdd }
-          : i
-      );
-
-      toast.success(`${item.name} × ${qtyToAdd} added to cart!`);
-      return { cart: updatedCart };
-    }
-
-    toast.success(`${item.name} × ${qtyToAdd} added to cart!`);
-    return {
-      cart: [...state.cart, { ...item, quantity: qtyToAdd }],
-    };
-  }),
-
-  removeFromCart: (id) =>
-    set((state) => {
-      toast.success("Item removed from cart");
-      return { cart: state.cart.filter((item) => item.id !== id) };
-    }),
-
-  updateQuantity: (id, quantity) =>
-    set((state) => {
-      if (quantity <= 0) {
-        toast.success("Item removed from cart");
-        return { cart: state.cart.filter((item) => item.id !== id) };
-      }
-      return {
-        cart: state.cart.map((item) =>
-          item.id === id ? { ...item, quantity } : item
-        ),
-      };
-    }),
-
-  clearCart: () => set({ cart: [] }),
-
-  getCartTotal: () => {
-    const { cart } = get();
-    return cart.reduce((total, item) => total + item.price * item.quantity, 0);
-  },
-
-  getCartCount: () => {
-    const { cart } = get();
-    return cart.reduce((count, item) => count + item.quantity, 0);
-  },
-
-  checkout: (restaurantName) =>
-    set((state) => {
-      const newOrder: Order = {
-        id: `ORD-${String(state.orders.length + 1).padStart(3, "0")}`,
-        date: "Just now",
-        timestamp: Date.now(),
-        restaurantName,
-        items: [...state.cart],
-        total: get().getCartTotal(),
-        status: "pending",
-      };
-      toast.success("Order placed successfully!");
-      return {
-        orders: [newOrder, ...state.orders],
-        cart: [],
-      };
-    }),
 }));

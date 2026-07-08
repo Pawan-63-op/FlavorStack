@@ -1,5 +1,3 @@
-// Worker process entrypoint — selects a worker via WORKER_TYPE (outbox|email|notification|fulfillment).
-// One image (`Dockerfile.worker`), env-selected process per the Phase 11 plan.
 import { logger } from '../infrastructure/observability/logger';
 import { run as runOutboxWorker } from './outbox.worker';
 import { run as runEmailWorker } from './email.worker';

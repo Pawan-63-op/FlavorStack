@@ -4,7 +4,6 @@ import { IFavoriteRestaurant, IFavoriteRecipe } from '@/Types/allTypes';
 import mongoose from 'mongoose';
 import { Response } from 'express';
 
-// @route   GET /api/favorites
 export const getFavorites = async (req: AuthRequest, res: Response) => {
   try {
     let favorites = await Favorite.findOne({ user: req.user?._id })
@@ -15,14 +14,12 @@ export const getFavorites = async (req: AuthRequest, res: Response) => {
       favorites = await Favorite.create({ user: req.user?._id });
     }
 
-    // BUG FIX: was status(400) — should be 200
     return res.status(200).json({ favorites });
   } catch (error: any) {
     res.status(500).json({ message: error.message || "internal server error" });
   }
 };
 
-// @route   POST /api/favorites/restaurant/:id
 export const addRestaurantToFavorites = async (req: AuthRequest, res: Response) => {
   try {
     let favorites = await Favorite.findOne({ user: req.user?._id });
@@ -51,7 +48,6 @@ export const addRestaurantToFavorites = async (req: AuthRequest, res: Response) 
   }
 };
 
-// @route   DELETE /api/favorites/restaurant/:id
 export const removeRestaurantFromFavorites = async (req: AuthRequest, res: Response) => {
   try {
     const favorites = await Favorite.findOne({ user: req.user?._id });
@@ -71,7 +67,6 @@ export const removeRestaurantFromFavorites = async (req: AuthRequest, res: Respo
   }
 };
 
-// @route   POST /api/favorites/recipe/:id
 export const addRecipeToFavorites = async (req: AuthRequest, res: Response) => {
   try {
     let favorites = await Favorite.findOne({ user: req.user?._id });
@@ -100,7 +95,6 @@ export const addRecipeToFavorites = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// @route   DELETE /api/favorites/recipe/:id
 export const removeRecipeFromFavorites = async (req: AuthRequest, res: Response) => {
   try {
     const favorites = await Favorite.findOne({ user: req.user?._id });

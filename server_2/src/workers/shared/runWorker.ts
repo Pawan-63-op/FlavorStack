@@ -1,4 +1,3 @@
-// Signal handling + graceful-shutdown helper shared by every worker entrypoint.
 import { logger } from '../../infrastructure/observability/logger';
 
 const SHUTDOWN_TIMEOUT_MS = 10000;

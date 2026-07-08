@@ -1,8 +1,3 @@
-// Thin controller delegating to Commerce cart use cases (Phase 4): GET /cart, POST
-// /cart/items (AddToCart), PATCH /cart/items/:itemId (UpdateCartItem), DELETE
-// /cart/items/:itemId (RemoveFromCart), DELETE /cart (ClearCart). customerId is
-// always derived from the authenticated actor (`req.user!.userId`), never from the
-// request body/params.
 import { Request, Response, NextFunction } from 'express';
 import { GetCart } from '../../../application/commerce/use-cases/GetCart';
 import { GetCartSummary } from '../../../application/commerce/use-cases/GetCartSummary';

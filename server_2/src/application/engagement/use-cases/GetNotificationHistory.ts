@@ -1,5 +1,3 @@
-// UC: GetNotificationHistory — paginated notification history for a recipient (engagement_module.md §5).
-// Served directly from the notifications collection (no separate projection, §7).
 import { Result } from '../../../domain/shared/Result';
 import { INotificationRepository } from '../../../domain/engagement/repositories/INotificationRepository';
 import { GetNotificationHistoryDto } from '../dtos/NotificationDtos';

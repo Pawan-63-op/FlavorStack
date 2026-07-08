@@ -1,16 +1,3 @@
-// Notification template seed (engagement_module.md §2 / §6). Seeds the eight §2 keys PLUS
-// `password_reset` (the gap flagged in Phase 2.C — without it OnPasswordResetRequested stays
-// SKIPPED:template_unavailable), each for the exact channel its dispatching handler uses and
-// locale `en`.
-//
-// Channel/category per key mirror the handlers in application/engagement/event-handlers:
-//   welcome / password_changed / password_reset  → EMAIL  (SECURITY)
-//   order_confirmed / ready_for_pickup / order_cancelled → PUSH (ORDER_UPDATES)
-//   rider_assigned / out_for_delivery / delivered → PUSH (DELIVERY)
-//
-// Idempotent by (key, channel, locale): each template is looked up via
-// findByKeyChannelLocale and only created when absent. Re-running the seed is a no-op (it never
-// overwrites an admin-edited template), so it is safe to run on every boot.
 import { NotificationTemplate } from '../../../domain/engagement/entities/NotificationTemplate';
 import {
   NOTIFICATION_CHANNEL,
@@ -30,7 +17,6 @@ interface TemplateSeed {
 
 /** The seeded template set: the eight §2 keys + password_reset, on their dispatch channel. */
 export const NOTIFICATION_TEMPLATE_SEEDS: readonly TemplateSeed[] = [
-  // Security (EMAIL).
   {
     key: 'welcome',
     channel: NOTIFICATION_CHANNEL.EMAIL,
@@ -49,7 +35,6 @@ export const NOTIFICATION_TEMPLATE_SEEDS: readonly TemplateSeed[] = [
     titleTemplate: 'Reset your password',
     bodyTemplate: 'We received a password reset request for {{email}}. Follow the link in this email to reset it.',
   },
-  // Order updates (PUSH).
   {
     key: 'order_confirmed',
     channel: NOTIFICATION_CHANNEL.PUSH,
@@ -68,7 +53,6 @@ export const NOTIFICATION_TEMPLATE_SEEDS: readonly TemplateSeed[] = [
     titleTemplate: 'Order cancelled',
     bodyTemplate: 'Order {{fulfillmentId}} was cancelled. {{reason}}',
   },
-  // Delivery (PUSH).
   {
     key: 'rider_assigned',
     channel: NOTIFICATION_CHANNEL.PUSH,
@@ -112,7 +96,6 @@ export async function seedNotificationTemplates(
       bodyTemplate: seed.bodyTemplate,
     });
     if (result.isFailure) {
-      // A malformed seed entry is a programming error, not a runtime condition — fail loudly.
       throw new Error(`Invalid notification template seed "${seed.key}": ${String(result.getError())}`);
     }
 

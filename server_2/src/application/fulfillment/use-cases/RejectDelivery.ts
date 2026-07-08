@@ -1,8 +1,3 @@
-// UC: RejectDelivery — the offered rider declines (fulfillment_module.md §6.1, Phase 3B).
-// The aggregate moves the rejected attempt to history and frees the active slot (no domain event).
-// We then trigger a re-offer to the next candidate via OfferRiderAssignment, in a SEPARATE
-// transaction (each command mutates one aggregate version) — best-effort: if no rider is available
-// the reject still succeeds and the fulfillment simply waits (the Phase 8 retry job will re-try).
 import { Result } from '../../../domain/shared/Result';
 import { NotFoundError } from '../../../domain/shared/errors/NotFoundError';
 import { IFulfillmentRepository } from '../../../domain/fulfillment/repositories/IFulfillmentRepository';
@@ -39,7 +34,6 @@ export class RejectDelivery {
 
     if (events.length > 0) await this.eventBus.publishAll(events);
 
-    // Re-offer to the next candidate (best-effort; never fails the reject).
     const reoffer = await this.offerRiderAssignment.execute({ fulfillmentId: dto.fulfillmentId });
     if (reoffer.isFailure) {
       logger.info(

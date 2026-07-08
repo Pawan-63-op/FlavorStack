@@ -1,5 +1,3 @@
-// Mongoose schema — `restaurant_rating_views` read-model collection (engagement_module.md §7).
-// Key: unique restaurantId. Updated incrementally by RecomputeRestaurantRating on approve.
 import { Schema, model } from 'mongoose';
 
 export interface RestaurantRatingDistributionDocument {

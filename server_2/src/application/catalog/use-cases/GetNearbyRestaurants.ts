@@ -1,7 +1,3 @@
-// Query: proximity discovery — restaurants within `radiusMeters` of a point,
-// ordered nearest-first (Catalog Phase 10). Geo ranking via the `2dsphere`
-// index (`$geoNear`) is delegated to ISearchService; cuisine/open filters and
-// cursor pagination compose on top. Only PUBLIC + ACTIVE restaurants surface.
 import { Result } from '../../../domain/shared/Result';
 import { GeoPoint } from '../../../domain/identity/value-objects/GeoPoint.vo';
 import { ISearchService } from '../../../domain/catalog/services/ISearchService';

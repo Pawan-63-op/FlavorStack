@@ -1,30 +1,3 @@
-// UC: ReassignRider — admin/system hands a delivery to a different rider (fulfillment_module.md
-// §6.1 / §7.4, Phase 5B). Backs POST /admin/fulfillments/:id/reassign and the timeout/rider-drop path.
-//
-// Two shapes, decided from the live assignment:
-//   • An ACCEPTED rider is on the delivery (a "drop")  → fulfillment.reassign(newRider) hands over in
-//     one atomic mutation, emitting RiderReassigned. The replacement rider is dto.riderId, or the next
-//     candidate from IDeliveryAssignmentService (excluding everyone already tried).
-//   • No ACCEPTED rider (nobody to hand over from)     → delegate to AssignRider, i.e. make a fresh
-//     offer (RiderOffered). This keeps the admin endpoint a single call for both situations.
-//
-// Sequence — rider cancel → reassign:
-//
-//   Rider(ACCEPTED)        ReassignRider          Fulfillment(agg)        Outbox/Bus
-//        │  drop/admin reassign  │                      │                     │
-//        │──────────────────────▶│  findById            │                     │
-//        │                       │─────────────────────▶│                     │
-//        │                       │  pickNextRider(excl)  │                     │
-//        │                       │  reassign(newRider)   │                     │
-//        │                       │─────────────────────▶│ prev→REASSIGNED→hist │
-//        │                       │                       │ delivery ASSIGNED→  │
-//        │                       │                       │   UNASSIGNED→ASSIGNED│
-//        │                       │                       │ new rider ACCEPTED   │
-//        │                       │   runInTransaction { update + append } ─────▶│ RiderReassigned
-//        │                       │   publishAll ───────────────────────────────▶│ (→ read models)
-//
-// Version guard: the aggregate loads at persistedVersion and the repo update CAS-matches it, so a
-// concurrent mutation makes this reassignment fail rather than clobber.
 import { Result } from '../../../domain/shared/Result';
 import { NotFoundError } from '../../../domain/shared/errors/NotFoundError';
 import { ConflictError } from '../../../domain/shared/errors/ConflictError';
@@ -57,7 +30,6 @@ export class ReassignRider {
     const current = fulfillment.currentAssignment;
     const hasAcceptedRider = current?.status.value === RIDER_ASSIGNMENT_STATUS.ACCEPTED;
 
-    // No accepted rider to hand over from → a fresh offer is the right action (delegate to AssignRider).
     if (!hasAcceptedRider) {
       return this.assignRider.execute({ fulfillmentId: dto.fulfillmentId, riderId: dto.riderId });
     }

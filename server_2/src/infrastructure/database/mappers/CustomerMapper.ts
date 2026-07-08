@@ -1,5 +1,3 @@
-// Domain <-> persistence mapping for the Customer aggregate (CUSTOMER discriminator).
-// Implements src/domain/identity/entities/Customer.ts <-> CustomerDocument (CustomerModel.ts).
 import { Customer, CustomerAddress } from '../../../domain/identity/entities/Customer';
 import { CustomerDocument, CustomerAddressDocument, WalletTransactionDocument } from '../models/CustomerModel';
 import { Address } from '../../../domain/identity/value-objects/Address.vo';
@@ -58,10 +56,14 @@ function addressEntryToPersistence(entry: CustomerAddress): CustomerAddressDocum
   return {
     id: entry.id,
     label: address.label,
+    recipientName: address.recipientName,
+    phone: address.phone,
     street: address.street,
     city: address.city,
     state: address.state,
     pinCode: address.pinCode,
+    landmark: address.landmark,
+    deliveryInstructions: address.deliveryInstructions,
     coordinates: { lat: address.coordinates.lat, lng: address.coordinates.lng },
   };
 }
@@ -74,10 +76,14 @@ function addressEntryToDomain(doc: CustomerAddressDocument): CustomerAddress {
   const address = rebuildOrThrow(
     Address.create({
       label: doc.label,
+      recipientName: doc.recipientName,
+      phone: doc.phone,
       street: doc.street,
       city: doc.city,
       state: doc.state,
       pinCode: doc.pinCode,
+      landmark: doc.landmark,
+      deliveryInstructions: doc.deliveryInstructions,
       coordinates,
     }),
     `Customer address (${doc.id})`

@@ -1,13 +1,3 @@
-// Batch 4B (Phase 4 DoD) — NotificationDispatcher lifecycle against a real MongoNotificationRepository
-// (mongodb-memory-server). Verifies the worker-side path end-to-end at the persistence boundary:
-//   - a persisted PENDING notification → dispatch → channel send → row SENT (+ provider/sentAt);
-//   - a no_recipient channel failure → row FAILED (terminal, no throw);
-//   - a transient channel error → propagates, row stays PENDING (BullMQ would retry);
-//   - markExhausted after retries → PENDING → FAILED;
-//   - re-dispatching an already-SENT row → SKIPPED, channel never sends twice (idempotency).
-//
-// Channels are stubbed so the test is hermetic (no live Resend/FCM/Redis). The channel adapters
-// themselves are unit-tested separately (Batch 4A).
 import { randomUUID } from 'crypto';
 import { Notification } from '../../../domain/engagement/entities/Notification';
 import { Result } from '../../../domain/shared/Result';

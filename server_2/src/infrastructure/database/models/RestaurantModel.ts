@@ -1,12 +1,3 @@
-// Mongoose schema — `restaurants` collection (Catalog Phase 8).
-// Persisted shape of the Restaurant aggregate root
-// (src/domain/catalog/entities/Restaurant.ts). Categories and delivery zones are
-// embedded sub-documents (they live inside the Restaurant aggregate); the menu
-// items of a restaurant are a SEPARATE aggregate/collection (see MenuItemModel).
-//
-// _id is a UUID string (UniqueEntityId); versionKey disabled (the domain owns
-// `version`). `location` and each zone `polygon` are stored as GeoJSON so the
-// 2dsphere indexes can serve `$near` / `$geoIntersects` discovery queries.
 import { Schema, model } from 'mongoose';
 import { RESTAURANT_STATUS, RestaurantStatus } from '../../../domain/catalog/enums/restaurant-status.enum';
 import { CATALOG_VISIBILITY, CatalogVisibility } from '../../../domain/catalog/enums/catalog-visibility.enum';
@@ -183,7 +174,6 @@ const RestaurantSchema = new Schema<RestaurantDocument>(
   }
 );
 
-// Slug is unique among live restaurants; a soft-deleted slug can be reclaimed.
 RestaurantSchema.index({ slug: 1 }, { unique: true, partialFilterExpression: { deletedAt: null } });
 RestaurantSchema.index({ ownerId: 1 });
 RestaurantSchema.index({ status: 1 });

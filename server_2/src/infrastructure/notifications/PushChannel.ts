@@ -1,5 +1,3 @@
-// Batch 4A — PUSH adapter. Resolves the recipient's device tokens through INotificationRecipientResolver
-// and delegates the send to the existing IPushProvider (FCM no-op stub). Pure: no Identity repo access.
 import { Result } from '../../domain/shared/Result';
 import { Notification } from '../../domain/engagement/entities/Notification';
 import { NOTIFICATION_CHANNEL, NotificationChannelValue } from '../../domain/engagement/enums/notification-channel.enum';
@@ -21,7 +19,6 @@ export class PushChannel implements INotificationChannel {
     const tokens = await this.resolver.resolvePushTokens(notification.recipientUserId);
     if (!tokens || tokens.length === 0) return Result.fail<ChannelSendResult>(NO_RECIPIENT);
 
-    // Provider errors propagate so the worker can retry the still-PENDING notification.
     for (const token of tokens) {
       await this.pushProvider.sendPush(token, notification.renderedTitle, notification.renderedBody);
     }

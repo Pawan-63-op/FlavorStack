@@ -1,9 +1,3 @@
-// Batch 4 (Phase 8) integration tests — OutboxProcessor: poll → publish → settle,
-// with the nextAttemptAt gate, persisted exponential backoff on transient failure,
-// and terminal FAILED after retries are exhausted.
-//
-// Mirrors outbox.integration.test.ts setup (getConnection-backed memory replset via
-// tests/setup.ts, deleteMany cleanup).
 import { randomUUID } from 'crypto';
 import { TransactionContext } from '../../../infrastructure/database/TransactionContext';
 import { MongoOutboxRepository } from '../../../infrastructure/repositories/OutboxRepository';
@@ -115,7 +109,6 @@ describe('OutboxProcessor (Phase 8, Batch 4)', () => {
     expect(updated!.status).toBe(OUTBOX_STATUS.PENDING);
     expect(updated!.retryCount).toBe(1);
     expect(updated!.lastError).toContain('publish failed');
-    // retryCount was 0 → delay = base * 2^0 = 1000ms; jitter is non-negative.
     const lowerBound = before + CONFIG.backoffBaseMs;
     expect(updated!.nextAttemptAt!.getTime()).toBeGreaterThanOrEqual(lowerBound);
     expect(updated!.nextAttemptAt!.getTime()).toBeLessThan(after + CONFIG.backoffBaseMs * 3);
@@ -123,7 +116,6 @@ describe('OutboxProcessor (Phase 8, Batch 4)', () => {
 
   it('escalates to terminal FAILED on the 5th failure and never re-serves it', async () => {
     const bus = new ThrowingEventBus();
-    // retryCount already 4 → this processing attempt is the 5th → FAILED.
     const doc = await OutboxEventModel.create(seedRow({ retryCount: 4 }));
 
     const processor = new OutboxProcessor(repo, bus, CONFIG);
@@ -133,7 +125,6 @@ describe('OutboxProcessor (Phase 8, Batch 4)', () => {
     expect(updated!.status).toBe(OUTBOX_STATUS.FAILED);
     expect(updated!.lastError).toContain('publish failed');
 
-    // A FAILED row is not returned by findPending.
     const pending = await repo.findPending(100);
     expect(pending.find((r) => String(r._id) === String(doc._id))).toBeUndefined();
   });
@@ -143,7 +134,6 @@ describe('OutboxProcessor (Phase 8, Batch 4)', () => {
     const id = String(doc._id);
 
     await repo.markProcessing(id);
-    // Second claim must be a no-op: the guard is { status: PENDING }.
     await repo.markProcessing(id);
 
     const updated = await OutboxEventModel.findById(id).lean();

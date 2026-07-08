@@ -1,6 +1,3 @@
-// Maps between the Notification aggregate and NotificationModel documents (engagement_module.md §6).
-// toDomain rebuilds NotificationStatus via create() (trusted data — corruption surfaces as
-// DomainError via rebuildOrThrow) and rehydrates the root through Notification.reconstitute.
 import { Notification, NotificationProps } from '../../../domain/engagement/entities/Notification';
 import { NotificationStatus } from '../../../domain/engagement/value-objects/NotificationStatus';
 import { NotificationStatusValue } from '../../../domain/engagement/enums/notification-status.enum';

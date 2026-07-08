@@ -1,4 +1,3 @@
-// RBAC: requireRole (claim check) + requirePermission (resource/action check)
 import { Request, Response, NextFunction, RequestHandler } from 'express';
 import { UserRole } from '../../../domain/identity/enums/user-role.enum';
 import { PermissionResource } from '../../../domain/identity/enums/permission-resource.enum';

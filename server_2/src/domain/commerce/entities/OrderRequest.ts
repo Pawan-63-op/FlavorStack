@@ -1,9 +1,3 @@
-// AggregateRoot (immutable after creation): id, customerId, idempotencyKey, restaurant: RestaurantSnapshot,
-// lines: OrderRequestLine[], pricing: PricingBreakdown, deliveryAddress, paymentIntent: PaymentIntent,
-// status: OrderRequestStatus (REQUESTED), schemaVersion, createdAt —
-// static createFromCheckout(input): Result<OrderRequest> builds the snapshot, validates pricing
-// reproducibility, raises OrderRequested + CheckoutReadyForPayment. Never mutated afterward.
-// (Commerce Phase 11, commerce_module.md §3.1/§4.4/§8.1.)
 import { AggregateRoot } from '../../shared/AggregateRoot';
 import { Result } from '../../shared/Result';
 import { Guard } from '../../shared/Guard';
@@ -124,9 +118,6 @@ export class OrderRequest extends AggregateRoot<OrderRequestProps> {
       return Result.fail<OrderRequest>(new ValidationError('OrderRequest paymentIntent must be a valid PaymentIntent'));
     }
 
-    // Price-Integrity invariant (§3.6.3): the breakdown subtotal must reproduce from the line totals.
-    // Money.add rejects currency mismatches, so this also enforces single-currency consistency across lines
-    // and the pricing breakdown.
     let lineSum = input.lines[0]!.lineTotal;
     for (let i = 1; i < input.lines.length; i += 1) {
       const addResult = lineSum.add(input.lines[i]!.lineTotal);

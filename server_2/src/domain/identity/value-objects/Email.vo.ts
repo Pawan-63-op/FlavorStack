@@ -28,7 +28,6 @@ export class Email extends ValueObject<EmailProps> {
 
     const trimmed = String(value).trim().toLowerCase();
 
-    // RFC-ish format: single @, domain with TLD (has dot and at least 2 char TLD)
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
     if (!emailRegex.test(trimmed)) {
       return Result.fail<Email>(new ValidationError('Invalid email format'));

@@ -1,9 +1,3 @@
-// UC: OfferRiderAssignment — system-driven offer of a delivery to the next available rider
-// (fulfillment_module.md §6.1, Phase 3B). The rider is chosen by IDeliveryAssignmentService,
-// excluding riders already tried on this fulfillment (current + history). Emits RiderOffered.
-//
-// Flow mirrors the established command shape: load → pick rider → aggregate method (raises events,
-// enforces "one active assignment") → atomic { repo.update + outbox.append } → post-commit publish.
 import { Result } from '../../../domain/shared/Result';
 import { NotFoundError } from '../../../domain/shared/errors/NotFoundError';
 import { ConflictError } from '../../../domain/shared/errors/ConflictError';

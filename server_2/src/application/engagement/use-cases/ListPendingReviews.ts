@@ -1,5 +1,3 @@
-// UC: ListPendingReviews — admin moderation queue (engagement_module.md §5). Defaults to PENDING;
-// callers may request AUTO_FLAGGED. Lists across all restaurants via the moderation-status index.
 import { Result } from '../../../domain/shared/Result';
 import { MODERATION_STATUS } from '../../../domain/engagement/enums/moderation-status.enum';
 import { IReviewRepository } from '../../../domain/engagement/repositories/IReviewRepository';

@@ -1,26 +1,3 @@
-// Composition root / application bootstrap for the Identity bounded context (Phase 11, Batch 4).
-//
-// This is the single place the whole Identity object graph is assembled. It owns
-// connection lifecycle (Mongo, Redis, OutboxProcessor) and wires the three context
-// containers (identity, auth, event) into the 20 frozen Identity use-cases.
-//
-// Bootstrap order (deterministic, fail-fast):
-//   0. assertRequiredConfig()        — throw before any network connection on missing env
-//   1. connectDB()                   — Mongo
-//   2. RedisClient.connect()         — Redis
-//   3. createIdentityContainer()     — repos + UoW + outbox store (shared TransactionContext)
-//   4. createAuthContainer()         — token/password/session/email/otp/sms
-//   5. createEventContainer()        — in-process event bus
-//   6. wireIdentityEventHandlers()   — BEFORE the processor starts, so drained events have subscribers
-//   7. new OutboxProcessor()         — only `.start()`s when opts.startOutboxProcessor !== false
-//   8. construct all 20 use-cases    — RegisterUser after RegisterCustomer/RegisterDriver
-//   9. return AppContainer
-//
-// NOTE: `bootstrap()` is intended to be called once per process. The API (`server.ts`) calls
-// `bootstrap({ startOutboxProcessor: false })` — `OutboxWorker` (`src/workers/outbox.worker.ts`)
-// owns the poller, so only one `OutboxProcessor.start()` ever runs across all processes.
-// A second call would create a duplicate RedisClient/OutboxProcessor (duplicate-poller bug);
-// single-call per process is enforced by the entrypoint structure, not a runtime guard here (YAGNI).
 import type { Connection } from 'mongoose';
 
 import { assertRequiredConfig, getOutboxConfig } from '../config';
@@ -39,6 +16,9 @@ import { createCatalogReadContainer, CatalogReadContainer } from './catalog.cont
 import { createCatalogWriteContainer, CatalogWriteContainer } from './catalog-write.container';
 import { createCommerceContainer, CommerceContainer } from './commerce.container';
 import { createFulfillmentContainer, FulfillmentContainer } from './fulfillment.container';
+import { CatalogRestaurantDirectory } from '../infrastructure/services/CatalogRestaurantDirectory';
+import { MongoRestaurantRepository } from '../infrastructure/repositories/RestaurantRepository';
+import { createAvailableDriversProvider } from '../infrastructure/services/AvailableDriversProvider';
 import { createEngagementContainer, EngagementContainer } from './engagement.container';
 import { runSeeds } from '../infrastructure/database/seeds';
 import { ConflictError } from '../domain/shared/errors/ConflictError';
@@ -75,8 +55,17 @@ import { AssignRole } from '../application/identity/use-cases/AssignRole';
 import { GrantPermission } from '../application/identity/use-cases/GrantPermission';
 import { BanUser } from '../application/identity/use-cases/BanUser';
 import { UnbanUser } from '../application/identity/use-cases/UnbanUser';
+import { SetDriverAvailability } from '../application/identity/use-cases/SetDriverAvailability';
+import { VerifyDriver } from '../application/identity/use-cases/VerifyDriver';
+import { ListDrivers } from '../application/identity/use-cases/ListDrivers';
+import { ListUsers } from '../application/identity/use-cases/ListUsers';
 import { GetProfile } from '../application/identity/use-cases/GetProfile';
 import { UpdateProfile } from '../application/identity/use-cases/UpdateProfile';
+import { ListCustomerAddresses } from '../application/identity/use-cases/ListCustomerAddresses';
+import { AddCustomerAddress } from '../application/identity/use-cases/AddCustomerAddress';
+import { UpdateCustomerAddress } from '../application/identity/use-cases/UpdateCustomerAddress';
+import { DeleteCustomerAddress } from '../application/identity/use-cases/DeleteCustomerAddress';
+import { SetDefaultCustomerAddress } from '../application/identity/use-cases/SetDefaultCustomerAddress';
 
 export interface IdentityUseCases {
   registerCustomer: RegisterCustomer;
@@ -101,6 +90,15 @@ export interface IdentityUseCases {
   unbanUser: UnbanUser;
   getProfile: GetProfile;
   updateProfile: UpdateProfile;
+  setDriverAvailability: SetDriverAvailability;
+  verifyDriver: VerifyDriver;
+  listDrivers: ListDrivers;
+  listUsers: ListUsers;
+  listCustomerAddresses: ListCustomerAddresses;
+  addCustomerAddress: AddCustomerAddress;
+  updateCustomerAddress: UpdateCustomerAddress;
+  deleteCustomerAddress: DeleteCustomerAddress;
+  setDefaultCustomerAddress: SetDefaultCustomerAddress;
 }
 
 export interface BootstrapOptions {
@@ -141,29 +139,20 @@ export interface AppContainer {
 export async function bootstrap(opts: BootstrapOptions = {}): Promise<AppContainer> {
   const startOutboxProcessor = opts.startOutboxProcessor ?? true;
 
-  // 0. Fail fast on missing env (JWT keys / Resend key) before opening any connection.
   assertRequiredConfig();
 
-  // 1. Mongo.
   const connection = await connectDB();
 
   try {
-    // 2. Redis.
     const redisClient = new RedisClient();
     await redisClient.connect();
 
-    // 3. Repositories + persistence ports (shared TransactionContext).
     const identity = createIdentityContainer(connection);
 
-    // 4. Auth / crypto / session / messaging services.
     const auth = createAuthContainer(redisClient);
 
-    // 5. In-process event bus.
     const event = createEventContainer();
 
-    // 5b. Catalog read + write graphs. The read container subscribes its
-    //     projector to `event.eventBus`, so command use-cases that publish on
-    //     the same bus after commit keep the projections in sync.
     const catalogCache = new CatalogCache(new CacheStore(redisClient));
     const catalogRead = createCatalogReadContainer(
       event.eventBus,
@@ -172,38 +161,25 @@ export async function bootstrap(opts: BootstrapOptions = {}): Promise<AppContain
     );
     const catalogWrite = createCatalogWriteContainer(connection, event.eventBus);
 
-    // 5c. Commerce write graph (Phase 4 cart use-cases). CartItemAdded/CartCleared
-    //     publish on the same in-process bus after commit (in-process only, not outbox-routed).
-    //     The Phase 10 Catalog ACL gateway is fed Catalog's three published read ports from the
-    //     read container above — Commerce adapts them, never re-instantiating Catalog concretes.
     const commerce = createCommerceContainer(connection, event.eventBus, {
       readRepository: catalogRead.readRepository,
       serviceabilityQuery: catalogRead.queries.checkServiceability,
       openingHoursService: catalogRead.openingHoursService,
     });
 
-    // 5d. Fulfillment write graph (Phase 1). Subscribes OnOrderRequested to the same in-process bus
-    //     BEFORE the outbox processor starts, so Commerce's drained OrderRequested rows create exactly
-    //     one Fulfillment (duplicate orderRequestId is an idempotent no-op).
-    //     Phase 5B: a BullMQ delayed-job scheduler arms assignment-timeout / SLA jobs when the
-    //     matching events are published on the bus (in whichever process runs the OutboxProcessor).
     const fulfillmentJobScheduler = new FulfillmentJobQueue();
 
-    // Phase 7: realtime tracking infra (Redis latest-location + throttle gate, Mongo history,
-    // late-bound Socket.IO broadcaster). The broadcaster's namespace is attached in `server.ts`
-    // after the HTTP server is listening; until then status/location broadcasts are no-ops.
     const { trackingLatestTtlSeconds } = getRealtimeConfig();
     const trackingBroadcaster = new SocketTrackingBroadcaster();
-    // Phase 8: notification producer. Passed into the fulfillment graph so the dispatcher can turn
-    // customer/rider-facing status events into push jobs on `notification-queue`.
     const notificationQueue = new NotifyQueue();
-    // Phase 9 (Batch 9.1): read-side cache for the hot tracking/dashboard queries. Shares the
-    // process Redis via CacheStore; TTLs come from the single fulfillment config source.
     const { trackingCacheTtlSeconds, dashboardCacheTtlSeconds } = getFulfillmentConfig();
     const fulfillmentCache = new FulfillmentCache(new CacheStore(redisClient), {
       trackingSeconds: trackingCacheTtlSeconds,
       dashboardSeconds: dashboardCacheTtlSeconds,
     });
+    const restaurantDirectory = new CatalogRestaurantDirectory(new MongoRestaurantRepository(new TransactionContext()));
+    const availableRidersProvider = createAvailableDriversProvider(identity.driverRepository);
+
     const fulfillment = createFulfillmentContainer(
       connection,
       event.eventBus,
@@ -214,28 +190,13 @@ export async function bootstrap(opts: BootstrapOptions = {}): Promise<AppContain
         broadcaster: trackingBroadcaster,
       },
       notificationQueue,
-      fulfillmentCache
+      fulfillmentCache,
+      restaurantDirectory,
+      availableRidersProvider
     );
 
-    // 5e. Engagement graph (Phase 3.B). Builds the engagement object graph and — crucially —
-    //     subscribes its nine cross-context handlers onto the SAME in-process bus, BEFORE the
-    //     OutboxProcessor starts (step 7). That ordering guarantees that drained Identity/Fulfillment
-    //     events (UserRegistered, FulfillmentCreated, DeliveryCompleted, …) always have a subscriber,
-    //     so notifications/eligibility are never silently dropped. Engagement reuses the single shared
-    //     `notificationQueue` producer (DispatchNotification enqueues onto QUEUE.notification after
-    //     commit) — no second queue, so the single-poller invariant is untouched.
-    //     Route declarations live in EngagementEventRoutes.ts (consumed by the future BullMQ
-    //     OutboxPoller, like the other contexts' route tables); they are not bound to a live router
-    //     here because bootstrap runs no EventRouter today.
     const engagement = createEngagementContainer(connection, event.eventBus, notificationQueue);
 
-    // 5f. Seed bootstrap config (idempotent, insert-if-absent). Notification templates must exist
-    //     BEFORE the OutboxProcessor (step 7) drains events and the engagement handlers dispatch —
-    //     otherwise DispatchNotification returns SKIPPED:template_unavailable. Existing rows are left
-    //     untouched, so this is a no-op on every boot after the first. Every entrypoint bootstraps,
-    //     so on a fresh DB peers can cold-start concurrently and race the unique (key,channel,locale)
-    //     index; a ConflictError just means a peer is mid-seed — log and continue (the next boot, and
-    //     the peer's own run, fill any gap). Any other error is a real failure → fail fast.
     try {
       const { notificationTemplatesCreated } = await runSeeds({
         notificationTemplateRepo: engagement.templateRepository,
@@ -252,12 +213,9 @@ export async function bootstrap(opts: BootstrapOptions = {}): Promise<AppContain
       }
     }
 
-    // 6. Subscribe identity handlers BEFORE the processor starts draining events.
     const emailQueue = new EmailQueue();
     wireIdentityEventHandlers(event.eventBus, emailQueue);
 
-    // 7. Reliable async dispatch spine. The API process passes `startOutboxProcessor:
-    //    false` — `OutboxWorker` (Phase 11) owns `.start()` so only one poller ever runs.
     const outboxProcessor = new OutboxProcessor(
       identity.outboxRepository,
       event.eventBus,
@@ -267,8 +225,6 @@ export async function bootstrap(opts: BootstrapOptions = {}): Promise<AppContain
       outboxProcessor.start();
     }
 
-    // 8. Construct all 20 use-cases. RegisterUser composes RegisterCustomer + RegisterDriver,
-    //    so those two are built first.
     const registerCustomer = new RegisterCustomer(
       identity.userRepository,
       identity.customerRepository,
@@ -384,13 +340,22 @@ export async function bootstrap(opts: BootstrapOptions = {}): Promise<AppContain
       ),
       getProfile: new GetProfile(identity.userRepository),
       updateProfile: new UpdateProfile(identity.userRepository),
+      listCustomerAddresses: new ListCustomerAddresses(identity.userRepository),
+      addCustomerAddress: new AddCustomerAddress(identity.userRepository),
+      updateCustomerAddress: new UpdateCustomerAddress(identity.userRepository),
+      deleteCustomerAddress: new DeleteCustomerAddress(identity.userRepository),
+      setDefaultCustomerAddress: new SetDefaultCustomerAddress(identity.userRepository),
+      setDriverAvailability: new SetDriverAvailability(identity.userRepository),
+      verifyDriver: new VerifyDriver(
+        identity.userRepository,
+        identity.unitOfWork,
+        identity.outboxStore,
+        event.eventBus,
+      ),
+      listDrivers: new ListDrivers(identity.driverRepository),
+      listUsers: new ListUsers(identity.userRepository),
     };
 
-    // 9. Phase-10 placeholder: controllers (`src/api/v1/controllers/*`) are still stubs.
-    //    `useCases` is returned on the AppContainer so Phase 10's app.ts can wire
-    //    AuthController/UserController from `app.useCases.*` without reaching into the
-    //    container internals. The absence of a "construct controllers" step here is
-    //    intentional, not an oversight.
     return {
       connection,
       redisClient,
@@ -410,8 +375,6 @@ export async function bootstrap(opts: BootstrapOptions = {}): Promise<AppContain
       useCases,
     };
   } catch (err) {
-    // Anything after the DB connected failed — close Mongo so we don't leak the
-    // connection on a partial bootstrap, then re-throw the original error.
     await disconnectDB();
     throw err;
   }
@@ -422,9 +385,6 @@ export async function bootstrap(opts: BootstrapOptions = {}): Promise<AppContain
  * in-flight batch), close the email + notification queues, close Redis, then disconnect Mongo.
  */
 export async function shutdown(app: AppContainer): Promise<void> {
-  // NOTE: `app.engagement` owns no closable resources of its own — it reuses the shared
-  // `notificationQueue` (closed below) and its repos/use-cases are stateless — so it needs no
-  // explicit teardown step here.
   await app.outboxProcessor.stop();
   await app.emailQueue.close();
   await app.notificationQueue.close();

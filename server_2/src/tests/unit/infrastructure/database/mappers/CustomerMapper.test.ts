@@ -11,10 +11,14 @@ function buildCustomer(): Customer {
   const coordinates = GeoPoint.create(18.52, 73.85).getValue();
   const address = Address.create({
     label: 'Home',
+    recipientName: 'Asha Verma',
+    phone: '+919876543210',
     street: '12 MG Road',
     city: 'Pune',
     state: 'MH',
     pinCode: '411001',
+    landmark: 'Near the clock tower',
+    deliveryInstructions: 'Leave at the gate',
     coordinates,
   }).getValue();
 
@@ -80,10 +84,14 @@ describe('CustomerMapper', () => {
     expect(doc.addresses[0]).toMatchObject({
       id: 'addr-1',
       label: 'Home',
+      recipientName: 'Asha Verma',
+      phone: '+919876543210',
       street: '12 MG Road',
       city: 'Pune',
       state: 'MH',
       pinCode: '411001',
+      landmark: 'Near the clock tower',
+      deliveryInstructions: 'Leave at the gate',
       coordinates: { lat: 18.52, lng: 73.85 },
     });
 
@@ -97,16 +105,13 @@ describe('CustomerMapper', () => {
     expect(rehydrated.version).toBe(original.version);
     expect(rehydrated.createdAt).toEqual(original.createdAt);
 
-    // Address VO rebuilt via create() and equal-by-value
     expect(rehydrated.addresses[0].id).toBe('addr-1');
     expect(rehydrated.addresses[0].address.equals(original.addresses[0].address)).toBe(true);
     expect(rehydrated.addresses[0].address.coordinates.equals(original.addresses[0].address.coordinates)).toBe(true);
     expect(rehydrated.defaultAddressId).toBe('addr-1');
 
-    // Structs copied as-is
     expect(rehydrated.walletTransactions).toEqual(original.walletTransactions);
 
-    // Scalars
     expect(rehydrated.walletBalance).toBe(original.walletBalance);
     expect(rehydrated.loyaltyPoints).toBe(original.loyaltyPoints);
     expect(rehydrated.totalLifetimeSpend).toBe(original.totalLifetimeSpend);

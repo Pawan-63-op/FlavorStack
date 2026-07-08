@@ -5,14 +5,6 @@ import { AppliedPromotion } from '../../domain/commerce/value-objects/AppliedPro
 import { Coupon } from '../../domain/commerce/value-objects/Coupon';
 import { IPromotionService, PromotionContext } from '../../domain/commerce/services/IPromotionService';
 
-// Interim IPromotionService (Commerce Phase 8). Backed by an in-memory coupon catalog
-// injected at composition time. `validate` normalizes the code, looks up the matching
-// Coupon, and delegates eligibility (min-order) + discount computation to Coupon.apply —
-// so all promotion rules live in the domain VO, not here.
-//
-// Extraction seam: when a future Promotions context owns the catalog, only this class
-// changes (catalog lookup becomes a network/db call); the IPromotionService port,
-// Coupon/AppliedPromotion VOs, and every Commerce caller stay untouched.
 export class PromotionService implements IPromotionService {
   private readonly couponsByCode: Map<string, Coupon>;
 

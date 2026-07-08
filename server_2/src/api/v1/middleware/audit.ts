@@ -1,5 +1,3 @@
-// Emits a structured audit log entry once the response finishes. Non-blocking:
-// never delays or fails the response, even if logging itself throws.
 import { Request, Response, NextFunction, RequestHandler } from 'express';
 import { logger } from '../../../infrastructure/observability/logger';
 

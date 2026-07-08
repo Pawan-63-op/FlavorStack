@@ -1,14 +1,3 @@
-// Implements IOrderRequestRepository over OrderRequestModel via OrderRequestMapper. Write-once/append-only;
-// duplicate checkout guarded by the unique idempotencyKey index. (Commerce Phase 11, commerce_module.md §6.)
-//
-// Session propagation: the active Mongo ClientSession is read implicitly from the shared TransactionContext
-// (AsyncLocalStorage) and attached to every operation, mirroring MongoCartRepository — so `save` participates
-// in the checkout transaction (order_requests row + outbox rows commit atomically, blueprint §4.4 step 8).
-//
-// `save` is a pure insert: OrderRequest is immutable, so there is no update path. A duplicate _id or
-// idempotencyKey means a concurrent checkout already produced this order request; that surfaces as a
-// ConflictError. The Checkout use case (Phase 11 Batch 4) checks findByIdempotencyKey first, so a duplicate
-// here is the genuine race, not the normal replay path.
 import type { ClientSession } from 'mongoose';
 import { IOrderRequestRepository } from '../../domain/commerce/repositories/IOrderRequestRepository';
 import { OrderRequest } from '../../domain/commerce/entities/OrderRequest';

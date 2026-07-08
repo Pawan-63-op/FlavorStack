@@ -1,4 +1,3 @@
-// Response shape for GET /fulfillments/:id/tracking (fulfillment_module.md §7.3, Phase 6).
 import { CustomerTrackingView } from '../../../domain/fulfillment/repositories/IFulfillmentProjectionRepository';
 
 export interface TrackingTimelineEntryResponse {

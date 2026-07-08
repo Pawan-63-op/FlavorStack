@@ -43,7 +43,6 @@ const reviewSchema = new Schema<IReview>({
   timestamps: true
 });
 
-// Prevent duplicate reviews for same order
 reviewSchema.index({ user: 1, order: 1 }, { unique: true });
 
 const Review = mongoose.model<IReview>('Review', reviewSchema);

@@ -1,4 +1,3 @@
-// Domain repository contract for the NotificationTemplate aggregate (engagement_module.md §6).
 import { NotificationTemplate } from '../entities/NotificationTemplate';
 import { NotificationChannelValue } from '../enums/notification-channel.enum';
 

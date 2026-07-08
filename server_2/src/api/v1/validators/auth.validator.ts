@@ -1,4 +1,3 @@
-// Zod schemas for all auth DTOs
 import { z } from 'zod';
 import { USER_ROLE } from '../../../domain/identity/enums/user-role.enum';
 

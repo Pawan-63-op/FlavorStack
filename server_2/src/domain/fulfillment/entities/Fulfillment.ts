@@ -1,12 +1,3 @@
-// Fulfillment — THE aggregate root for one order's post-checkout journey (fulfillment_module.md §2.1).
-//
-// Phase 1: created from OrderRequested into CREATED state, raising FulfillmentCreated.
-// Phase 2: restaurant-driven prep transitions — startPreparation() → PREPARING,
-//          markReadyForPickup() → READY_FOR_PICKUP. Version is incremented per mutation;
-//          _persistedVersion captures the version at load time for optimistic-concurrency checks.
-//
-// Mutations happen ONLY through aggregate methods; each raises its domain event via addDomainEvent().
-// Ownership is enforced inside each method: the calling restaurantId must match this.restaurantId.
 import { AggregateRoot } from '../../shared/AggregateRoot';
 import { Result } from '../../shared/Result';
 import { Guard } from '../../shared/Guard';
@@ -73,7 +64,6 @@ export interface CreateFulfillmentInput {
 }
 
 export class Fulfillment extends AggregateRoot<FulfillmentProps> {
-  // Version at load time — used by the repository for optimistic-concurrency (cf. Restaurant.persistedVersion).
   private readonly _persistedVersion: number;
 
   private constructor(props: FulfillmentProps, id?: UniqueEntityId) {
@@ -154,6 +144,7 @@ export class Fulfillment extends AggregateRoot<FulfillmentProps> {
       input.id
     );
 
+    const addr = fulfillment.props.deliveryAddress;
     fulfillment.addDomainEvent(
       new FulfillmentCreated({
         fulfillmentId: fulfillment.id.toString(),
@@ -164,6 +155,20 @@ export class Fulfillment extends AggregateRoot<FulfillmentProps> {
           amount: fulfillment.props.pricingTotal.amount,
           currency: fulfillment.props.pricingTotal.currency,
         },
+        deliveryAddress: {
+          ...(addr.label !== undefined ? { label: addr.label } : {}),
+          street: addr.street,
+          city: addr.city,
+          state: addr.state,
+          pinCode: addr.pinCode,
+          coordinates: { lat: addr.coordinates.lat, lng: addr.coordinates.lng },
+        },
+        lines: fulfillment.props.lines.map((l) => ({
+          menuItemId: l.menuItemId,
+          name: l.name,
+          quantity: l.quantity,
+          lineTotal: { amount: l.lineTotal.amount, currency: l.lineTotal.currency },
+        })),
       })
     );
 
@@ -238,7 +243,6 @@ export class Fulfillment extends AggregateRoot<FulfillmentProps> {
       return Result.fail<void>(new ConflictError('An active rider assignment already exists for this fulfillment'));
     }
 
-    // Sweep a leftover terminal assignment into history before opening a new attempt.
     if (this.props.currentAssignment && !this.props.currentAssignment.isActive()) {
       this.props.assignmentHistory.push(this.props.currentAssignment);
       this.props.currentAssignment = null;
@@ -283,7 +287,6 @@ export class Fulfillment extends AggregateRoot<FulfillmentProps> {
     const accepted = assignment.accept(now);
     if (accepted.isFailure) return Result.fail<void>(accepted.getError());
 
-    // Couple the rider leg: an accepted assignment moves the delivery sub-state to ASSIGNED (§3.1).
     const deliveryTransition = this.props.deliveryStatus.transitionTo(DELIVERY_STATUS.ASSIGNED);
     if (deliveryTransition.isFailure) return Result.fail<void>(deliveryTransition.getError());
     this.props.deliveryStatus = deliveryTransition.getValue();
@@ -566,13 +569,11 @@ export class Fulfillment extends AggregateRoot<FulfillmentProps> {
 
     const now = new Date();
 
-    // Drop the current rider: ACCEPTED → REASSIGNED, swept into history.
     const reassigned = assignment.reassign(now);
     if (reassigned.isFailure) return Result.fail<void>(reassigned.getError());
     this.props.assignmentHistory.push(assignment);
     this.props.currentAssignment = null;
 
-    // Reset the rider leg, then bind the new rider as a fresh ACCEPTED attempt.
     const toUnassigned = this.props.deliveryStatus.transitionTo(DELIVERY_STATUS.UNASSIGNED);
     if (toUnassigned.isFailure) return Result.fail<void>(toUnassigned.getError());
     this.props.deliveryStatus = toUnassigned.getValue();

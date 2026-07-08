@@ -55,8 +55,6 @@ export class CreateRestaurant {
     const restaurant = restaurantResult.getValue();
     const events = restaurant.pullDomainEvents();
 
-    // Transaction boundary: persist the new Restaurant aggregate and its outbox
-    // row atomically. Domain events are published only after a successful commit.
     await this.unitOfWork.runInTransaction(async (ctx) => {
       await this.restaurantRepo.save(restaurant);
       if (events.length > 0) {

@@ -1,12 +1,10 @@
-// Thin HTTP delivery for Fulfillment restaurant-side write use-cases (Phase 2) and
-// customer-facing read use-cases (Phase 6).
-// All business logic (ownership, transitions, events) is inside the use cases.
 import { Request, Response, NextFunction } from 'express';
 import { MarkPreparing } from '../../../../application/fulfillment/use-cases/MarkPreparing';
 import { MarkReadyForPickup } from '../../../../application/fulfillment/use-cases/MarkReadyForPickup';
 import { GetRestaurantFulfillments } from '../../../../application/fulfillment/use-cases/GetRestaurantFulfillments';
 import { CancelFulfillment } from '../../../../application/fulfillment/use-cases/CancelFulfillment';
 import { GetLiveTracking } from '../../../../application/fulfillment/use-cases/GetLiveTracking';
+import { ListCustomerOrders } from '../../../../application/fulfillment/use-cases/ListCustomerOrders';
 import { CANCELLED_BY } from '../../../../domain/fulfillment/enums/cancelled-by.enum';
 import { USER_ROLE } from '../../../../domain/identity/enums/user-role.enum';
 
@@ -16,6 +14,7 @@ export interface FulfillmentControllerDeps {
   getRestaurantFulfillments: GetRestaurantFulfillments;
   cancelFulfillment: CancelFulfillment;
   getLiveTracking: GetLiveTracking;
+  listCustomerOrders: ListCustomerOrders;
 }
 
 export class FulfillmentController {
@@ -25,7 +24,7 @@ export class FulfillmentController {
   markPreparing = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const result = await this.deps.markPreparing.execute({
       fulfillmentId: req.params.id as string,
-      restaurantId: req.user!.userId,
+      actorUserId: req.user!.userId,
       prepEstimateMinutes: req.body.prepEstimateMinutes,
     });
     if (result.isFailure) return next(result.getError());
@@ -36,7 +35,7 @@ export class FulfillmentController {
   markReadyForPickup = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const result = await this.deps.markReadyForPickup.execute({
       fulfillmentId: req.params.id as string,
-      restaurantId: req.user!.userId,
+      actorUserId: req.user!.userId,
     });
     if (result.isFailure) return next(result.getError());
     res.status(200).json(result.getValue());
@@ -75,6 +74,24 @@ export class FulfillmentController {
     const result = await this.deps.getLiveTracking.execute({
       fulfillmentId: req.params.id as string,
       customerId: req.user!.userId,
+    });
+    if (result.isFailure) return next(result.getError());
+    res.status(200).json(result.getValue());
+  };
+
+  /**
+   * GET /me/orders — the authenticated customer's order history (Phase 15 / G1).
+   * Each row carries orderRequestId + fulfillmentId so the frontend can resolve and
+   * track orders without the client-only localStorage linkage. Customer-scoped to
+   * the authenticated userId.
+   */
+  listMyOrders = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const limit = req.query.limit ? Number(req.query.limit) : undefined;
+    const offset = req.query.offset ? Number(req.query.offset) : undefined;
+    const result = await this.deps.listCustomerOrders.execute({
+      customerId: req.user!.userId,
+      limit,
+      offset,
     });
     if (result.isFailure) return next(result.getError());
     res.status(200).json(result.getValue());

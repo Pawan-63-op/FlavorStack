@@ -84,9 +84,7 @@ describe('Login use-case', () => {
       const auth = result.getValue();
       const sessions = await sessionStore.list(customer._id);
       const session = sessions[0];
-      // Hash must not equal the raw token
       expect(session.refreshTokenHash).not.toBe(auth.refreshToken);
-      // But it should equal what FakeRefreshTokenHasher produces
       expect(session.refreshTokenHash).toBe(refreshTokenHasher.hash(auth.refreshToken));
     });
 
@@ -144,7 +142,6 @@ describe('Login use-case', () => {
       customer.pullDomainEvents();
       await userRepo.save(customer);
 
-      // 5 failed attempts (shouldLockAfterAttempt uses loginAttempts + 1 >= maxAttempts)
       for (let i = 0; i < 5; i++) {
         await useCase.execute({ ...dto, password: 'WrongPass1!' });
       }
@@ -155,7 +152,6 @@ describe('Login use-case', () => {
 
     it('returns account_locked_or_banned after account is locked', async () => {
       const customer = makeCustomer();
-      // Lock the account directly
       customer.lockAccount();
       customer.pullDomainEvents();
       await userRepo.save(customer);
@@ -187,12 +183,10 @@ describe('Login use-case', () => {
       customer.pullDomainEvents();
       await userRepo.save(customer);
 
-      // 5 failed — last one locks the account
       for (let i = 0; i < 5; i++) {
         await useCase.execute({ ...dto, password: 'WrongPass1!' });
       }
 
-      // 6th attempt — account should be locked
       const result = await useCase.execute(dto);
       expect(result.isFailure).toBe(true);
       const err = result.getError() as DomainError;

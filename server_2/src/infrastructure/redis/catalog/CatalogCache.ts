@@ -1,19 +1,3 @@
-// CatalogCache — Redis-backed cache-aside + event-driven invalidation for the
-// catalog read side (Phase 13).
-//
-// Two key families:
-//   • Per-restaurant keys (`summary:{id}`, `menu:{id}`) are invalidated directly by
-//     id when that restaurant's projection is rebuilt or tombstoned.
-//   • Collection-scoped keys (browse lists, serviceability) embed a monotonic
-//     GENERATION counter. Their membership/content depends on many restaurants and
-//     filters, so the keys can't be enumerated to delete; instead invalidation
-//     bumps the generation, orphaning every old key at once. Old keys carry short
-//     TTLs and expire on their own. The next read computes against the new
-//     generation → guaranteed fresh.
-//
-// Ordering guarantee: the projector rebuilds the projection FIRST, then calls
-// `invalidateRestaurant`. So a read after invalidation always repopulates from the
-// committed, up-to-date projection — no stale reads survive a write.
 import { CacheStore } from '../CacheStore';
 import {
   ICatalogCacheInvalidator,
@@ -49,7 +33,6 @@ export class CatalogCache implements ICatalogCacheInvalidator, IServiceabilityCa
     private readonly ttls: CatalogCacheTtls = DEFAULT_CATALOG_CACHE_TTLS
   ) {}
 
-  // ── key builders ─────────────────────────────────────────────
   private summaryKey(restaurantId: string): string {
     return `${PREFIX}:summary:${restaurantId}`;
   }
@@ -70,13 +53,11 @@ export class CatalogCache implements ICatalogCacheInvalidator, IServiceabilityCa
     return `${PREFIX}:svc:g${generation}:${point.lat}:${point.lng}:${subtotal.amount}:${subtotal.currency}`;
   }
 
-  // ── generation ───────────────────────────────────────────────
   /** Current collection generation; absent counter reads as 0 (cold start). */
   async currentGeneration(): Promise<number> {
     return (await this.cache.get<number>(GENERATION_KEY)) ?? 0;
   }
 
-  // ── read-through helpers (used by CachedCatalogReadRepository) ─
   rememberSummary<T>(restaurantId: string, loader: () => Promise<T>): Promise<T> {
     return this.cache.getOrSet(this.summaryKey(restaurantId), this.ttls.summarySeconds, loader);
   }
@@ -90,7 +71,6 @@ export class CatalogCache implements ICatalogCacheInvalidator, IServiceabilityCa
     return this.cache.getOrSet(this.listKey(generation, discriminator), this.ttls.listSeconds, loader);
   }
 
-  // ── IServiceabilityCache ─────────────────────────────────────
   async remember<T>(
     point: ServiceabilityCachePoint,
     subtotal: ServiceabilityCacheSubtotal,
@@ -104,12 +84,9 @@ export class CatalogCache implements ICatalogCacheInvalidator, IServiceabilityCa
     );
   }
 
-  // ── ICatalogCacheInvalidator ─────────────────────────────────
   async invalidateRestaurant(restaurantId: string): Promise<void> {
-    // Drop the restaurant's own projections...
     await this.cache.del(this.summaryKey(restaurantId));
     await this.cache.del(this.menuKey(restaurantId));
-    // ...and rotate every collection-scoped key (lists + serviceability) in one shot.
     await this.cache.incr(GENERATION_KEY);
   }
 }

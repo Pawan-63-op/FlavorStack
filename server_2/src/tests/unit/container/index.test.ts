@@ -1,7 +1,5 @@
 import { generateKeyPairSync } from 'crypto';
 
-// --- Mock the I/O boundaries that bootstrap() owns (Mongo + Redis connections).
-//     Everything else (container factories, use-case construction) runs for real.
 jest.mock('../../../infrastructure/database/connection', () => ({
   connectDB: jest.fn(),
   disconnectDB: jest.fn(),
@@ -17,9 +15,6 @@ jest.mock('../../../infrastructure/redis/client', () => ({
   RedisClient: jest.fn(() => mockRedisInstance),
 }));
 
-// Seeding runs a real Mongo query; bootstrap's Mongo connection is mocked as `{}` here, so stub the
-// seed runner. Its execution + ordering (before OutboxProcessor.start) is asserted via this mock;
-// the real seed logic (fresh-DB create + idempotency) is covered by the engagement integration test.
 jest.mock('../../../infrastructure/database/seeds', () => ({
   runSeeds: jest.fn().mockResolvedValue({ notificationTemplatesCreated: 0 }),
 }));
@@ -80,14 +75,11 @@ function setValidEnv(): void {
   process.env.JWT_PUBLIC_KEY = publicKey;
   process.env.RESEND_API_KEY = 'test-resend-key';
   process.env.BCRYPT_ROUNDS = '4';
-  // Keep the poll interval long so the real OutboxProcessor timer never fires mid-test.
   process.env.OUTBOX_POLL_INTERVAL_MS = '999999';
 }
 
 beforeEach(() => {
   setValidEnv();
-  // `resetMocks: true` (jest.config.js) wipes implementations before each test, so
-  // re-establish the constructor + instance method behavior here.
   (RedisClient as unknown as jest.Mock).mockImplementation(() => mockRedisInstance);
   (Queue as unknown as jest.Mock).mockImplementation(function (this: { add: jest.Mock; close: jest.Mock }) {
     this.add = jest.fn().mockResolvedValue(undefined);
@@ -152,7 +144,6 @@ describe('bootstrap', () => {
     const app = await bootstrap();
 
     try {
-      // Handlers must be live before the processor begins draining events.
       expect(startSpy).toHaveBeenCalledTimes(1);
       const subscribed = await emailHandlerIsSubscribed(app);
       expect(subscribed).toBe(true);
@@ -169,7 +160,6 @@ describe('bootstrap', () => {
 
     try {
       expect(runSeeds).toHaveBeenCalledTimes(1);
-      // Templates must be seeded before events are drained and dispatched.
       const seedOrder = (runSeeds as jest.Mock).mock.invocationCallOrder[0];
       const startOrder = startSpy.mock.invocationCallOrder[0];
       expect(seedOrder).toBeLessThan(startOrder);

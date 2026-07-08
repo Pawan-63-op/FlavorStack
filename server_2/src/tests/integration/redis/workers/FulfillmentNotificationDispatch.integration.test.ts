@@ -1,16 +1,3 @@
-// Fulfillment Phase 8, Batch 3 — end-to-end DoD verification for the notification path across the
-// queue/worker seam (BullMQ + Redis). Proves the §12 DoD "notifications fire once per event (dedup
-// verified); failures land in DLQ" for the FULFILLMENT side specifically:
-//
-//   fulfillment status event → FulfillmentNotificationDispatcher → NotifyQueue (notification-queue)
-//     → NotifyWorker → IPushProvider.sendPush
-//
-// Complements the worker-level NotifyWorker.integration.test.ts (raw push jobs) by driving the real
-// dispatcher: per-recipient fan-out, replay dedup, and the notification DLQ.
-//
-// The assignment-retry → auto-cancel-after-N and SLA-timeout paths are NOT re-proven here — they are
-// covered by the existing Phase 5B suites (src/tests/integration/fulfillment/failure-reassignment +
-// cancellation + assignment-flow); Batch 3's verification step runs those to confirm no regression.
 import { Queue } from 'bullmq';
 import IORedis from 'ioredis';
 import { StartedRedisContainer } from '@testcontainers/redis';
@@ -67,7 +54,6 @@ describe('Fulfillment notification dispatch integration (event -> queue -> worke
     await container.stop();
   });
 
-  // Clean queues between cases so jobIds / DLQ entries never bleed across tests.
   afterEach(async () => {
     await flushClient.flushall();
   });
@@ -85,7 +71,6 @@ describe('Fulfillment notification dispatch integration (event -> queue -> worke
       await dispatcher.handle(event);
       await waitUntil(() => provider.sendPush.mock.calls.length === 1);
 
-      // token == customerId placeholder; copy + data flow through from the mapper.
       expect(provider.sendPush).toHaveBeenCalledWith(
         'cust-1',
         'Order confirmed',
@@ -93,7 +78,6 @@ describe('Fulfillment notification dispatch integration (event -> queue -> worke
         { fulfillmentId: 'ful-1', event: 'FulfillmentCreated' },
       );
 
-      // Replay the same eventId — in-memory guard + jobId dedup => no second send.
       await dispatcher.handle(event);
       await new Promise((r) => setTimeout(r, 1500));
       expect(provider.sendPush).toHaveBeenCalledTimes(1);

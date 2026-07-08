@@ -1,11 +1,3 @@
-// Shapes for the commerce_catalog_view local projection (Commerce Phase 5).
-//
-// This is Commerce's own denormalized copy of the Catalog data needed for
-// cart-time validation (restaurant status/visibility/open hours/delivery fee
-// inputs, menu item price/variants/availability). It is intentionally a plain
-// mirror of the subset of Catalog's domain shapes Commerce cares about — no
-// types are imported from `domain/catalog` so the two contexts stay decoupled
-// at the type level too.
 
 export interface CommerceCatalogDayInterval {
   open: string; // "HH:mm"

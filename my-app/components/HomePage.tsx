@@ -6,9 +6,11 @@ import { Badge } from "./ui/badge";
 import { motion } from "motion/react";
 import { useRouter } from "next/navigation";
 import { Search, MapPin, UtensilsCrossed, Home, User, Receipt, Clock, Star, TrendingUp } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { ImageWithFallback } from "@/figma/ImageWithFallback";
 import { useAddressStore } from "@/store/addressStore";
+import { useHydrateAddresses } from "@/lib/api/hooks/useHydrateAddresses";
+import { NearbyRestaurants } from "./NearbyRestaurants";
 import Link from "next/link";
 
 interface HomePageProps {
@@ -20,8 +22,8 @@ export function HomePage(){
   const [searchQuery, setSearchQuery] = useState("");
   const [searchType, setSearchType] = useState<"name" | "city" | "country" | "menu">("name");
 
-  const { addresses, isLoading: addressLoading, fetchAddresses } = useAddressStore();
-  useEffect(() => { fetchAddresses(); }, []);
+  const { addresses } = useAddressStore();
+  useHydrateAddresses();
 
   const handleSearch = () => {
     if (searchQuery.trim()) {
@@ -137,6 +139,9 @@ router.push(`/search?q=${encodeURIComponent(searchQuery)}`);
         </div>
       </motion.div>
 
+      {/* Nearby (flag-gated: renders nothing unless `nearby` is enabled) */}
+      <NearbyRestaurants />
+
       {/* Quick Actions */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -211,17 +216,11 @@ router.push(`/search?q=${encodeURIComponent(searchQuery)}`);
           </Link>
         </div>
 
-        {addressLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[1, 2].map((i) => (
-              <div key={i} className="h-24 rounded-xl bg-muted animate-pulse" />
-            ))}
-          </div>
-        ) : addresses.length > 0 ? (
+        {addresses.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {addresses.slice(0, 3).map((addr, index) => (
               <motion.div
-                key={addr._id}
+                key={addr.id}
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ delay: 0.15 + index * 0.05 }}
@@ -242,7 +241,7 @@ router.push(`/search?q=${encodeURIComponent(searchQuery)}`);
                               <span className="text-xs text-primary font-medium">Default</span>
                             )}
                           </div>
-                          <p className="text-sm text-muted-foreground truncate">{addr.address}</p>
+                          <p className="text-sm text-muted-foreground truncate">{addr.addressLines}, {addr.city}</p>
                           <p className="text-xs text-muted-foreground mt-0.5">{addr.phone}</p>
                         </div>
                       </div>

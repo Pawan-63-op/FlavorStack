@@ -1,6 +1,3 @@
-// BullMQ producer for the Fulfillment delayed jobs — concrete IFulfillmentJobScheduler over
-// QUEUE.fulfillment (fulfillment_module.md §10, Phase 5B). Jobs are enqueued with a `delay` so they
-// become due at the offer TTL / SLA deadline, and a stable `jobId` so an at-least-once re-arm is de-duped.
 import { Queue } from 'bullmq';
 
 import { FulfillmentJob, IFulfillmentJobScheduler, ScheduleOptions } from '../../../application/fulfillment/jobs/FulfillmentJob';

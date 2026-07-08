@@ -17,17 +17,13 @@ export class LogoutAllSessions {
   ) {}
 
   async execute(dto: LogoutAllDto): Promise<Result<void>> {
-    // 1. Load user
     const user = await this.userRepo.findById(dto.userId);
     if (!user) return Result.fail(new NotFoundError('user_not_found'));
 
-    // 2. Bump tokenVersion (no domain event raised)
     user.invalidateAllSessions();
 
-    // 3. Pull events (will be empty)
     const events = user.pullDomainEvents();
 
-    // 4. Atomic transaction: update user (tokenVersion bump)
     await this.unitOfWork.runInTransaction(async (ctx) => {
       await this.userRepo.update(user);
       if (events.length > 0) {
@@ -35,7 +31,6 @@ export class LogoutAllSessions {
       }
     });
 
-    // 5. Post-commit: publish events (no-op if empty) and clear Redis sessions
     if (events.length > 0) {
       await this.eventBus.publishAll(events);
     }

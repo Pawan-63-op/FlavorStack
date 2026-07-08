@@ -21,7 +21,6 @@ export class GrantPermission {
   ) {}
 
   async execute(dto: GrantPermissionDto): Promise<Result<void>> {
-    // 1. Load actor and target — both must be admins
     const actor = await this.userRepo.findById(dto.actorId);
     if (!actor) return Result.fail(new NotFoundError('actor_not_found'));
     if (!(actor instanceof Admin)) return Result.fail(new ForbiddenError('actor_not_admin'));
@@ -30,7 +29,6 @@ export class GrantPermission {
     if (!target) return Result.fail(new NotFoundError('admin_not_found'));
     if (!(target instanceof Admin)) return Result.fail(new NotFoundError('admin_not_found'));
 
-    // 2. Authorize the actor (super-admins short-circuit via hasPermission)
     try {
       actor.assertPermission(PERMISSION_RESOURCE.USER, PERMISSION_ACTION.MANAGE);
     } catch (e) {
@@ -38,7 +36,6 @@ export class GrantPermission {
       throw e;
     }
 
-    // 3. Validate the permission to grant
     const permissionResult = Permission.create({
       resource: dto.resource,
       action: dto.action,
@@ -46,13 +43,10 @@ export class GrantPermission {
     });
     if (permissionResult.isFailure) return Result.fail(permissionResult.getError());
 
-    // 4. Grant (idempotent — raises PermissionGranted only if not already held)
     target.grantPermission(permissionResult.getValue());
 
-    // 5. Pull events
     const events = target.pullDomainEvents();
 
-    // 6. Atomic transaction: persist target + outbox
     await this.unitOfWork.runInTransaction(async (ctx) => {
       await this.userRepo.update(target);
       if (events.length > 0) {
@@ -60,7 +54,6 @@ export class GrantPermission {
       }
     });
 
-    // 7. Post-commit: publish events (no-op if idempotent)
     if (events.length > 0) {
       await this.eventBus.publishAll(events);
     }

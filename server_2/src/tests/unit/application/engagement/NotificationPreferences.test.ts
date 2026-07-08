@@ -50,7 +50,6 @@ describe('GetNotificationPreferences', () => {
 
     expect(result.isSuccess).toBe(true);
     expect(result.getValue().userId).toBe('user-1');
-    // PROMOTIONS is push-only by default
     expect(result.getValue().channels[NOTIFICATION_CATEGORY.PROMOTIONS].email).toBe(false);
   });
 

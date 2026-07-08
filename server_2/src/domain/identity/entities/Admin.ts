@@ -1,4 +1,3 @@
-// src/modules/user/domain/entities/Admin.ts
 
 import { BaseUser } from './BaseUser'
 import { USER_ROLE, UserRole } from '../enums/user-role.enum'
@@ -8,26 +7,21 @@ import { PermissionResource, PERMISSION_RESOURCE } from '../enums/permission-res
 import { AuditEntry } from '../value-objects/AuditEntry.vo'
 import { CreateAdminInput } from '../types/CreateAdminInput'
 
-// Imports added for Batch 5
 import { ForbiddenError } from '../../shared/errors/ForbiddenError';
 import { UserRegistered } from '../events/UserRegistered';
 import { RoleAssigned } from '../events/RoleAssigned';
 import { PermissionGranted } from '../events/PermissionGranted';
 
 export class Admin extends BaseUser {
-    // Identity
     department: string
     isSuperAdmin!: boolean
     managedBy!: string
 
-    //RBAC  
     permissions: Permission[]
 
-    // two factor auth
     twoFactorEnabled: boolean
     twoFactorSecret: string | null
     
-    // audit
     auditLog: AuditEntry[]
     lastActivityAt: Date | null
 
@@ -44,14 +38,11 @@ export class Admin extends BaseUser {
         this.managedBy = data.managedBy ?? ''
     }
 
-    // ── Abstract ──────────────────────────────────────────
     get displayName() { return `${this.name} (Admin)` }
 
-    // ── Virtuals ──────────────────────────────────────────
     get isFullAccess() { return this.isSuperAdmin }
     get permissionSummary() { return this.permissions.map(p => p.toString()) }
 
-    // ── RBAC checks ───────────────────────────────────────
     hasPermission(resource: PermissionResource, action: PermissionAction): boolean {
         if (this.isSuperAdmin) return true
         return this.permissions.some(p => p.matches(resource, action))
@@ -67,7 +58,6 @@ export class Admin extends BaseUser {
         }
     }
 
-    // ── Permission management ─────────────────────────────
     grantPermission(p: Permission) {
         const exists = this.permissions.some(ep => ep.matches(p.resource, p.action))
         if (!exists) {
@@ -84,7 +74,6 @@ export class Admin extends BaseUser {
     
     revokeAllPermissions() { this.permissions = []; this.isSuperAdmin = false }
 
-    // ── User / driver management (pure state rules) ───────
     assertCanBan(targetRole: UserRole) {
         if (targetRole === USER_ROLE.ADMIN && !this.isSuperAdmin) {
             throw new ForbiddenError('Only super admins can ban other admins');
@@ -99,7 +88,6 @@ export class Admin extends BaseUser {
         this.addDomainEvent(new RoleAssigned(targetUserId, targetRole, this._id));
     }
 
-    // ── 2FA ───────────────────────────────────────────────
     enable2FA(secret: string) {
         this.twoFactorSecret = secret
         this.twoFactorEnabled = true
@@ -110,7 +98,6 @@ export class Admin extends BaseUser {
         this.twoFactorEnabled = false
     }
 
-    // ── Audit ─────────────────────────────────────────────
     logAction(action: string, meta: object) {
         this.auditLog.push({
             action,
@@ -120,7 +107,6 @@ export class Admin extends BaseUser {
         this.lastActivityAt = new Date()
     }
 
-    // ── Static factory ────────────────────────────────────
     static create(input: CreateAdminInput): Admin {
         const admin = new Admin({
             ...input,

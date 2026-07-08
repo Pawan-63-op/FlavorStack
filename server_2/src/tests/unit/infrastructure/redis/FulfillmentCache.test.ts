@@ -1,10 +1,6 @@
-// Unit tests for FulfillmentCache (Phase 9 / Batch 9.1).
-// Backed by a real CacheStore over an in-memory fake of the ioredis subset CacheStore touches,
-// so getOrSet + generation rotation are exercised for real.
 import { CacheStore } from '../../../../infrastructure/redis/CacheStore';
 import { FulfillmentCache } from '../../../../infrastructure/redis/fulfillment/FulfillmentCache';
 
-// ── in-memory redis fake ───────────────────────────────────────────────────────
 class FakeRedis {
   private store = new Map<string, string>();
   async get(key: string): Promise<string | null> {
@@ -91,7 +87,6 @@ describe('FulfillmentCache', () => {
         .mockResolvedValueOnce([{ status: 'READY_FOR_PICKUP' }]);
 
       await cache.rememberDashboard('status=', loader);
-      // Any view-mutating event bumps the generation, orphaning every dashboard page.
       await cache.invalidateFulfillment('some-other-fulfillment');
       const after = await cache.rememberDashboard('status=', loader);
 

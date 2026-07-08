@@ -1,4 +1,3 @@
-// Polling helper for BullMQ integration tests — avoids relying on fixed sleeps.
 export async function waitUntil(
   condition: () => Promise<boolean> | boolean,
   timeoutMs = 30000,

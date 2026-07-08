@@ -1,4 +1,3 @@
-// Read shape returned by Notification use cases (engagement_module.md §4/§5).
 import { Notification } from '../../../domain/engagement/entities/Notification';
 
 export interface NotificationResponse {

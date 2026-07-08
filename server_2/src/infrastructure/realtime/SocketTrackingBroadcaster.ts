@@ -1,11 +1,3 @@
-// SocketTrackingBroadcaster — implements ITrackingBroadcaster over the Socket.IO `/tracking`
-// namespace (fulfillment_module.md §9, Phase 7).
-//
-// Late-bound on purpose: the container constructs this broadcaster (so RecordRiderLocation and
-// TrackingStatusBridge can depend on it during bootstrap), but the Socket.IO namespace only exists
-// AFTER the HTTP server is listening (server.ts). `attach(namespace)` wires the real target; until
-// then broadcasts are no-ops (no clients are connected pre-listen anyway). The Socket.IO Redis
-// adapter on the namespace fans `.to(room).emit(...)` out across every instance.
 import type { Namespace } from 'socket.io';
 import {
   ITrackingBroadcaster,

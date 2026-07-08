@@ -1,5 +1,3 @@
-// Master fulfillment lifecycle states (fulfillment_module.md §2.4 / §4.1).
-// Phase 1 only ever constructs CREATED; later phases drive the remaining transitions.
 export const FULFILLMENT_STATUS = {
   CREATED: 'CREATED',
   PREPARING: 'PREPARING',

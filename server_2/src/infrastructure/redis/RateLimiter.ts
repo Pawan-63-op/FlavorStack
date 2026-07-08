@@ -1,7 +1,3 @@
-// RateLimiter — infra-only sorted-set sliding-window limiter over Redis.
-// No domain interface: the eventual consumer is the API rate-limit middleware.
-// The count-and-add runs inside a single atomic Lua script (see slidingWindow.ts),
-// making it distributed-safe across API instances sharing one Redis.
 import { randomUUID } from 'crypto';
 import { RedisClient } from './client';
 import { rateLimitKey } from './keys';
@@ -37,7 +33,6 @@ export const DEFAULT_RATE_LIMITS: Record<RateLimitAction, RateLimitRule> = {
   'otp-generation': { windowSeconds: 600, max: 3 },
   'otp-verification': { windowSeconds: 600, max: 5 },
   'password-reset': { windowSeconds: 3600, max: 3 },
-  // Public, unauthenticated discovery (search/nearby) — keyed by IP, generous.
   'catalog-search': { windowSeconds: 60, max: 60 },
 };
 
@@ -59,7 +54,6 @@ export class RateLimiter {
     const rule = this.rules[action];
     const now = Date.now();
     const windowMs = rule.windowSeconds * 1000;
-    // Unique member so simultaneous calls in the same ms each count distinctly.
     const member = `${now}-${randomUUID()}`;
 
     const [allowed, remaining, retryAfter] = (await this.redisClient

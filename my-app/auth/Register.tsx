@@ -5,13 +5,15 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useAuthStore } from "@/store/authStore";
-import { registerSchema, type RegisterFormData } from "@/validations/auth";
+import { registerWithRoleSchema, type RegisterWithRoleFormData } from "@/validations/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { UtensilsCrossed, Loader2, Eye, EyeOff } from "lucide-react";
+import { UtensilsCrossed, Loader2, Eye, EyeOff, User, Bike } from "lucide-react";
+import { cn } from "@/lib/utils";
+import type { VehicleInput } from "@/lib/api/adapters/register";
 
 export function Register() {
   const [error, setError]               = useState("");
@@ -23,23 +25,54 @@ export function Register() {
   const isLoading                       = useAuthStore((s) => s.isLoading);
   const user                            = useAuthStore((s) => s.user);
 
-  // FIX: redirect guard — already logged in → go home
+  // Already-verified user lands here → go home. A *just-registered* (auto-
+  // logged-in but unverified) user is NOT redirected by this guard; onSubmit
+  // drives them to /verify-email instead.
   useEffect(() => {
-    if (!isLoading && isAuthenticated && user) {
+    if (!isLoading && isAuthenticated && user?.isVerified) {
       router.replace("/");
     }
   }, [isAuthenticated, isLoading, user]);
 
-  const form = useForm<RegisterFormData>({
-    resolver: zodResolver(registerSchema),
-    defaultValues: { name: "", email: "", password: "", confirmPassword: "" },
+  const form = useForm<RegisterWithRoleFormData>({
+    resolver: zodResolver(registerWithRoleSchema),
+    defaultValues: {
+      role: "CUSTOMER",
+      name: "",
+      email: "",
+      phone: "",
+      password: "",
+      confirmPassword: "",
+      vehicle: {
+        type: "BIKE",
+        brand: "",
+        model: "",
+        licensePlate: "",
+        rcDocumentUrl: "https://example.com/rc.pdf",
+        insuranceUrl: "https://example.com/insurance.pdf",
+      },
+    },
   });
 
-  const onSubmit = async (data: RegisterFormData) => {
+  const role = form.watch("role");
+  const isDriver = role === "DRIVER";
+
+  const onSubmit = async (data: RegisterWithRoleFormData) => {
     setError("");
     try {
-      await registerUser(data.name, data.email, data.password);
-      router.push(`/verify-email?email=${encodeURIComponent(data.email)}`);
+      // Store registers then auto-logs-in; session is live on success.
+      await registerUser({
+        name: data.name,
+        email: data.email,
+        phone: data.phone,
+        password: data.password,
+        role: data.role,
+        // superRefine guarantees all vehicle fields are present when DRIVER.
+        vehicle: data.role === "DRIVER" ? (data.vehicle as VehicleInput) : undefined,
+      });
+      // Both roles auto-login unverified; the driver route-group guard requires a
+      // verified email, so everyone is routed through /verify-email first.
+      router.push("/verify-email");
     } catch (err: any) {
       // FIX: show real error
       setError(err.message || "Registration failed. Please try again.");
@@ -59,7 +92,9 @@ export function Register() {
           <div>
             <CardTitle className="text-2xl text-center">Create Account</CardTitle>
             <CardDescription className="text-center">
-              Sign up to start ordering delicious food
+              {isDriver
+                ? "Sign up as a delivery partner"
+                : "Sign up to start ordering delicious food"}
             </CardDescription>
           </div>
         </CardHeader>
@@ -72,6 +107,42 @@ export function Register() {
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
               )}
+
+              {/* Phase 1 (G4): role toggle — Customer vs Driver self-registration. */}
+              <FormField control={form.control} name="role"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>I want to join as</FormLabel>
+                    <div className="grid grid-cols-2 gap-3" role="radiogroup" aria-label="Account type">
+                      <button type="button" role="radio" aria-checked={field.value === "CUSTOMER"}
+                        onClick={() => field.onChange("CUSTOMER")}
+                        disabled={form.formState.isSubmitting}
+                        className={cn(
+                          "flex flex-col items-center gap-1 rounded-lg border-2 p-3 text-sm transition-colors",
+                          field.value === "CUSTOMER"
+                            ? "border-primary bg-primary/5 text-primary"
+                            : "border-muted text-muted-foreground hover:border-primary/40",
+                        )}>
+                        <User className="h-5 w-5" />
+                        Customer
+                      </button>
+                      <button type="button" role="radio" aria-checked={field.value === "DRIVER"}
+                        onClick={() => field.onChange("DRIVER")}
+                        disabled={form.formState.isSubmitting}
+                        className={cn(
+                          "flex flex-col items-center gap-1 rounded-lg border-2 p-3 text-sm transition-colors",
+                          field.value === "DRIVER"
+                            ? "border-primary bg-primary/5 text-primary"
+                            : "border-muted text-muted-foreground hover:border-primary/40",
+                        )}>
+                        <Bike className="h-5 w-5" />
+                        Driver
+                      </button>
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
               <FormField control={form.control} name="name"
                 render={({ field }) => (
@@ -99,6 +170,19 @@ export function Register() {
                 )}
               />
 
+              <FormField control={form.control} name="phone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Phone</FormLabel>
+                    <FormControl>
+                      <Input type="tel" placeholder="+14155552671"
+                        disabled={form.formState.isSubmitting} {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
               <FormField control={form.control} name="password"
                 render={({ field }) => (
                   <FormItem>
@@ -115,6 +199,9 @@ export function Register() {
                         </button>
                       </div>
                     </FormControl>
+                    <p className="text-xs text-muted-foreground">
+                      At least 8 characters, with an uppercase letter, a number, and a special character.
+                    </p>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -140,6 +227,100 @@ export function Register() {
                   </FormItem>
                 )}
               />
+
+              {/* Phase 1 (G4): vehicle/KYC details — only when registering as a driver. */}
+              {isDriver && (
+                <div className="space-y-4 rounded-lg border border-dashed border-primary/40 p-4">
+                  <p className="text-sm font-medium text-foreground">Vehicle details</p>
+
+                  <FormField control={form.control} name="vehicle.type"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Vehicle Type</FormLabel>
+                        <FormControl>
+                          <select
+                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                            disabled={form.formState.isSubmitting}
+                            {...field}
+                            value={field.value ?? "BIKE"}>
+                            <option value="BIKE">Bike</option>
+                            <option value="SCOOTER">Scooter</option>
+                            <option value="CAR">Car</option>
+                            <option value="BICYCLE">Bicycle</option>
+                          </select>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <FormField control={form.control} name="vehicle.brand"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Brand</FormLabel>
+                          <FormControl>
+                            <Input type="text" placeholder="Honda"
+                              disabled={form.formState.isSubmitting} {...field} value={field.value ?? ""} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField control={form.control} name="vehicle.model"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Model</FormLabel>
+                          <FormControl>
+                            <Input type="text" placeholder="Activa"
+                              disabled={form.formState.isSubmitting} {...field} value={field.value ?? ""} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <FormField control={form.control} name="vehicle.licensePlate"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>License Plate</FormLabel>
+                        <FormControl>
+                          <Input type="text" placeholder="KA01AB1234"
+                            disabled={form.formState.isSubmitting} {...field} value={field.value ?? ""} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField control={form.control} name="vehicle.rcDocumentUrl"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>RC Document URL</FormLabel>
+                        <FormControl>
+                          <Input type="url" placeholder="https://…/rc.pdf"
+                            disabled={form.formState.isSubmitting} {...field} value={field.value ?? ""} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField control={form.control} name="vehicle.insuranceUrl"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Insurance URL</FormLabel>
+                        <FormControl>
+                          <Input type="url" placeholder="https://…/insurance.pdf"
+                            disabled={form.formState.isSubmitting} {...field} value={field.value ?? ""} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              )}
             </CardContent>
 
             <CardFooter className="flex flex-col gap-4">
@@ -147,7 +328,7 @@ export function Register() {
                 disabled={form.formState.isSubmitting}>
                 {form.formState.isSubmitting
                   ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Creating account...</>
-                  : "Create Account"}
+                  : isDriver ? "Create Driver Account" : "Create Account"}
               </Button>
 
               <p className="text-sm text-muted-foreground text-center">

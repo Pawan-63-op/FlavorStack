@@ -1,7 +1,3 @@
-// BullMQ Worker consuming `fulfillment-queue` — runs the delayed assignment-timeout / sla-timeout
-// jobs through FulfillmentJobHandler (fulfillment_module.md §10, Phase 5B). Mirrors NotifyWorker:
-// the worker is a thin shell; all decisioning lives in the application use cases (idempotent + version
-// guarded). Exhausted jobs (after BullMQ's configured attempts) are copied to the DLQ for inspection.
 import { Job, Worker } from 'bullmq';
 
 import { FulfillmentJob } from '../../../application/fulfillment/jobs/FulfillmentJob';

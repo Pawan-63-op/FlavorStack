@@ -1,6 +1,3 @@
-// MongoOpeningHoursService — projection-driven implementation of
-// IOpeningHoursService (Catalog Phase 9). Reads the restaurant_summary projection
-// and reuses the shared `deriveIsOpen` rule (ACTIVE + within opening hours).
 import { IOpeningHoursService } from '../../domain/catalog/services/IOpeningHoursService';
 import { RestaurantSummaryModel, RestaurantSummaryDocument } from '../database/models/RestaurantSummaryModel';
 import { deriveIsOpen } from '../database/projections/openState';

@@ -53,7 +53,6 @@ describe('SubtotalStage', () => {
       }),
     ]);
 
-    // (10000 + 2000 + 1500) * 2 = 27000
     expect(result.getValue().amount).toBe(27000);
   });
 

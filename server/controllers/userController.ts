@@ -2,9 +2,6 @@ import { Response } from 'express';
 import User from '../models/User';
 import { AuthRequest } from "@/Types/allTypes.js";
 
-// @desc    Get user profile
-// @route   GET /api/users/profile
-// @access  Private
 export const getProfile = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const user = await User.findById(req.user?._id);
@@ -14,9 +11,6 @@ export const getProfile = async (req: AuthRequest, res: Response): Promise<void>
   }
 };
 
-// @desc    Update user profile
-// @route   PUT /api/users/profile
-// @access  Private
 export const updateProfile = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const user = await User.findById(req.user?._id);
@@ -55,9 +49,6 @@ export const updateProfile = async (req: AuthRequest, res: Response): Promise<vo
   }
 };
 
-// @desc    Get all users
-// @route   GET /api/users
-// @access  Private/Admin
 export const getAllUsers = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const users = await User.find({}).select('-password');
@@ -67,9 +58,6 @@ export const getAllUsers = async (req: AuthRequest, res: Response): Promise<void
   }
 };
 
-// @desc    Delete user
-// @route   DELETE /api/users/:id
-// @access  Private/Admin
 export const deleteUser = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const user = await User.findById(req.params.id);

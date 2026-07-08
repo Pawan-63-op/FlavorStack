@@ -1,5 +1,3 @@
-// SHA-256 over the full refresh-token JWT — bcrypt's 72-byte truncation would
-// collide on the shared header/claim prefix of two of a user's tokens.
 import { createHash, timingSafeEqual } from 'crypto';
 import { IRefreshTokenHasher } from '../../domain/identity/services/IRefreshTokenHasher';
 

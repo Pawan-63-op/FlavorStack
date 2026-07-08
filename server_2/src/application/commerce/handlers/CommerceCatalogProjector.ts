@@ -1,12 +1,3 @@
-// CommerceCatalogProjector — keeps the commerce_catalog_view local projection in
-// sync with Catalog (Commerce Phase 5). Mirrors CatalogProjector's "rebuild
-// wholesale from source aggregates" strategy: on any restaurant- or item-affecting
-// catalog event, reload the restaurant + its menu items via Catalog's read-only
-// domain repositories and rebuild that restaurant's commerce_catalog_view entry.
-//
-// Idempotency: every event is checkpointed by `eventId` via
-// `ICommerceCatalogReadRepository.markEventProcessed` before any read/write happens,
-// so at-least-once redelivery (outbox -> QUEUE.commerce) is a safe no-op.
 import { DomainEvent } from '../../../domain/shared/DomainEvent';
 import { Restaurant } from '../../../domain/catalog/entities/Restaurant';
 import { MenuItem } from '../../../domain/catalog/entities/MenuItem';
@@ -83,7 +74,6 @@ export class CommerceCatalogProjector {
     private readonly telemetry: CommerceTelemetry = new CommerceTelemetry()
   ) {}
 
-  // ── event reactions ──────────────────────────────────────────
 
   /** RestaurantUpdated / RestaurantStatusChanged — aggregateId IS the restaurantId. */
   async onRestaurantEvent(event: DomainEvent): Promise<void> {
@@ -102,7 +92,6 @@ export class CommerceCatalogProjector {
     await this.rebuild(item.restaurantId, event);
   }
 
-  // ── rebuild core ─────────────────────────────────────────────
 
   /**
    * Rebuild the commerce_catalog_view entry for a restaurant from source aggregates,
@@ -113,7 +102,6 @@ export class CommerceCatalogProjector {
     const isNew = await this.projectionRepo.markEventProcessed(event.eventId, event.eventName, restaurantId);
     if (!isNew) return;
 
-    // Phase 14: projection lag = time from the catalog event occurring to this view rebuild (§11).
     const occurredOn = event.occurredOn instanceof Date ? event.occurredOn.getTime() : new Date(event.occurredOn).getTime();
     if (!Number.isNaN(occurredOn)) {
       this.telemetry.recordProjectionLag(Math.max(0, Date.now() - occurredOn), {

@@ -1,5 +1,3 @@
-// Commerce Phase 14 — MetricsRegistry unit tests. Counters/histograms must be label-aware,
-// snapshot-able, and resettable (the building block the telemetry layer feeds, §11).
 import { MetricsRegistry, metricKey } from '../../../../infrastructure/observability/metrics';
 
 describe('metricKey', () => {

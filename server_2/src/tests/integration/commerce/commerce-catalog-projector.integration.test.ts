@@ -146,7 +146,6 @@ describe('CommerceCatalogProjector (commerce_catalog_view projections)', () => {
     const callsAfterFirst = findByIdSpy.mock.calls.length;
     expect(callsAfterFirst).toBeGreaterThan(0);
 
-    // Redeliver the exact same event (same eventId) — should be a checkpointed no-op.
     await bus.publish(restaurantUpdatedEvent!);
     expect(await CommerceCatalogProjectionCheckpointModel.countDocuments({ _id: restaurantUpdatedEvent!.eventId })).toBe(1);
     expect(findByIdSpy.mock.calls.length).toBe(callsAfterFirst);

@@ -63,7 +63,6 @@ function address(): Address {
 
 function validInput(overrides: Record<string, unknown> = {}) {
   const lines = [line('item-1', 1000, 2, [200]), line('item-2', 500, 1)];
-  // subtotal = (1000+200)*2 + 500 = 2900
   const pricing = PricingBreakdown.create({
     subtotal: money(2900),
     fees: [Fee.create({ type: FEE_TYPE.PLATFORM, amount: money(50) }).getValue()],

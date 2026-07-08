@@ -1,4 +1,3 @@
-// domain/types/CreateAdminInput.ts
 import { Permission } from "../value-objects/Permission.vo";
 export interface CreateAdminInput {
   name: string

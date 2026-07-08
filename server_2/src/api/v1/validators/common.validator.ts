@@ -1,7 +1,5 @@
-// Shared: cursor, pagination, user/admin id param
 import { z } from 'zod';
 
-// BaseUser._id is a UUID string (UniqueEntityId), not a Mongo ObjectId.
 export const objectId = z.string().uuid('Invalid id format');
 
 export const userIdParam = z.object({
@@ -10,6 +8,10 @@ export const userIdParam = z.object({
 
 export const adminIdParam = z.object({
   adminId: objectId,
+});
+
+export const driverIdParam = z.object({
+  id: objectId,
 });
 
 export const sessionIdParam = z.object({

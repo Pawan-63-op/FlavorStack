@@ -24,7 +24,7 @@ function buildDeps() {
     resetPassword: mockUseCase(),
     changePassword: mockUseCase(),
     sendEmailOtp: mockUseCase(),
-    verifyEmailOtp: mockUseCase(),
+    verifyEmail: mockUseCase(),
     sendPhoneOtp: mockUseCase(),
     verifyPhoneOtp: mockUseCase(),
   };
@@ -308,23 +308,23 @@ describe('AuthController', () => {
     });
   });
 
-  describe('verifyEmailOtp', () => {
+  describe('verifyEmail', () => {
     it('verifies the email OTP code for the current user and returns 204', async () => {
-      deps.verifyEmailOtp.execute.mockResolvedValue(Result.ok());
+      deps.verifyEmail.execute.mockResolvedValue(Result.ok());
       const req = mockReq({ user: AUTH_USER, body: { code: '123456' } });
 
-      await controller.verifyEmailOtp(req, res, next);
+      await controller.verifyEmail(req, res, next);
 
-      expect(deps.verifyEmailOtp.execute).toHaveBeenCalledWith({ userId: 'user-1', code: '123456' });
+      expect(deps.verifyEmail.execute).toHaveBeenCalledWith({ userId: 'user-1', code: '123456' });
       expect(res.status).toHaveBeenCalledWith(204);
     });
 
     it('forwards the error to next on failure', async () => {
       const error = new (require('../../../../../domain/shared/errors/ValidationError').ValidationError)('invalid_otp');
-      deps.verifyEmailOtp.execute.mockResolvedValue(Result.fail(error));
+      deps.verifyEmail.execute.mockResolvedValue(Result.fail(error));
       const req = mockReq({ user: AUTH_USER, body: { code: '000000' } });
 
-      await controller.verifyEmailOtp(req, res, next);
+      await controller.verifyEmail(req, res, next);
 
       expect(next).toHaveBeenCalledWith(error);
     });

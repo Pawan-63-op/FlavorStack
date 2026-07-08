@@ -1,13 +1,3 @@
-// UC: DispatchNotification (internal) — the shared notification dispatch flow used by every
-// engagement event handler (engagement_module.md §4). Channel selection/sending happens later in the
-// worker (Phase 4); this use case only resolves intent and queues durable work.
-//
-// Flow: dedupe guard → resolve preference (default-allow) → skip if channel disabled → load + render
-// template (skip gracefully if missing/inactive) → Notification.queue(PENDING) → runInTransaction(save
-// + outbox) → publishAll → enqueue to QUEUE.notification.
-//
-// Idempotency: the dedupe key (`sourceEventId:category`) is checked up front and is also a unique DB
-// index, so at-least-once event redelivery collapses to a single notification + single enqueue.
 import { Result } from '../../../domain/shared/Result';
 import { Notification } from '../../../domain/engagement/entities/Notification';
 import { NotificationPreference } from '../../../domain/engagement/entities/NotificationPreference';
@@ -37,13 +27,11 @@ export class DispatchNotification {
   async execute(dto: DispatchNotificationDto): Promise<Result<DispatchNotificationResponse>> {
     const dedupeKey = buildDedupeKey(dto.sourceEventId, dto.category);
 
-    // Idempotency guard: same triggering event + category already produced a notification.
     const duplicate = await this.notificationRepo.findByDedupeKey(dedupeKey);
     if (duplicate) {
       return Result.ok({ outcome: 'SKIPPED', dedupeKey, reason: 'duplicate' });
     }
 
-    // Preference resolution — default-allow when the user has no stored preference.
     const preference =
       (await this.preferenceRepo.findByUserId(dto.recipientUserId)) ??
       NotificationPreference.createDefault(dto.recipientUserId);
@@ -51,7 +39,6 @@ export class DispatchNotification {
       return Result.ok({ outcome: 'SKIPPED', dedupeKey, reason: 'channel_disabled' });
     }
 
-    // Template resolution + rendering — skip gracefully if missing or deactivated.
     const locale = dto.locale ?? DEFAULT_LOCALE;
     const tmpl = await this.templateRepo.findByKeyChannelLocale(dto.templateKey, dto.channel, locale);
     if (!tmpl || !tmpl.active) {
@@ -80,8 +67,6 @@ export class DispatchNotification {
 
     await this.eventBus.publishAll(events);
 
-    // Enqueue after commit (mirrors publishAll-after-txn). dedupeKey-derived jobId gives queue-level
-    // dedup so a retried handler invocation never double-enqueues.
     await this.notificationQueue.enqueue(
       { type: 'engagement', notificationId: notification.id.toString(), channel: dto.channel },
       { jobId: dedupeKeyToJobId(dedupeKey) }

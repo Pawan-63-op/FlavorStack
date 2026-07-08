@@ -1,4 +1,3 @@
-// Mounts CartController under /v1/cart (Phase 4) — customer-authenticated cart routes (§9).
 import { Router } from 'express';
 import { CartController } from '../controllers/CartController';
 import { authenticate } from '../middleware/authenticate';
@@ -17,15 +16,12 @@ export function createCartRoutes(deps: CartRoutesDeps): Router {
   const auth = authenticate(deps.tokenService);
 
   router.get('/', auth, c.getCart);
-  // Phase 13 — read models. /summary is a static segment, so its order relative to '/'
-  // is immaterial, but it stays above the item routes for readability.
   router.get('/summary', auth, c.getCartSummary);
   router.post('/items', auth, validate(addToCartSchema), c.addItem);
   router.patch('/items/:itemId', auth, validate(cartItemIdParam, 'params'), validate(updateCartItemSchema), c.updateItem);
   router.delete('/items/:itemId', auth, validate(cartItemIdParam, 'params'), c.removeItem);
   router.delete('/', auth, c.clearCart);
 
-  // Phase 8 — promotions
   router.post('/promotion', auth, validate(promotionCodeSchema), c.applyPromotion);
   router.post('/promotion/validate', auth, validate(promotionCodeSchema), c.validatePromotion);
   router.delete('/promotion', auth, c.removePromotion);

@@ -24,7 +24,7 @@ function buildFakeApp() {
     resetPassword: mockUseCase(),
     changePassword: mockUseCase(),
     sendEmailOtp: mockUseCase(),
-    verifyEmailOtp: mockUseCase(),
+    verifyEmail: mockUseCase(),
     sendPhoneOtp: mockUseCase(),
     verifyPhoneOtp: mockUseCase(),
     getProfile: mockUseCase(),
@@ -56,9 +56,6 @@ function buildFakeApp() {
     findById: jest.fn(),
   };
 
-  // Catalog graphs (Phase 11 wiring): createApiRouter constructs the catalog
-  // controllers from these, so the fake container must supply them or createApp
-  // throws. The controllers only store the deps, so mock use-cases suffice.
   const catalogWrite = {
     commands: {
       createRestaurant: mockUseCase(),
@@ -96,8 +93,6 @@ function buildFakeApp() {
     },
   };
 
-  // Commerce graph (Phase 4 wiring): createApiRouter constructs CartController
-  // from these, so the fake container must supply them or createApp throws.
   const commerce = {
     commands: {
       createCart: mockUseCase(),

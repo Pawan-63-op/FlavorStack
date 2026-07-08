@@ -1,18 +1,10 @@
-// import { transporter, sender } from  MailtrapClient
 import { transporter,sender } from "./mailer";
 import { generatePasswordResetEmailHtml, generateResetSuccessEmailHtml, generateWelcomeEmailHtml, htmlContent as templateHtml } from "./htmlEmail";
 
-// Verification Email
 export const sendVerificationEmail = async (email: string, verificationToken: string) => {
     const html = templateHtml.replace("{verificationToken}", verificationToken);
 
     try {
-        // await transporter.sendMail({
-        //     from: sender,
-        //     to: email,
-        //     subject: "Verify your email",
-        //     html: html
-        // });
         console.log(`✅ Verification email sent to ${email}`);
     } catch (error) {
         console.error(error);
@@ -20,7 +12,6 @@ export const sendVerificationEmail = async (email: string, verificationToken: st
     }
 };
 
-// Welcome Email
 export const sendWelcomeEmail = async (email: string, name: string) => {
     const html = generateWelcomeEmailHtml(name);
 
@@ -38,7 +29,6 @@ export const sendWelcomeEmail = async (email: string, name: string) => {
     }
 };
 
-// Password Reset Email
 export const sendPasswordResetEmail = async (email: string, resetURL: string) => {
     const html = generatePasswordResetEmailHtml(resetURL);
 
@@ -56,7 +46,6 @@ export const sendPasswordResetEmail = async (email: string, resetURL: string) =>
     }
 };
 
-// Reset Success Email
 
 export const sendResetSuccessEmail = async (email: string) => {
     const html = generateResetSuccessEmailHtml();

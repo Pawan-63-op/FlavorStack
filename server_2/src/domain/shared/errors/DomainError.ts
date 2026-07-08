@@ -8,10 +8,8 @@ export class DomainError extends Error {
     this.code = code;
     this.details = details;
 
-    // Restore prototype chain
     Object.setPrototypeOf(this, new.target.prototype);
 
-    // Capture stack trace
     if ((Error as any).captureStackTrace) {
       (Error as any).captureStackTrace(this, this.constructor);
     }

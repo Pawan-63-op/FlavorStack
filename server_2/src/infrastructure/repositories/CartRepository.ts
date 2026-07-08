@@ -1,19 +1,3 @@
-// MongoDB implementation of ICartRepository (Commerce Phase 3).
-//
-// Persists the Cart aggregate (with embedded CartItem entities) to the `carts`
-// collection. All translation goes through CartMapper — the repository never
-// accepts or returns Mongoose documents.
-//
-// Session propagation: the active Mongo ClientSession is read implicitly from the
-// shared TransactionContext (AsyncLocalStorage) and attached to every operation,
-// mirroring MongoRestaurantRepository / MongoUserRepository.
-//
-// Optimistic locking: `save` is upsert-style. It guards the update on the
-// `version` present at load (`persistedVersion`); a non-match means a concurrent
-// writer already advanced the document. If the cart was never persisted
-// (persistedVersion === 0 and no document matched), it is inserted instead. A
-// duplicate-key error on that insert means a concurrent writer won first, which
-// also surfaces as ConflictError.
 import type { ClientSession } from 'mongoose';
 import { ICartRepository } from '../../domain/commerce/repositories/ICartRepository';
 import { Cart } from '../../domain/commerce/entities/Cart';
@@ -65,9 +49,6 @@ export class MongoCartRepository implements ICartRepository {
     }
 
     if (cart.persistedVersion === 0) {
-      // No document matched the version-0 guard: either this cart has never
-      // been persisted (insert it), or a concurrent writer already advanced it
-      // past version 0 (duplicate _id on insert -> ConflictError below).
       try {
         await CartModel.create([CartMapper.toPersistence(cart)], { session: this.session });
         return;

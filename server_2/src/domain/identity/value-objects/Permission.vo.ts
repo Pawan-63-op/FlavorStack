@@ -31,7 +31,6 @@ export class Permission extends ValueObject<PermissionProps> {
     if (this.props.resource !== resource || this.props.action !== action) {
       return false;
     }
-    // Scope only constrains the match when this permission carries one.
     if (this.props.scope !== undefined) {
       return this.props.scope === scope;
     }

@@ -1,7 +1,3 @@
-// UC: SubmitReview — a customer reviews a delivered fulfillment (engagement_module.md §4).
-// Eligibility is validated purely from the Engagement-local ReviewEligibility projection (§7), so this
-// never touches Fulfillment/Commerce. Canonical write shape: domain method → pullDomainEvents →
-// runInTransaction(save + outbox.append + markReviewed) → publishAll.
 import { Result } from '../../../domain/shared/Result';
 import { ValidationError } from '../../../domain/shared/errors/ValidationError';
 import { ForbiddenError } from '../../../domain/shared/errors/ForbiddenError';

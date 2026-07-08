@@ -20,9 +20,6 @@ describe('Negative atomicity harness', () => {
 
     const fakeEvent = makeFakeEvent();
 
-    // Simulate commit failure: work() runs (in-memory outbox gets written),
-    // but the transaction throws on commit (DB rolls back in production).
-    // The use-case pattern: publish ONLY after runInTransaction resolves successfully.
     unitOfWork.forceFailOnCommit(new Error('DB error'));
 
     let caught: Error | null = null;
@@ -30,7 +27,6 @@ describe('Negative atomicity harness', () => {
       await unitOfWork.runInTransaction(async (ctx) => {
         await outboxStore.append([fakeEvent], ctx);
       });
-      // This line is only reached on successful commit — skipped when tx throws.
       await eventBusSpy.publishAll([fakeEvent]);
     } catch (e) {
       caught = e as Error;
@@ -38,9 +34,7 @@ describe('Negative atomicity harness', () => {
 
     expect(caught).not.toBeNull();
     expect(caught!.message).toBe('DB error');
-    // work() ran so outbox received events (in prod these would be rolled back by DB tx)
     expect(outboxStore.appended).toHaveLength(1);
-    // The critical invariant: bus publish is NEVER called when the transaction throws
     expect(eventBusSpy.publishedEvents).toHaveLength(0);
   });
 

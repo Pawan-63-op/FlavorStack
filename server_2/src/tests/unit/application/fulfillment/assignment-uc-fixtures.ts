@@ -1,5 +1,3 @@
-// Shared builders/mocks for the Phase 3B rider-assignment use-case unit tests.
-// (Not a *.test.ts file, so jest does not collect it as a suite.)
 import { Fulfillment } from '../../../../domain/fulfillment/entities/Fulfillment';
 import { FulfillmentLine } from '../../../../domain/fulfillment/value-objects/FulfillmentLine';
 import { DeliveryAddress } from '../../../../domain/fulfillment/value-objects/DeliveryAddress';

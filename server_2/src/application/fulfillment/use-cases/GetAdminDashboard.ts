@@ -1,5 +1,3 @@
-// UC: GetAdminDashboard — returns the admin fulfillment dashboard with optional filters
-// (fulfillment_module.md §6.2 / §7.4, Phase 6). No transaction; reads from AdminDashboardView projection.
 import { Result } from '../../../domain/shared/Result';
 import {
   IFulfillmentProjectionRepository,

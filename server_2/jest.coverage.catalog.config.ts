@@ -1,12 +1,5 @@
 import type { Config } from 'jest';
 
-// Catalog module coverage gate (Phase 14). Runs the pure unit suite for the catalog
-// domain + application layers and enforces the ≥80% bar across all four metrics.
-//
-// The in-process projector (`application/catalog/handlers/`) is excluded here: it is
-// infrastructure-coupled glue exercised by the catalog INTEGRATION suite
-// (read-model-projector / catalog-cache), not by mockable unit tests. Search/repo
-// adapters live in `infrastructure/` and are likewise integration-covered.
 const config: Config = {
   preset: 'ts-jest',
   testEnvironment: 'node',

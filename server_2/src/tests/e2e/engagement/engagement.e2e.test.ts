@@ -1,11 +1,3 @@
-// Engagement API e2e (Phase 5) — black-box over the real HTTP API (supertest + createApp)
-// against MongoMemoryReplSet (tests/setup.ts) + a disposable Redis.
-//
-// Exercises the happy paths from engagement_module.md §5/Phase 5:
-//   update preferences -> get preferences reflects it
-//   seed notification -> list history -> mark read -> unread count drops
-//   seed review eligibility -> submit review -> public rating zeroed pre-approval
-//   admin approves -> rating updated; admin rejects a second review -> rating unaffected
 import { generateKeyPairSync, randomUUID } from 'crypto';
 import request from 'supertest';
 import type { Express } from 'express';
@@ -108,7 +100,6 @@ describe('Engagement API e2e (Phase 5)', () => {
     process.env = { ...ORIGINAL_ENV };
   });
 
-  // ── Notification preferences ────────────────────────────────────────────
 
   it('returns default-allow preferences for a user with none set', async () => {
     const res = await agent.get('/api/v1/me/notification-preferences').set('Cookie', customerCookie);
@@ -130,7 +121,6 @@ describe('Engagement API e2e (Phase 5)', () => {
     expect(get.body.channels.ORDER_UPDATES.email).toBe(false);
   });
 
-  // ── Notification history / read / unread count ──────────────────────────
 
   let notificationId: string;
 
@@ -171,7 +161,6 @@ describe('Engagement API e2e (Phase 5)', () => {
     expect(after.body.count).toBe(beforeCount - 1);
   });
 
-  // ── Reviews + rating ──────────────────────────────────────────────────
 
   it('returns a zeroed rating for a restaurant with no approved reviews', async () => {
     const res = await agent.get(`/api/v1/restaurants/${restaurantId}/rating`);

@@ -3,14 +3,6 @@ import { ValidationError } from '../../../shared/errors/ValidationError';
 import { Money } from '../../../shared/Money';
 import { AppliedPromotion } from '../../value-objects/AppliedPromotion';
 
-// Pricing pipeline stage 4 (Commerce Phase 8, §4.2) — pure.
-// Resolves the discount contribution from an already-validated AppliedPromotion.
-//
-// The promotion is resolved upstream by IPromotionService (cart-time apply / checkout
-// recompute); this stage stays pure and only folds its discount into the pipeline. With
-// no promotion it yields a zero discount in the subtotal's currency — preserving the
-// Phase 7 reproducibility invariant. It guards currency match and ensures the discount
-// can never exceed the subtotal (which would drive the total negative).
 export class PromotionStage {
   public static run(promotion: AppliedPromotion | undefined | null, subtotal: Money): Result<Money> {
     if (!(subtotal instanceof Money)) {

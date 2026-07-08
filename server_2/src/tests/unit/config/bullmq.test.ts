@@ -13,11 +13,9 @@ describe('bullmq config', () => {
         email: 'email-queue',
         notification: 'notification-queue',
         dlq: 'dead-letter-queue',
-        // Cross-context fan-out queues added in Catalog Phase 12 (EventRouter targets).
         commerce: 'commerce-queue',
         fulfillment: 'fulfillment-queue',
         searchReindex: 'search-reindex-queue',
-        // Publish-and-park targets added in Commerce Phase 12 (no consumer yet).
         ordering: 'ordering-queue',
         payments: 'payments-queue',
       });
@@ -52,7 +50,6 @@ describe('bullmq config', () => {
       process.env.REDIS_DB = '2';
       process.env.REDIS_TLS = 'true';
       process.env.REDIS_KEY_PREFIX = 'flavorstack:';
-      // even if someone tries to relax it via env, BullMQ requires null
       process.env.REDIS_MAX_RETRIES_PER_REQUEST = '7';
 
       expect(getBullConnection()).toEqual({

@@ -27,7 +27,6 @@ export class RegisterCustomer {
   ) {}
 
   async execute(dto: RegisterCustomerDto): Promise<Result<AuthResponse>> {
-    // 1. Validate email + password VOs
     const emailResult = Email.create(dto.email);
     if (emailResult.isFailure) return Result.fail(emailResult.getError());
     const email = emailResult.getValue();
@@ -35,11 +34,9 @@ export class RegisterCustomer {
     const passwordResult = Password.create(dto.password);
     if (passwordResult.isFailure) return Result.fail(passwordResult.getError());
 
-    // 2. Check email uniqueness
     const exists = await this.userRepo.existsByEmail(email);
     if (exists) return Result.fail(new ConflictError('email_already_registered'));
 
-    // 3. Resolve referral (silently ignore if not found)
     let referralCode: string | undefined;
     if (dto.referralCode) {
       const referrer = await this.customerRepo.findByReferralCode(dto.referralCode);
@@ -48,10 +45,8 @@ export class RegisterCustomer {
       }
     }
 
-    // 4. Hash password
     const passwordHash = await this.passwordHasher.hash(dto.password);
 
-    // 5. Build optional address
     let defaultAddress: Address | undefined;
     if (dto.address) {
       const geoResult = GeoPoint.create(dto.address.lat, dto.address.lng);
@@ -69,8 +64,6 @@ export class RegisterCustomer {
       defaultAddress = addressResult.getValue();
     }
 
-    // 6. Create aggregate (raises UserRegistered internally)
-    // Generate a unique referral code for this new customer
     const newCustomerReferralCode = randomUUID().slice(0, 8).toUpperCase();
     const createInput = {
       name: dto.name,
@@ -81,15 +74,12 @@ export class RegisterCustomer {
       ...(defaultAddress ? { defaultAddress } : {}),
     };
     const customer = Customer.create(createInput);
-    // Set referredBy post-construction if a valid referral code was used
     if (referralCode) {
       customer.referredBy = referralCode;
     }
 
-    // 7. Pull events
     const events = customer.pullDomainEvents();
 
-    // 8. Atomic transaction: save + outbox
     await this.unitOfWork.runInTransaction(async (ctx) => {
       await this.userRepo.save(customer);
       if (events.length > 0) {
@@ -97,10 +87,8 @@ export class RegisterCustomer {
       }
     });
 
-    // 9. Post-commit publish
     await this.eventBus.publishAll(events);
 
-    // 10. Return empty-token AuthResponse (email not verified yet)
     return Result.ok(toAuthResponse(customer, '', '', 0));
   }
 }

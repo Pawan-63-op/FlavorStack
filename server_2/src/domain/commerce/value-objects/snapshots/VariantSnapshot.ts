@@ -1,5 +1,3 @@
-// VO: { optionId, label, priceDelta: Money, schemaVersion } — immutable copy of a selected
-// variant/add-on option taken at checkout (Commerce Phase 9, commerce_module.md §3.3/§6.4).
 import { ValueObject } from '../../../shared/ValueObject';
 import { Result } from '../../../shared/Result';
 import { ValidationError } from '../../../shared/errors/ValidationError';

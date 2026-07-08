@@ -1,19 +1,3 @@
-// Phase 9, Batch 5 — end-to-end validation of the composition root (`bootstrap`/
-// `shutdown`) against real Mongo + Redis. Exercises Batches 0-4 as a black box.
-//
-// Harness notes (see identity_phase9.md §7 Batch 5 "Risks/validation"):
-// - Mongo: `tests/setup.ts` already opens a MongoMemoryReplSet + connects Mongoose
-//   in a global `beforeAll`. `bootstrap()` also calls `connectDB()` (reading
-//   `process.env.MONGO_URI`), so we point `MONGO_URI` at the same replset URI
-//   before calling `bootstrap()` — `mongoose.connect()` on an already-open
-//   connection to the same URI is a no-op and returns the existing connection.
-// - Redis: this config provisions no Redis, so we start a disposable container via
-//   the existing `startRedisContainer()` helper and point `REDIS_HOST`/`REDIS_PORT`
-//   at it before calling `bootstrap()`.
-// - `shutdown()` disconnects Mongo. The global `afterAll` in `tests/setup.ts` owns
-//   `disconnectDB()`/`replSet.stop()`, so after exercising `shutdown()` we
-//   reconnect Mongo to the same replset to avoid a double-disconnect against an
-//   already-closed topology ("Topology is closed").
 import { randomUUID, generateKeyPairSync } from 'crypto';
 import mongoose from 'mongoose';
 
@@ -91,8 +75,6 @@ describe('Identity container bootstrap (Phase 9, Batch 5)', () => {
     process.env.JWT_PRIVATE_KEY = privateKey;
     process.env.JWT_PUBLIC_KEY = publicKey;
     process.env.RESEND_API_KEY = 'test-resend-key';
-    // Fast enough that the started OutboxProcessor drains a seeded row well within
-    // the waitFor() budget below, slow enough not to thrash between assertions.
     process.env.OUTBOX_POLL_INTERVAL_MS = '500';
 
     app = await bootstrap();
@@ -214,8 +196,6 @@ describe('Identity container bootstrap (Phase 9, Batch 5)', () => {
       expect(app.redisClient.isReady()).toBe(false);
       expect(app.connection.readyState).toBe(mongoose.ConnectionStates.disconnected);
 
-      // Restore the connection for tests/setup.ts's global afterAll (disconnectDB +
-      // replSet.stop), which would otherwise hit an already-closed topology.
       await connectDB(getTestMongoUri());
     });
   });

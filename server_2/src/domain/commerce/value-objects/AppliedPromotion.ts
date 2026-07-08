@@ -4,11 +4,6 @@ import { ValidationError } from '../../shared/errors/ValidationError';
 import { Money } from '../../shared/Money';
 import { PROMOTION_KIND, PromotionKind } from '../enums/promotion-kind.enum';
 
-// VO: { code, kind, discount: Money, sourceRef } — the resolved outcome of validating a
-// promotion code against a cart/checkout context (Commerce Phase 8). One per Cart; produced
-// by IPromotionService and re-validated/recomputed at checkout. `sourceRef` points back at
-// the coupon (or future Promotion entity) that produced it, keeping the engine extractable
-// to a future Promotions context with no Commerce rewrite.
 interface AppliedPromotionProps {
   code: string;
   kind: PromotionKind;

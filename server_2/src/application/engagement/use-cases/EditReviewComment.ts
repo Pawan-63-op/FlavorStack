@@ -1,5 +1,3 @@
-// UC: EditReviewComment — author edits their comment while the review is not yet moderated
-// (engagement_module.md §4). No domain event is raised, so this is a plain load → mutate → update.
 import { Result } from '../../../domain/shared/Result';
 import { NotFoundError } from '../../../domain/shared/errors/NotFoundError';
 import { ForbiddenError } from '../../../domain/shared/errors/ForbiddenError';

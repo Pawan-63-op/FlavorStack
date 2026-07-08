@@ -1,5 +1,3 @@
-// Records who cancelled a fulfillment, why, and when (fulfillment_module.md §2.3).
-// Defined in Phase 1 as a building block; the aggregate's cancel() path is realized in Phase 5.
 import { ValueObject } from '../../shared/ValueObject';
 import { Result } from '../../shared/Result';
 import { Guard } from '../../shared/Guard';

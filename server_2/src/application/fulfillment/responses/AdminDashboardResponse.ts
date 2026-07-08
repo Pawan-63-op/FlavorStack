@@ -1,4 +1,3 @@
-// Response shape for GET /admin/fulfillments (fulfillment_module.md §7.4, Phase 6).
 import { AdminDashboardView } from '../../../domain/fulfillment/repositories/IFulfillmentProjectionRepository';
 
 export interface AdminDashboardItemResponse {

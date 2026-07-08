@@ -1,5 +1,3 @@
-// Immutable delivery-address snapshot copied from OrderRequested (fulfillment_module.md §2.3).
-// Reuses the shared identity GeoPoint VO for coordinates (same pattern as commerce's OrderRequest).
 import { ValueObject } from '../../shared/ValueObject';
 import { Result } from '../../shared/Result';
 import { Guard } from '../../shared/Guard';

@@ -2,8 +2,6 @@ import { Response } from "express";
 import { AuthRequest } from "@/Types/allTypes";
 import Address from "../models/Address";
 
-// @route   GET /api/addresses
-// @access  Private
 export const getAddresses = async (req: AuthRequest, res: Response) => {
   try {
     const addresses = await Address.find({ user: req.user?._id }).sort({ isDefault: -1, createdAt: -1 });
@@ -13,8 +11,6 @@ export const getAddresses = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// @route   POST /api/addresses
-// @access  Private
 export const addAddress = async (req: AuthRequest, res: Response) => {
   try {
     const { label, name, phone, address, isDefault } = req.body;
@@ -23,12 +19,10 @@ export const addAddress = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ message: "Name, phone and address are required" });
     }
 
-    // If new address is set as default, unset all others first
     if (isDefault) {
       await Address.updateMany({ user: req.user?._id }, { isDefault: false });
     }
 
-    // If this is the first address, force it as default
     const count = await Address.countDocuments({ user: req.user?._id });
     const shouldBeDefault = isDefault || count === 0;
 
@@ -47,13 +41,10 @@ export const addAddress = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// @route   PATCH /api/addresses/:id
-// @access  Private
 export const updateAddress = async (req: AuthRequest, res: Response) => {
   try {
     const { label, name, phone, address, isDefault } = req.body;
 
-    // If setting as default, unset all others first
     if (isDefault) {
       await Address.updateMany({ user: req.user?._id }, { isDefault: false });
     }
@@ -74,8 +65,6 @@ export const updateAddress = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// @route   DELETE /api/addresses/:id
-// @access  Private
 export const deleteAddress = async (req: AuthRequest, res: Response) => {
   try {
     const deleted = await Address.findOneAndDelete({
@@ -87,7 +76,6 @@ export const deleteAddress = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ message: "Address not found" });
     }
 
-    // If deleted was default, make the most recent remaining one default
     if (deleted.isDefault) {
       const next = await Address.findOne({ user: req.user?._id }).sort({ createdAt: -1 });
       if (next) {
@@ -102,8 +90,6 @@ export const deleteAddress = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// @route   PATCH /api/addresses/:id/set-default
-// @access  Private
 export const setDefaultAddress = async (req: AuthRequest, res: Response) => {
   try {
     await Address.updateMany({ user: req.user?._id }, { isDefault: false });

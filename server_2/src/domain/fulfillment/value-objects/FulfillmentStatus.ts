@@ -1,7 +1,3 @@
-// Master fulfillment state-machine VO (fulfillment_module.md §4.1). Mirrors
-// catalog/value-objects/RestaurantStatus.vo.ts: private ctor + static create(),
-// canTransitionTo(), transitionTo(): Result<VO>. The full transition table is encoded so later
-// phases drive prep/pickup/delivery; Phase 1 only ever constructs CREATED.
 import { ValueObject } from '../../shared/ValueObject';
 import { Result } from '../../shared/Result';
 import { ValidationError } from '../../shared/errors/ValidationError';

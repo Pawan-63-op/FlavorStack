@@ -1,4 +1,3 @@
-// OtpStore — implements IOtpStore using otp:{key} (issued code) + rate:otp:{key} (failed-attempt counter)
 import { Result } from '../../domain/shared/Result';
 import { IOtpStore } from '../../domain/identity/services/IOtpStore';
 import { RedisClient } from './client';

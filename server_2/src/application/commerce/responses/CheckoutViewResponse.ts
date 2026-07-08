@@ -1,5 +1,3 @@
-// Output DTO: CheckoutView — result of PreviewCheckout; dry-run PricingBreakdown + revalidated lines,
-// what the customer sees before confirming. No persistence. (Commerce Phase 11 Batch 3, commerce_module.md §7.)
 import { PricingBreakdown } from '../../../domain/commerce/value-objects/PricingBreakdown';
 import { CheckoutAssembly } from '../services/CheckoutContextAssembler';
 

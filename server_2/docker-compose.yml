@@ -1,5 +1,9 @@
-# Identity-context stack: API + outbox/email/notification workers + Mongo (replica set,
-# required for outbox transactions) + Redis (sessions/OTP/BullMQ).
+# Full stack (identity + catalog + commerce + fulfillment + engagement):
+# API + outbox/email/notification/fulfillment workers + Mongo (replica set,
+# required for outbox/cross-context transactions) + Redis (sessions/OTP/BullMQ).
+#
+# Worker Mongo needs: outbox/notification/fulfillment call bootstrap() → require MONGO_URI +
+# the initialized replica set (mongo-init). email is Resend+Redis only (no Mongo).
 
 services:
   mongo:
@@ -88,8 +92,31 @@ services:
     env_file: .env
     environment:
       WORKER_TYPE: notification
+      # notification.worker calls bootstrap() (NotificationRepository + IdentityRecipientResolver +
+      # email channel) → needs the replica-set Mongo, not just Redis.
+      MONGO_URI: mongodb://mongo:27017/flavorstack?replicaSet=rs0
       REDIS_HOST: redis
     depends_on:
+      mongo-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  worker-fulfillment:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    env_file: .env
+    environment:
+      WORKER_TYPE: fulfillment
+      # fulfillment.worker calls bootstrap() (FulfillmentJobHandler: assignment-/sla-timeout jobs)
+      # → needs the replica-set Mongo.
+      MONGO_URI: mongodb://mongo:27017/flavorstack?replicaSet=rs0
+      REDIS_HOST: redis
+    depends_on:
+      mongo-init:
+        condition: service_completed_successfully
       redis:
         condition: service_started
     restart: unless-stopped

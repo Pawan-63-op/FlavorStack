@@ -187,7 +187,6 @@ describe('Catalog query use-cases (projection-driven)', () => {
       const { item } = await seed({ closed: true });
       const result = await new GetItemsSnapshot(readRepo).execute({ itemIds: [item.id.toString()] });
       expect(result.getValue()).toHaveLength(1);
-      // Snapshot is item-level: raw isAvailable stays true even though restaurant is closed.
       expect(result.getValue()[0].isAvailable).toBe(true);
       expect(result.getValue()[0].basePriceAmount).toBe(25000);
     });

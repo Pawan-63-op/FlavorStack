@@ -1,4 +1,3 @@
-// Mounts AuthController — 14 self-service auth routes (register..change-password)
 import { Router } from 'express';
 import { AuthController } from '../controllers/AuthController';
 import { authenticate } from '../middleware/authenticate';
@@ -69,7 +68,7 @@ export function createAuthRoutes(deps: AuthRoutesDeps): Router {
     rateLimit(deps.rateLimiter, 'otp-verification'),
     audit('auth.verify-email-otp'),
     validate(otpCodeSchema),
-    c.verifyEmailOtp,
+    c.verifyEmail,
   );
 
   router.post(

@@ -1,4 +1,3 @@
-// import 
 
 export type CheckoutSessionRequest = {
     cartItems:{

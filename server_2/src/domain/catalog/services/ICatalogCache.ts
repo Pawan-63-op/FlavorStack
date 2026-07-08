@@ -1,6 +1,3 @@
-// Catalog caching ports (Phase 13). Framework-free contracts so the application
-// layer can depend on cache behaviour without importing Redis. The Redis-backed
-// implementation lives in infrastructure and is wired only in the container.
 
 /**
  * Event-driven invalidation port. The read-model projector calls this AFTER it has

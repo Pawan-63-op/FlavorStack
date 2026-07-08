@@ -1,7 +1,6 @@
 import { UniqueEntityId } from './UniqueEntityId';
 
 export abstract class Entity<T> {
-  // Private so subclasses cannot shadow it; access via the `id` getter only.
   private readonly _entityId: UniqueEntityId;
   protected readonly props: T;
 

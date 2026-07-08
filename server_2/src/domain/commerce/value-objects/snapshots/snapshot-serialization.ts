@@ -1,6 +1,3 @@
-// Shared Money/Fee/PricingBreakdown <-> JSON helpers for the Commerce Phase 9 snapshot VOs.
-// Snapshots are embedded (not referenced) inside OrderRequest, so each one needs to
-// serialize to/from plain JSON-safe data independently of any Mongoose model.
 import { Result } from '../../../shared/Result';
 import { Money } from '../../../shared/Money';
 import { Fee } from '../Fee';

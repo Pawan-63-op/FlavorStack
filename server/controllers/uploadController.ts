@@ -3,16 +3,12 @@ import { Readable } from 'stream';
 import {Request,Response} from 'express';
 import { AuthRequest } from '@/Types/allTypes';
 
-// @desc    Upload image to Cloudinary
-// @route   POST /api/upload
-// @access  Private
 export const uploadImage = async (req:Request, res:Response) => {
   try {
     if (!req.file) {
       return res.status(400).json({ message: 'Please upload a file' });
     }
 
-    // Convert buffer to stream
     const stream = cloudinary.uploader.upload_stream(
       {
         folder: 'food-delivery',
@@ -30,7 +26,6 @@ export const uploadImage = async (req:Request, res:Response) => {
       }
     );
 
-    // Pipe the buffer to the stream
     Readable.from(req.file.buffer).pipe(stream);
 
   } catch (error:any) {
@@ -38,9 +33,6 @@ export const uploadImage = async (req:Request, res:Response) => {
   }
 };
 
-// @desc    Delete image from Cloudinary
-// @route   DELETE /api/upload/:publicId
-// @access  Private
 export const deleteImage = async (req:AuthRequest, res:Response) => {
   try {
     const publicId = req.params.publicId?.replace(/-/g, '/');

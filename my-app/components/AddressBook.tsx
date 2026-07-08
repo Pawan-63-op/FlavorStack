@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -9,10 +9,13 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   MapPin, Phone, User, Plus, Pencil,
   Trash2, Star, Home, Briefcase,
-  MoreHorizontal, Check, X, Loader2,
+  MoreHorizontal, Check, X, LocateFixed, Loader2,
 } from "lucide-react";
-import { useAddressStore, type Address } from "@/store/addressStore";
+import { useAddressStore } from "@/store/addressStore";
 import { useAuthStore } from "@/store/authStore";
+import { useHydrateAddresses } from "@/lib/api/hooks/useHydrateAddresses";
+import { useGeolocation } from "@/lib/geo/useGeolocation";
+import type { Address } from "@/lib/address/types";
 
 const LABELS = ["Home", "Work", "Other"] as const;
 
@@ -24,29 +27,33 @@ const LabelIcon = ({ label }: { label: string }) => {
 
 const emptyForm = {
   label: "Home" as string,
-  name: "",
+  recipientName: "",
   phone: "",
-  address: "",
+  addressLines: "",
+  city: "",
+  state: "",
+  pinCode: "",
+  landmark: "",
+  deliveryInstructions: "",
   isDefault: false,
+  lat: undefined as number | undefined,
+  lng: undefined as number | undefined,
 };
 
 export function AddressBook() {
   const { user } = useAuthStore();
-  const { addresses, isLoading, fetchAddresses, addAddress, updateAddress, deleteAddress, setDefault } =
-    useAddressStore();
+  const { addresses, addAddress, updateAddress, deleteAddress, setDefault } = useAddressStore();
+  useHydrateAddresses();
+  const geo = useGeolocation();
 
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({ ...emptyForm });
 
-  useEffect(() => {
-    fetchAddresses();
-  }, []);
-
   const openAdd = () => {
     setForm({
       ...emptyForm,
-      name: user?.name || "",
+      recipientName: user?.name || "",
       phone: user?.phone || "",
       isDefault: addresses.length === 0,
     });
@@ -57,12 +64,19 @@ export function AddressBook() {
   const openEdit = (addr: Address) => {
     setForm({
       label: addr.label,
-      name: addr.name,
+      recipientName: addr.recipientName,
       phone: addr.phone,
-      address: addr.address,
+      addressLines: addr.addressLines,
+      city: addr.city,
+      state: addr.state,
+      pinCode: addr.pinCode,
+      landmark: addr.landmark || "",
+      deliveryInstructions: addr.deliveryInstructions || "",
       isDefault: addr.isDefault,
+      lat: addr.lat,
+      lng: addr.lng,
     });
-    setEditingId(addr._id);
+    setEditingId(addr.id);
     setShowForm(true);
   };
 
@@ -70,12 +84,38 @@ export function AddressBook() {
     setForm((f) => ({ ...f, phone: val.replace(/[^0-9\s\+\-\(\)]/g, "") }));
   };
 
+  const hasCoords = form.lat !== undefined && form.lng !== undefined;
+
+  const canSubmit = Boolean(
+    form.recipientName.trim() &&
+    form.phone.trim() &&
+    form.addressLines.trim() &&
+    form.city.trim() &&
+    form.state.trim() &&
+    form.pinCode.trim() &&
+    hasCoords,
+  );
+
   const handleSubmit = async () => {
-    if (!form.name.trim() || !form.phone.trim() || !form.address.trim()) return;
+    if (!canSubmit || form.lat === undefined || form.lng === undefined) return;
+    const payload = {
+      label: form.label,
+      recipientName: form.recipientName.trim(),
+      phone: form.phone.trim(),
+      addressLines: form.addressLines.trim(),
+      city: form.city.trim(),
+      state: form.state.trim(),
+      pinCode: form.pinCode.trim(),
+      landmark: form.landmark.trim() || undefined,
+      deliveryInstructions: form.deliveryInstructions.trim() || undefined,
+      isDefault: form.isDefault,
+      lat: form.lat,
+      lng: form.lng,
+    };
     if (editingId) {
-      await updateAddress(editingId, form);
+      updateAddress(editingId, payload);
     } else {
-      await addAddress(form);
+      addAddress(payload);
     }
     setShowForm(false);
     setEditingId(null);
@@ -148,8 +188,8 @@ export function AddressBook() {
                     </Label>
                     <Input
                       placeholder="John Doe"
-                      value={form.name}
-                      onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                      value={form.recipientName}
+                      onChange={(e) => setForm((f) => ({ ...f, recipientName: e.target.value }))}
                     />
                   </div>
 
@@ -169,13 +209,105 @@ export function AddressBook() {
 
                 <div className="space-y-1.5">
                   <Label className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <MapPin className="h-3.5 w-3.5" /> Delivery Address *
+                    <MapPin className="h-3.5 w-3.5" /> Address Line *
                   </Label>
                   <Input
-                    placeholder="123 Main Street, Apt 4B, City"
-                    value={form.address}
-                    onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
+                    placeholder="123 Main Street, Apt 4B"
+                    value={form.addressLines}
+                    onChange={(e) => setForm((f) => ({ ...f, addressLines: e.target.value }))}
                   />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-sm text-muted-foreground">City *</Label>
+                    <Input
+                      placeholder="City"
+                      value={form.city}
+                      onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-sm text-muted-foreground">State *</Label>
+                    <Input
+                      placeholder="State"
+                      value={form.state}
+                      onChange={(e) => setForm((f) => ({ ...f, state: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-sm text-muted-foreground">PIN / ZIP Code *</Label>
+                    <Input
+                      placeholder="000000"
+                      value={form.pinCode}
+                      onChange={(e) => setForm((f) => ({ ...f, pinCode: e.target.value }))}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-sm text-muted-foreground">Landmark (optional)</Label>
+                  <Input
+                    placeholder="Near the park"
+                    value={form.landmark}
+                    onChange={(e) => setForm((f) => ({ ...f, landmark: e.target.value }))}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-sm text-muted-foreground">Delivery instructions (optional)</Label>
+                  <Input
+                    placeholder="Ring the bell twice"
+                    value={form.deliveryInstructions}
+                    onChange={(e) => setForm((f) => ({ ...f, deliveryInstructions: e.target.value }))}
+                  />
+                </div>
+
+                {/* Coordinate capture */}
+                <div className="space-y-2 rounded-lg border-2 border-dashed p-3">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-2 text-sm">
+                      <LocateFixed className="h-4 w-4 text-muted-foreground" />
+                      {hasCoords ? (
+                        <span className="text-foreground">
+                          Location captured ({form.lat!.toFixed(4)}, {form.lng!.toFixed(4)})
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">
+                          Coordinates required to save (server needs delivery coordinates)
+                        </span>
+                      )}
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={geo.request}
+                      disabled={geo.status === "prompting"}
+                      className="gap-1.5"
+                    >
+                      {geo.status === "prompting" ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <LocateFixed className="h-3.5 w-3.5" />
+                      )}
+                      Use my location
+                    </Button>
+                  </div>
+                  {geo.coords && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-xs"
+                      onClick={() => setForm((f) => ({ ...f, lat: geo.coords!.lat, lng: geo.coords!.lng }))}
+                    >
+                      Apply captured location
+                    </Button>
+                  )}
+                  {(geo.status === "denied" || geo.status === "unavailable" || geo.status === "error") && (
+                    <p className="text-xs text-destructive">{geo.error}</p>
+                  )}
                 </div>
 
                 {/* Default checkbox */}
@@ -192,7 +324,7 @@ export function AddressBook() {
                 </div>
 
                 <div className="flex gap-2 pt-2">
-                  <Button onClick={handleSubmit} className="gap-2">
+                  <Button onClick={handleSubmit} disabled={!canSubmit} className="gap-2">
                     <Check className="h-4 w-4" />
                     {editingId ? "Save Changes" : "Save Address"}
                   </Button>
@@ -206,15 +338,8 @@ export function AddressBook() {
         )}
       </AnimatePresence>
 
-      {/* Loading */}
-      {isLoading && (
-        <div className="flex justify-center py-8">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        </div>
-      )}
-
       {/* Empty state */}
-      {!isLoading && addresses.length === 0 && !showForm && (
+      {addresses.length === 0 && !showForm && (
         <Card className="border-2 border-dashed">
           <CardContent className="py-16 text-center">
             <MapPin className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
@@ -230,12 +355,12 @@ export function AddressBook() {
       )}
 
       {/* Address list */}
-      {!isLoading && addresses.length > 0 && (
+      {addresses.length > 0 && (
         <div className="space-y-3">
           <AnimatePresence mode="popLayout">
             {addresses.map((addr, index) => (
               <motion.div
-                key={addr._id}
+                key={addr.id}
                 layout
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -260,9 +385,11 @@ export function AddressBook() {
                               </Badge>
                             )}
                           </div>
-                          <p className="text-sm font-medium">{addr.name}</p>
+                          <p className="text-sm font-medium">{addr.recipientName}</p>
                           <p className="text-sm text-muted-foreground">{addr.phone}</p>
-                          <p className="text-sm text-muted-foreground truncate">{addr.address}</p>
+                          <p className="text-sm text-muted-foreground truncate">
+                            {addr.addressLines}, {addr.city}, {addr.state} {addr.pinCode}
+                          </p>
                         </div>
                       </div>
 
@@ -272,7 +399,7 @@ export function AddressBook() {
                             variant="ghost"
                             size="sm"
                             className="text-xs text-muted-foreground h-8"
-                            onClick={() => setDefault(addr._id)}
+                            onClick={() => setDefault(addr.id)}
                           >
                             Set default
                           </Button>
@@ -289,7 +416,7 @@ export function AddressBook() {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-destructive hover:text-destructive"
-                          onClick={() => deleteAddress(addr._id)}
+                          onClick={() => deleteAddress(addr.id)}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>

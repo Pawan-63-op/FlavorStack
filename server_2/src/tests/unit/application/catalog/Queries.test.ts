@@ -1,6 +1,3 @@
-// Unit coverage for the thin projection-/search-backed query use-cases. These are
-// delegations, so the tests assert the wiring: pass-through of results, NotFound on
-// misses, and the small bits of real logic (radius normalization, invalid geo).
 import { GetRestaurant } from '../../../../application/catalog/use-cases/GetRestaurant';
 import { GetRestaurantMenu } from '../../../../application/catalog/use-cases/GetRestaurantMenu';
 import { GetMenuItem } from '../../../../application/catalog/use-cases/GetMenuItem';

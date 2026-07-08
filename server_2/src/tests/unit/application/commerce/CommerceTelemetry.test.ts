@@ -1,6 +1,3 @@
-// Commerce Phase 14 — CommerceTelemetry façade tests. Freezes the metric vocabulary (§11):
-// each domain-named emitter must increment/observe the documented COMMERCE_METRICS name with
-// the right labels, so the contract between use cases and dashboards can't silently drift.
 import {
   CommerceTelemetry,
   COMMERCE_METRICS,

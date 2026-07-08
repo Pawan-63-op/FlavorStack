@@ -20,7 +20,6 @@ describe('ChannelToggle', () => {
     const updated = toggle.withChannel(NOTIFICATION_CHANNEL.EMAIL, false);
     expect(updated.isEnabled(NOTIFICATION_CHANNEL.EMAIL)).toBe(false);
     expect(updated.isEnabled(NOTIFICATION_CHANNEL.PUSH)).toBe(true);
-    // original is unchanged (immutability)
     expect(toggle.isEnabled(NOTIFICATION_CHANNEL.EMAIL)).toBe(true);
   });
 

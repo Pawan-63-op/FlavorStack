@@ -1,5 +1,3 @@
-// UC: AcceptDelivery — the offered rider accepts (fulfillment_module.md §6.1, Phase 3B).
-// The aggregate enforces accept-only-by-offered-rider and the offer TTL; emits RiderAssigned.
 import { Result } from '../../../domain/shared/Result';
 import { NotFoundError } from '../../../domain/shared/errors/NotFoundError';
 import { IFulfillmentRepository } from '../../../domain/fulfillment/repositories/IFulfillmentRepository';

@@ -1,6 +1,3 @@
-// Batch 4A — PushChannel resolves the recipient's device tokens through INotificationRecipientResolver
-// and delegates the send to the existing IPushProvider (FCM no-op stub). No tokens → deterministic
-// Result.fail('no_recipient'). Provider errors propagate (worker retries); the channel never swallows them.
 import { PushChannel } from '../../../../infrastructure/notifications/PushChannel';
 import { INotificationRecipientResolver } from '../../../../infrastructure/notifications/INotificationRecipientResolver';
 import { IPushProvider } from '../../../../infrastructure/external/push/IPushProvider';

@@ -1,4 +1,3 @@
-// Set/clear the access_token and refresh_token auth cookies
 import { CookieOptions, Response } from 'express';
 import { getAuthConfig } from '../../../config/auth';
 

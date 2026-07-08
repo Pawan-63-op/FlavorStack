@@ -1,9 +1,3 @@
-// Phase 10, Batch 6 — black-box e2e over the real HTTP API (supertest + createApp),
-// against MongoMemoryReplSet (tests/setup.ts) + a disposable Redis container.
-//
-// Every `it` below shares one bootstrap()'d AppContainer and runs strictly in
-// declaration order (see identity_phase10.md Batch 6) — later steps depend on
-// state (cookies, OTP codes, login-rate-limit counters) left by earlier ones.
 import { generateKeyPairSync } from 'crypto';
 import request from 'supertest';
 import type { Express } from 'express';
@@ -64,8 +58,6 @@ describe('Identity API e2e (Phase 10, Batch 6)', () => {
 
     app = await bootstrap();
 
-    // Avoid real network calls to Resend — e2e reads OTP codes straight out of
-    // Redis, it doesn't need actual email delivery.
     app.auth.emailProvider.sendVerification = jest.fn().mockResolvedValue(undefined);
     app.auth.emailProvider.sendPasswordReset = jest.fn().mockResolvedValue(undefined);
     app.auth.emailProvider.sendNotification = jest.fn().mockResolvedValue(undefined);
@@ -77,8 +69,6 @@ describe('Identity API e2e (Phase 10, Batch 6)', () => {
   afterAll(async () => {
     if (app) {
       await shutdown(app);
-      // shutdown() disconnected Mongo; reconnect so tests/setup.ts's global
-      // afterAll (disconnectDB + replSet.stop) doesn't hit a closed topology.
       await connectDB(getTestMongoUri());
     }
     if (redis) {
@@ -87,7 +77,6 @@ describe('Identity API e2e (Phase 10, Batch 6)', () => {
     process.env = { ...ORIGINAL_ENV };
   });
 
-  // ── register -> login -> refresh -> logout ─────────────────────────────
 
   it('registers a new customer (201, AuthResponse, no auth cookies)', async () => {
     const res = await agent.post('/api/v1/auth/register').send({
@@ -141,7 +130,6 @@ describe('Identity API e2e (Phase 10, Batch 6)', () => {
     expect(setCookie.some((c) => c.startsWith('refresh_token=;'))).toBe(true);
   });
 
-  // ── forgot-password -> reset-password ──────────────────────────────────
 
   it('requests a password reset (always 204, no enumeration)', async () => {
     const res = await agent
@@ -179,7 +167,6 @@ describe('Identity API e2e (Phase 10, Batch 6)', () => {
     refreshCookie = extractCookie(res, 'refresh_token');
   });
 
-  // ── email OTP send -> verify ────────────────────────────────────────────
 
   it('sends an email-verification OTP to the authenticated user', async () => {
     const res = await agent.post('/api/v1/auth/email-otp/send').set('Cookie', [accessCookie]);
@@ -199,7 +186,6 @@ describe('Identity API e2e (Phase 10, Batch 6)', () => {
     expect(res.status).toBe(204);
   });
 
-  // ── admin routes: role/permission/super-admin ──────────────────────────
 
   it('rejects a non-admin from an admin-only route (403)', async () => {
     const res = await agent
@@ -272,14 +258,8 @@ describe('Identity API e2e (Phase 10, Batch 6)', () => {
     expect(unbanRes.status).toBe(204);
   });
 
-  // ── rate limiting ────────────────────────────────────────────────────────
 
   it('blocks /auth/login with 429 once the per-IP rate limit is exhausted', async () => {
-    // DEFAULT_RATE_LIMITS.login = { windowSeconds: 900, max: 5 }, keyed by req.context.ip
-    // since /auth/login is unauthenticated. By this point the suite has already made
-    // exactly 5 /auth/login requests (initial login, old/new password after reset,
-    // scoped-admin login, super-admin login) — all from the same supertest agent IP —
-    // so this 6th request is the one that trips the limiter.
     const res = await agent
       .post('/api/v1/auth/login')
       .send({ email: customerEmail, password: newPassword });

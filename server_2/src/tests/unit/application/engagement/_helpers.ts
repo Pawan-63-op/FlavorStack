@@ -1,5 +1,3 @@
-// Shared mock factories for engagement application unit tests. Mirrors the inline mocks in
-// fulfillment use-case tests (e.g. MarkPreparing.test.ts) but extracted to cut duplication.
 import { IUnitOfWork } from '../../../../application/shared/ports/IUnitOfWork';
 import { IOutboxStore } from '../../../../application/shared/outbox/IOutboxStore';
 import { IEventBus } from '../../../../application/shared/events/IEventBus';

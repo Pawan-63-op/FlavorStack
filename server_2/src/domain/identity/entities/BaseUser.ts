@@ -1,11 +1,9 @@
-// src/modules/user/domain/entities/BaseUser.ts
 
 import { UserRole } from "../enums/user-role.enum";
 import { AuthProvider } from "../enums/auth-provider.enum";
 import { AggregateRoot } from "../../shared/AggregateRoot";
 import { UniqueEntityId } from "../../shared/UniqueEntityId";
 
-// Import events raised by BaseUser
 import { UserVerified } from "../events/UserVerified";
 import { PasswordChanged } from "../events/PasswordChanged";
 import { PasswordResetRequested } from "../events/PasswordResetRequested";
@@ -15,8 +13,6 @@ import { UserUnbanned } from "../events/UserUnbanned";
 
 export abstract class BaseUser extends AggregateRoot<any> {
 
-    // ── Section 1: Identity ──────────────────────────────
-    // String projection of the aggregate's UniqueEntityId — safe for events/persistence.
     get _id(): string {
         return this.id.toString();
     }
@@ -27,21 +23,16 @@ export abstract class BaseUser extends AggregateRoot<any> {
     avatarUrl!: string
     role!: UserRole
 
-    // ── Section 2: Auth credentials ──────────────────────
     passwordHash!: string
     authProvider!: AuthProvider
     providerId!: string
 
-    // ── Section 3: Email verification (Redis fields removed) ──
     isEmailVerified!: boolean
 
-    // ── Section 4: Password reset (Redis fields removed) ──────
     passwordChangedAt!: Date | null
 
-    // ── Section 5: Session tracking (Redis fields removed) ────
     tokenVersion!: number
 
-    // ── Section 6: Security ───────────────────────────────
     loginAttempts!: number
     lockUntil!: Date | null
     lastLoginAt!: Date | null
@@ -49,7 +40,6 @@ export abstract class BaseUser extends AggregateRoot<any> {
     isBanned!: boolean
     banReason!: string | null
 
-    // ── Section 7: Soft delete + concurrency ─────────────
     isActive!: boolean
     deletedAt!: Date | null
     version!: number
@@ -57,21 +47,15 @@ export abstract class BaseUser extends AggregateRoot<any> {
     updatedAt!: Date
 
     constructor(data: Partial<BaseUser>) {
-        // Destructure _id so Object.assign never overwrites the UniqueEntityId
-        // managed by Entity. Props passed as {} since BaseUser uses flat fields.
         const { _id: rawId, ...rest } = data as any;
         super({} as any, rawId ? new UniqueEntityId(String(rawId)) : undefined);
         Object.assign(this, rest);
-        // New entities (via create()) don't pass timestamps; rehydration
-        // (via baseToDomain) always does. UserModel requires both fields.
         if (!this.createdAt) this.createdAt = new Date();
         if (!this.updatedAt) this.updatedAt = new Date();
     }
 
-    // ── Abstract — each subclass must implement ───────────
     abstract get displayName(): string
 
-    // ── Virtuals — computed, never stored ─────────────────
     get isLocked(): boolean {
         return this.lockUntil != null && this.lockUntil > new Date()
     }
@@ -92,7 +76,6 @@ export abstract class BaseUser extends AggregateRoot<any> {
         }
     }
 
-    // ── Auth rules — pure logic, no crypto here ───────────
     canAttemptLogin(): boolean {
         return !this.isLocked && !this.isBanned && this.isActive
     }

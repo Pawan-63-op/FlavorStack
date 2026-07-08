@@ -1,13 +1,3 @@
-// Mongoose schema — `carts` collection (Commerce Phase 3).
-//
-// Persisted shape of the Cart aggregate root (src/domain/commerce/entities/Cart.ts)
-// with its embedded CartItem entities. `_id` is a UUID string (UniqueEntityId);
-// versionKey is disabled because the domain owns `version` for optimistic
-// concurrency (see MongoCartRepository).
-//
-// One active cart per customer (blueprint §6.2): the Cart aggregate has no
-// separate status field yet, so a unique index on `customerId` enforces this
-// directly at the collection level.
 import { Schema, model } from 'mongoose';
 
 export interface MoneyDocument {

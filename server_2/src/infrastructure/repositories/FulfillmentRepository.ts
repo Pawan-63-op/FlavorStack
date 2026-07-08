@@ -1,10 +1,3 @@
-// Implements IFulfillmentRepository over FulfillmentModel via FulfillmentMapper (fulfillment_module.md §2.5).
-//
-// Phase 1: save (idempotent create), findById, findByOrderRequestId.
-// Phase 2: update (optimistic concurrency on version), findActiveByRestaurant.
-//
-// Session propagation: the active Mongo ClientSession is read implicitly from the shared TransactionContext
-// (AsyncLocalStorage) and attached to every operation, mirroring MongoOrderRequestRepository.
 import type { ClientSession } from 'mongoose';
 import { IFulfillmentRepository } from '../../domain/fulfillment/repositories/IFulfillmentRepository';
 import { Fulfillment } from '../../domain/fulfillment/entities/Fulfillment';

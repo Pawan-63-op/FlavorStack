@@ -1,21 +1,8 @@
-/*  
-  ⚡ UPGRADED UI VERSION  
-  - Glass cards
-  - Rounded table rows
-  - Highlighted categories
-  - Status colors improved
-  - Modern spacing & shadows
-  - Dialog redesigned
-*/
 "use client";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -24,415 +11,341 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
-  DialogDescription,
 } from "@/components/ui/dialog";
-import { Plus, Edit, Trash2, Save } from "lucide-react";
+import { Plus, Edit, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import { toast } from "sonner";
-import { useMenuStore, type MenuItem } from "../../store/menuStore";
-import { useRestaurantStore } from "../../store/restaurantStore";
-import { ImageUpload } from "../ImageUpload";
-import Image from "next/image";
+import {
+  useOwnerRestaurants,
+  useOwnerMenu,
+  useAddMenuItem,
+  useUpdateMenuItem,
+  useRemoveMenuItem,
+  useUploadItemImage,
+} from "@/lib/api/hooks/useOwnerCatalog";
+import type { OwnerMenuItemView } from "@/lib/api";
+import {
+  MenuItemForm,
+  emptyMenuItemFormState,
+  menuItemErrorMessage,
+  parseTags,
+  type MenuItemFormState,
+} from "./menu/MenuItemForm";
+import { AvailabilityToggle } from "./menu/AvailabilityToggle";
+import { VariantGroupEditor } from "./menu/VariantGroupEditor";
+
+/** Group items under their category label; trailing "Uncategorized" bucket for orphans. */
+export function groupItemsByCategory(
+  items: OwnerMenuItemView[],
+  categories: { id: string; label: string }[],
+): { id: string; label: string; items: OwnerMenuItemView[] }[] {
+  const groups = categories.map((c) => ({
+    id: c.id,
+    label: c.label,
+    items: items.filter((i) => i.categoryId === c.id),
+  }));
+  const known = new Set(categories.map((c) => c.id));
+  const orphans = items.filter((i) => !known.has(i.categoryId));
+  if (orphans.length > 0) groups.push({ id: "__uncategorized__", label: "Uncategorized", items: orphans });
+  return groups;
+}
 
 export function MenuManagement() {
-  const menuItems = useMenuStore((state) => state.menuItems);
-  const addMenuItem = useMenuStore((state) => state.addMenuItem);
-  const updateMenuItem = useMenuStore((state) => state.updateMenuItem);
-  const deleteMenuItem = useMenuStore((state) => state.deleteMenuItem);
-  const fetchMenuItems = useMenuStore((state) => state.fetchMenuItems);
-  const restaurants = useRestaurantStore((state) => state.restaurants);
+  const { data: ownerRestaurants } = useOwnerRestaurants();
+  const restaurants = ownerRestaurants ?? [];
 
-  const [editingMenuItem, setEditingMenuItem] = useState<MenuItem | null>(null);
-  const [isAddingMenuItem, setIsAddingMenuItem] = useState(false);
-  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [restaurantId, setRestaurantId] = useState<string>("");
+  const selectedRestaurant = restaurants.find((r) => r.id === restaurantId) ?? null;
+  const categories = selectedRestaurant?.categories ?? [];
 
-  type MenuFormType = {
-    name: string;
-    description: string;
-    price: number;
-    category: string;
-    isVegetarian: boolean;
-    isSpicy: boolean;
-    isAvailable: boolean;
-    restaurant: string;
-    image: string;
+  const { data: items, isLoading } = useOwnerMenu(restaurantId);
+  const itemsList = items ?? [];
+
+  const addItem = useAddMenuItem();
+  const updateItem = useUpdateMenuItem();
+  const removeItem = useRemoveMenuItem();
+  const uploadImage = useUploadItemImage();
+
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [pendingImageFile, setPendingImageFile] = useState<File | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const editingItem = editingId ? itemsList.find((i) => i.id === editingId) ?? null : null;
+
+  const closeDialog = () => {
+    setDialogOpen(false);
+    setEditingId(null);
+    setPendingImageFile(null);
   };
 
-  const [menuForm, setMenuForm] = useState<MenuFormType>({
-    name: "",
-    description: "",
-    price: 0,
-    category: "Main Course",
-    isVegetarian: false,
-    isSpicy: false,
-    isAvailable: true,
-    restaurant: "",
-    image: "",
-  });
+  const uploadAfterSave = (itemId: string) => {
+    if (!pendingImageFile) return closeDialog();
+    uploadImage.mutate(
+      { itemId, file: pendingImageFile, contentType: pendingImageFile.type },
+      {
+        onSuccess: () => {
+          toast.success("Image uploaded");
+          closeDialog();
+        },
+        onError: (error) => {
+          toast.error(menuItemErrorMessage(error));
+          closeDialog();
+        },
+      },
+    );
+  };
 
-  useEffect(() => {
-    fetchMenuItems();
-  }, []);
-
-  // --------------------------------------
-  // Save / Update Menu Item
-  // --------------------------------------
-
-  const handleSaveMenuItem = async () => {
-    if (!menuForm.name || !menuForm.description || !menuForm.restaurant) {
-      toast.error("Please fill all required fields");
+  const handleSubmit = (values: MenuItemFormState) => {
+    const tags = parseTags(values.tagsText);
+    if (editingItem) {
+      updateItem.mutate(
+        {
+          itemId: editingItem.id,
+          input: {
+            categoryId: values.categoryId,
+            name: values.name,
+            description: values.description || undefined,
+            price: values.price,
+            currency: editingItem.basePrice.currency ?? undefined,
+            tags: tags.length ? tags : undefined,
+            dietary: values.dietary,
+          },
+        },
+        {
+          onSuccess: () => {
+            toast.success("Menu item updated");
+            if (pendingImageFile) uploadAfterSave(editingItem.id);
+            else closeDialog();
+          },
+          onError: (error) => toast.error(menuItemErrorMessage(error)),
+        },
+      );
       return;
     }
 
-    const formData = new FormData();
-    Object.entries(menuForm).forEach(([key, val]) =>
-      formData.append(key, String(val))
+    addItem.mutate(
+      {
+        restaurantId,
+        form: {
+          categoryId: values.categoryId,
+          name: values.name,
+          description: values.description || undefined,
+          basePrice: values.price,
+          tags: tags.length ? tags : undefined,
+          dietary: values.dietary,
+        },
+      },
+      {
+        onSuccess: (created) => {
+          toast.success("Menu item added");
+          if (pendingImageFile) uploadAfterSave(created.id);
+          else closeDialog();
+        },
+        onError: (error) => toast.error(menuItemErrorMessage(error)),
+      },
     );
-    if (imageFile) formData.append("imageFile", imageFile);
-
-    try {
-      if (editingMenuItem?._id) {
-        await updateMenuItem(editingMenuItem._id, formData);
-        toast.success("Menu item updated!");
-      } else {
-        await addMenuItem(formData);
-        toast.success("Menu item added!");
-      }
-      resetForm();
-    } catch {
-      toast.error("Failed to save");
-    }
   };
 
-  const handleDeleteMenuItem = async (id: string) => {
-    await deleteMenuItem(id);
-    toast.success("Deleted!");
+  const handleDelete = (itemId: string) => {
+    removeItem.mutate(
+      { restaurantId, itemId },
+      {
+        onSuccess: () => toast.success("Menu item deleted"),
+        onError: (error) => toast.error(menuItemErrorMessage(error)),
+      },
+    );
   };
 
-  const handleEditMenuItem = (menuItem: MenuItem) => {
-    setEditingMenuItem(menuItem);
-    setMenuForm({
-      name: menuItem.name,
-      description: menuItem.description,
-      price: menuItem.price,
-      category: menuItem.category,
-      isVegetarian: menuItem.isVegetarian,
-      isSpicy: menuItem.isSpicy,
-      isAvailable: menuItem.isAvailable,
-      restaurant:
-        typeof menuItem.restaurant === "string"
-          ? menuItem.restaurant
-          : menuItem.restaurant?._id || "",
-      image: menuItem.image,
-    });
-    setIsAddingMenuItem(true);
+  const formInitial = (item: OwnerMenuItemView | null): MenuItemFormState => {
+    if (!item) return emptyMenuItemFormState(categories[0]?.id ?? "");
+    return {
+      categoryId: item.categoryId,
+      name: item.name,
+      description: item.description ?? "",
+      price: item.basePrice.amount ?? 0,
+      dietary: item.dietary,
+      tagsText: item.tags.join(", "),
+    };
   };
 
-  const resetForm = () => {
-    setEditingMenuItem(null);
-    setIsAddingMenuItem(false);
-    setImageFile(null);
-    setMenuForm({
-      name: "",
-      description: "",
-      price: 0,
-      category: "Main Course",
-      isVegetarian: false,
-      isSpicy: false,
-      isAvailable: true,
-      restaurant: "",
-      image: "",
-    });
-  };
-
-  const restaurantsList = Array.isArray(restaurants) ? restaurants : [];
-  const menuItemsList = Array.isArray(menuItems) ? menuItems : [];
-
-  const getRestaurantName = (restaurant: any): string => {
-    if (typeof restaurant === "string") {
-      return restaurantsList.find((r) => r._id === restaurant)?.restaurantName || "N/A";
-    }
-    return restaurant?.restaurantName || "N/A";
-  };
-
-  // -----------------------------------------
-  // Stylish status UI
-  // -----------------------------------------
-
-  const statusBadge = (avail: boolean) =>
-    avail
-      ? "bg-emerald-100 text-emerald-700 border border-emerald-300"
-      : "bg-red-100 text-red-700 border border-red-300";
-
-  // -----------------------------------------
-  // Render UI
-  // -----------------------------------------
+  const groups = groupItemsByCategory(itemsList, categories);
 
   return (
     <div className="space-y-6 mt-6">
-      {/* PAGE HEADER */}
-      <div className="flex justify-between items-center">
-       <h3 className="text-3xl font-semibold bg-gradient-to-r from-purple-600 to-indigo-600 text-transparent bg-clip-text">
+      <div className="flex justify-between items-center gap-4 flex-wrap">
+        <div>
+          <h3 className="text-3xl font-semibold bg-gradient-to-r from-purple-600 to-indigo-600 text-transparent bg-clip-text">
             Menu Management
           </h3>
+          <p className="text-muted-foreground mt-1">Manage items for a restaurant you own</p>
+        </div>
 
-        <Dialog open={isAddingMenuItem} onOpenChange={setIsAddingMenuItem}>
-          <DialogTrigger asChild>
-            <Button className="gap-2 bg-gradient-to-r from-purple-500 to-indigo-500 hover:opacity-90 shadow-lg">
-              <Plus className="h-4 w-4" />
-              Add Menu Item
-            </Button>
-          </DialogTrigger>
+        <div className="flex items-center gap-3">
+          <Select value={restaurantId} onValueChange={(v) => setRestaurantId(v)}>
+            <SelectTrigger className="w-64" aria-label="Select restaurant">
+              <SelectValue placeholder="Select a restaurant" />
+            </SelectTrigger>
+            <SelectContent>
+              {restaurants.map((r) => (
+                <SelectItem key={r.id} value={r.id}>
+                  {r.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-          {/* Stylish Dialog */}
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl shadow-2xl border border-purple-200/30 backdrop-blur-xl bg-background/60">
-            <DialogHeader>
-              <DialogTitle className="text-xl font-semibold">
-                {editingMenuItem ? "Edit Menu Item" : "Add Menu Item"}
-              </DialogTitle>
-              <DialogDescription>
-                Fill details below to create or update a menu item.
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-4 py-4">
-              {/* Image Upload */}
-              <ImageUpload value={menuForm.image} onChange={(file, preview) => {
-                setImageFile(file);
-                setMenuForm({ ...menuForm, image: preview || "" });
-              }} />
-
-              {/* Restaurant */}
-              <div className="space-y-2">
-                <Label>Restaurant *</Label>
-                <Select
-                  value={menuForm.restaurant}
-                  onValueChange={(value:any) =>
-                    setMenuForm({ ...menuForm, restaurant: value })
-                  }
-                >
-                  <SelectTrigger className="bg-background/60 backdrop-blur-sm border-purple-200">
-                    <SelectValue placeholder="Choose restaurant" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {restaurantsList.map((r) => (
-                      <SelectItem key={r._id} value={r._id}>
-                        {r.restaurantName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Name + Category */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Item Name *</Label>
-                  <Input
-                    value={menuForm.name}
-                    onChange={(e) =>
-                      setMenuForm({ ...menuForm, name: e.target.value })
-                    }
-                    className="bg-background/60 backdrop-blur-sm"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Category *</Label>
-                  <Select
-                    value={menuForm.category}
-                    onValueChange={(val:any) =>
-                      setMenuForm({ ...menuForm, category: val })
-                    }
-                  >
-                    <SelectTrigger className="bg-background/60 backdrop-blur-sm">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Appetizer">Appetizer</SelectItem>
-                      <SelectItem value="Main Course">Main Course</SelectItem>
-                      <SelectItem value="Dessert">Dessert</SelectItem>
-                      <SelectItem value="Beverage">Beverage</SelectItem>
-                      <SelectItem value="Side">Side</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {/* Description */}
-              <div className="space-y-2">
-                <Label>Description *</Label>
-                <Textarea
-                  rows={3}
-                  value={menuForm.description}
-                  onChange={(e) =>
-                    setMenuForm({ ...menuForm, description: e.target.value })
-                  }
-                  className="bg-background/60 backdrop-blur-sm"
-                />
-              </div>
-
-              {/* Price */}
-              <div className="space-y-2">
-                <Label>Price ($) *</Label>
-                <Input
-                  type="number"
-                  value={menuForm.price}
-                  onChange={(e) =>
-                    setMenuForm({
-                      ...menuForm,
-                      price: parseFloat(e.target.value) || 0,
-                    })
-                  }
-                  className="bg-background/60 backdrop-blur-sm"
-                />
-              </div>
-
-              {/* Toggles */}
-              <div className="grid grid-cols-3 gap-4 pt-2">
-                {[
-                  { id: "veg", label: "Vegetarian", key: "isVegetarian" },
-                  { id: "spicy", label: "Spicy", key: "isSpicy" },
-                  { id: "avail", label: "Available", key: "isAvailable" },
-                ].map((opt) => (
-                  <div key={opt.id} className="flex items-center space-x-2">
-                    <Checkbox
-                      checked={(menuForm as any)[opt.key]}
-                      onCheckedChange={(checked:any) =>
-                        setMenuForm({
-                          ...menuForm,
-                          [opt.key]: checked as boolean,
-                        })
-                      }
-                    />
-                    <Label className="cursor-pointer">{opt.label}</Label>
-                  </div>
-                ))}
-              </div>
-
-              {/* Save Button */}
-              <Button
-                onClick={handleSaveMenuItem}
-                className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white hover:opacity-90 shadow-lg"
-              >
-                <Save className="h-4 w-4 mr-2" />
-                {editingMenuItem ? "Update Item" : "Save Item"}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+          <Button
+            className="gap-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white hover:opacity-90"
+            disabled={!selectedRestaurant || categories.length === 0}
+            onClick={() => {
+              setEditingId(null);
+              setDialogOpen(true);
+            }}
+          >
+            <Plus className="h-4 w-4" /> Add Menu Item
+          </Button>
+        </div>
       </div>
 
-      {/* TABLE */}
-      <Card className="border-2 shadow-xl bg-background/70 backdrop-blur-xl rounded-2xl">
-        <CardContent className="pt-6">
-          {menuItemsList.length === 0 ? (
-            <div className="text-center py-10 text-muted-foreground">
-              No menu items found.
+      <Dialog open={dialogOpen} onOpenChange={(open) => (open ? setDialogOpen(true) : closeDialog())}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editingItem ? "Edit Menu Item" : "Add Menu Item"}</DialogTitle>
+            <DialogDescription>Fill in the item details below</DialogDescription>
+          </DialogHeader>
+          <MenuItemForm
+            initial={formInitial(editingItem)}
+            categories={categories}
+            isEdit={Boolean(editingItem)}
+            imageUrl={editingItem?.imageUrl}
+            onImageSelected={setPendingImageFile}
+            onSubmit={handleSubmit}
+            onCancel={closeDialog}
+            submitting={addItem.isPending || updateItem.isPending || uploadImage.isPending}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {!selectedRestaurant ? (
+        <Card className="p-6 text-center">
+          <p className="text-muted-foreground">Select a restaurant to manage its menu.</p>
+        </Card>
+      ) : categories.length === 0 ? (
+        <Card className="p-6 text-center">
+          <p className="text-muted-foreground">
+            This restaurant has no categories yet. Add a category under Restaurant Management before creating items.
+          </p>
+        </Card>
+      ) : isLoading ? (
+        <Card className="p-6 text-center">
+          <p className="text-muted-foreground">Loading…</p>
+        </Card>
+      ) : itemsList.length === 0 ? (
+        <Card className="p-6 text-center">
+          <p className="text-muted-foreground">No menu items yet. Add your first item!</p>
+        </Card>
+      ) : (
+        <div className="space-y-6">
+          {groups.map((group) => (
+            <div key={group.id} className="space-y-3">
+              <h4 className="text-lg font-medium text-muted-foreground">{group.label}</h4>
+              {group.items.length === 0 ? (
+                <p className="text-sm text-muted-foreground pl-1">No items in this category.</p>
+              ) : (
+                group.items.map((item) => {
+                  const isExpanded = expandedId === item.id;
+                  return (
+                    <Card key={item.id} className="border shadow-sm rounded-xl" data-testid={`menu-item-${item.id}`}>
+                      <CardContent className="pt-5 space-y-3">
+                        <div className="flex gap-4 items-start">
+                          {item.imageUrl?.startsWith("http") ? (
+                            <img src={item.imageUrl} alt={item.name} className="w-20 h-20 rounded-lg object-cover" />
+                          ) : (
+                            <div className="w-20 h-20 rounded-lg bg-muted flex items-center justify-center text-muted-foreground text-xs">
+                              No image
+                            </div>
+                          )}
+
+                          <div className="flex-1 space-y-2">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-semibold">{item.name}</span>
+                              <span className="text-sm text-muted-foreground">{item.formattedBasePrice}</span>
+                              {item.isVegetarian && (
+                                <Badge className="bg-emerald-100 text-emerald-700 border-emerald-300">Veg</Badge>
+                              )}
+                              {item.dietary
+                                .filter((d) => d !== "VEG")
+                                .map((d) => (
+                                  <Badge key={d} variant="outline">
+                                    {d.replace(/_/g, " ")}
+                                  </Badge>
+                                ))}
+                            </div>
+                            {item.description && (
+                              <p className="text-sm text-muted-foreground">{item.description}</p>
+                            )}
+                            <AvailabilityToggle
+                              itemId={item.id}
+                              isAvailable={item.isAvailable}
+                              outOfStockReason={item.availability.outOfStockReason}
+                            />
+                          </div>
+
+                          <div className="flex flex-col gap-2">
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              aria-label={`Edit ${item.name}`}
+                              onClick={() => {
+                                setEditingId(item.id);
+                                setDialogOpen(true);
+                              }}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              aria-label={`Delete ${item.name}`}
+                              onClick={() => handleDelete(item.id)}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              aria-label={`Variants for ${item.name}`}
+                              onClick={() => setExpandedId(isExpanded ? null : item.id)}
+                            >
+                              {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                            </Button>
+                          </div>
+                        </div>
+
+                        {isExpanded && (
+                          <div className="border-t pt-4">
+                            <p className="text-sm font-medium mb-2">Variant groups</p>
+                            <VariantGroupEditor
+                              itemId={item.id}
+                              groups={item.variantGroups}
+                              currency={item.basePrice.currency ?? undefined}
+                            />
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })
+              )}
             </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-background-to-r from-purple-50 to-indigo-50">
-                  <TableHead>Image</TableHead>
-                  <TableHead>Restaurant</TableHead>
-                  <TableHead>Item</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead>Price</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-
-              <TableBody>
-                {menuItemsList.map((item) => (
-                  <TableRow
-                    key={item._id}
-                    className="hover:bg-purple-50/50 transition-all"
-                  >
-                    <TableCell>
-                      {item.image && (
-                        <Image
-                          src={item.image}
-                          alt={item.image}
-                         height={80}
-                         width={90}
-                          // className=" rounded-lg object-cover shadow-sm"
-                        />
-                      )}
-                    </TableCell>
-
-                    <TableCell>{getRestaurantName(item.restaurant)}</TableCell>
-
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        {item.name}
-                        {item.isVegetarian && (
-                          <Badge className="bg-emerald-100 text-emerald-700 border-emerald-300">
-                            🌱 Veg
-                          </Badge>
-                        )}
-                        {item.isSpicy && (
-                          <Badge className="bg-red-100 text-red-600 border-red-300">
-                            🌶️ Spicy
-                          </Badge>
-                        )}
-                      </div>
-                    </TableCell>
-
-                    <TableCell>
-                      <Badge variant="outline" className="border-purple-300">
-                        {item.category}
-                      </Badge>
-                    </TableCell>
-
-                    <TableCell>${item.price?.toFixed(2)}</TableCell>
-
-                    <TableCell>
-                      <span className={`px-3 py-1 rounded-md text-xs font-medium ${statusBadge(
-                        item.isAvailable
-                      )}`}>
-                        {item.isAvailable ? "Available" : "Unavailable"}
-                      </span>
-                    </TableCell>
-
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleEditMenuItem(item)}
-                        >
-                          <Edit className="h-4 w-4 text-purple-600" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDeleteMenuItem(item._id)}
-                        >
-                          <Trash2 className="h-4 w-4 text-red-600" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

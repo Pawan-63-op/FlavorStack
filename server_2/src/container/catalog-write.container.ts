@@ -1,13 +1,3 @@
-// Composition root for the Catalog write-side (Phase 7/8 command use-cases).
-//
-// Every command use-case owns its own transaction boundary: it persists the
-// aggregate and its outbox row atomically through a shared TransactionContext,
-// then publishes the pulled domain events on the in-process bus AFTER commit
-// (so the read-model projector — wired in catalog.container.ts — stays in sync).
-//
-// All repositories, the unit-of-work, and the outbox store share ONE
-// TransactionContext so `unitOfWork.runInTransaction(...)` transparently
-// propagates its Mongo session to the repos and the outbox append.
 import type { Connection } from 'mongoose';
 import { IEventBus } from '../application/shared/events/IEventBus';
 
@@ -17,9 +7,13 @@ import { MongoUnitOfWork } from '../infrastructure/database/MongoUnitOfWork';
 import { MongoOutboxStore } from '../infrastructure/database/MongoOutboxStore';
 import { TransactionContext } from '../infrastructure/database/TransactionContext';
 import { InMemoryImageStorage } from '../infrastructure/external/storage/InMemoryImageStorage';
+import { CloudinaryImageStorage } from '../infrastructure/external/cloudinary/CloudinaryImageStorage';
+import { RealCloudinaryClient } from '../infrastructure/external/cloudinary/RealCloudinaryClient';
+import { getCloudinaryConfig } from '../config/cloudinary';
 import { IImageStorage } from '../domain/catalog/services/IImageStorage';
 
 import { CreateRestaurant } from '../application/catalog/use-cases/CreateRestaurant';
+import { ListOwnerRestaurants } from '../application/catalog/use-cases/ListOwnerRestaurants';
 import { UpdateRestaurant } from '../application/catalog/use-cases/UpdateRestaurant';
 import { PublishRestaurant } from '../application/catalog/use-cases/PublishRestaurant';
 import { PauseRestaurant } from '../application/catalog/use-cases/PauseRestaurant';
@@ -40,6 +34,7 @@ import { SetItemVariants } from '../application/catalog/use-cases/SetItemVariant
 
 export interface CatalogCommandUseCases {
   createRestaurant: CreateRestaurant;
+  listOwnerRestaurants: ListOwnerRestaurants;
   updateRestaurant: UpdateRestaurant;
   publishRestaurant: PublishRestaurant;
   pauseRestaurant: PauseRestaurant;
@@ -74,12 +69,16 @@ export function createCatalogWriteContainer(
   const unitOfWork = new MongoUnitOfWork(connection, txContext);
   const outboxStore = new MongoOutboxStore(txContext);
 
-  const imageStorage = new InMemoryImageStorage();
+  const cloudinaryConfig = getCloudinaryConfig();
+  const imageStorage: IImageStorage = cloudinaryConfig
+    ? new CloudinaryImageStorage(new RealCloudinaryClient(cloudinaryConfig))
+    : new InMemoryImageStorage();
 
   return {
     imageStorage,
     commands: {
       createRestaurant: new CreateRestaurant(restaurantRepo, unitOfWork, outboxStore, eventBus),
+      listOwnerRestaurants: new ListOwnerRestaurants(restaurantRepo),
       updateRestaurant: new UpdateRestaurant(restaurantRepo, unitOfWork, outboxStore, eventBus),
       publishRestaurant: new PublishRestaurant(restaurantRepo, unitOfWork, outboxStore, eventBus),
       pauseRestaurant: new PauseRestaurant(restaurantRepo, unitOfWork, outboxStore, eventBus),

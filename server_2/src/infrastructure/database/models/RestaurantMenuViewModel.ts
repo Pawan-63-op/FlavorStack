@@ -1,11 +1,3 @@
-// Read-model projection — `restaurant_menu_view` collection (Catalog Phase 9).
-//
-// The full menu tree for a restaurant detail page (restaurant header + categories
-// + items), keyed by `restaurantId`. Rebuilt wholesale by the CatalogProjector.
-// Item `isAvailable` is stored RAW (the item's own toggle); the read repository
-// derives the effective availability at query time by ANDing it with the
-// restaurant's open-state (an item auto-goes-unavailable when its restaurant is
-// not ACTIVE/open).
 import { Schema, model } from 'mongoose';
 import { GeoJsonPoint, OpeningHoursDocument } from './RestaurantModel';
 

@@ -2,9 +2,6 @@ import mongoose, { Schema } from 'mongoose';
 import { IMenuItem } from "@/Types/allTypes";
 
 const menuItemSchema = new Schema<IMenuItem>({
-  // _id :{
-  //   type:Schema.Types.ObjectId,
-  // },
 
   name: {
     type: String,

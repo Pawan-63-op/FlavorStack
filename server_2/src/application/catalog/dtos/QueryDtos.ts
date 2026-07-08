@@ -1,5 +1,3 @@
-// Input DTOs for the catalog query use-cases (Catalog Phase 9). Queries are public
-// reads, so these carry no actor/ownership context.
 import { CuisineType } from '../../../domain/catalog/enums/cuisine-type.enum';
 import { DietaryTag } from '../../../domain/catalog/enums/dietary-tag.enum';
 
@@ -37,7 +35,6 @@ export interface CheckServiceabilityDto {
   currency?: string;
 }
 
-// --- Catalog Phase 10: Search & Discovery ---
 
 export interface SearchRestaurantsDto {
   query: string;

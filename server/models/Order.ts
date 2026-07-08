@@ -1,5 +1,4 @@
 import mongoose, { Schema } from 'mongoose';
-// import { IOrder } from '../types/index';
 import {IOrder} from "@/Types/allTypes";
 
 const orderSchema = new Schema<IOrder>({
@@ -86,7 +85,6 @@ const orderSchema = new Schema<IOrder>({
   timestamps: true
 });
 
-// Generate order ID
 orderSchema.pre('save', function(next) {
   if (!this.orderId) {
     this.orderId = 'ORD-' + Date.now().toString(36).toUpperCase();

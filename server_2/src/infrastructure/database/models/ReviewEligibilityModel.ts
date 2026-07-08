@@ -1,5 +1,3 @@
-// Mongoose schema — `review_eligibility` read-model collection (engagement_module.md §7).
-// Key: unique fulfillmentId. Seeded from FulfillmentCreated, updated by DeliveryCompleted.
 import { Schema, model } from 'mongoose';
 
 export interface ReviewEligibilityDocument {

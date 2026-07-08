@@ -1,7 +1,3 @@
-// Bootstrap seed runner — fresh-DB + idempotency integration coverage (mongodb-memory-server).
-// Exercises runSeeds() exactly as bootstrap (container/index.ts step 5f) invokes it: against the live
-// notification-template repository. Confirms a fresh DB is auto-populated and repeated startups create
-// no duplicates.
 import { runSeeds } from '../../../infrastructure/database/seeds';
 import { NOTIFICATION_TEMPLATE_SEEDS } from '../../../infrastructure/database/seeds/notification-templates.seed';
 import { TransactionContext } from '../../../infrastructure/database/TransactionContext';
@@ -29,7 +25,6 @@ describe('Bootstrap notification-template seed (runSeeds)', () => {
     expect(result.notificationTemplatesCreated).toBe(NOTIFICATION_TEMPLATE_SEEDS.length);
     expect(await NotificationTemplateModel.countDocuments({})).toBe(NOTIFICATION_TEMPLATE_SEEDS.length);
 
-    // A representative template is now resolvable on its dispatch channel (no longer template_unavailable).
     const welcome = NOTIFICATION_TEMPLATE_SEEDS.find((s) => s.key === 'welcome')!;
     const found = await repo.findByKeyChannelLocale('welcome', welcome.channel, 'en');
     expect(found).not.toBeNull();
@@ -45,7 +40,6 @@ describe('Bootstrap notification-template seed (runSeeds)', () => {
 
   it('partial existing set: creates only the missing templates', async () => {
     await runSeeds({ notificationTemplateRepo: repo });
-    // Drop one template to simulate a partially-seeded DB, then re-run.
     const welcome = NOTIFICATION_TEMPLATE_SEEDS.find((s) => s.key === 'welcome')!;
     await NotificationTemplateModel.deleteOne({ key: 'welcome', channel: welcome.channel, locale: 'en' });
 

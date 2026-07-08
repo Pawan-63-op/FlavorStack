@@ -1,10 +1,3 @@
-// Catalog Phase 12 — cross-context event payload contract tests.
-//
-// Each catalog domain event, once serialized exactly as the outbox stores it
-// (`JSON.parse(JSON.stringify(event))`), MUST satisfy its published Zod contract.
-// This is what guards the Catalog↔Commerce/Fulfillment/Search/Notification
-// boundary as services split later — a field rename or type change in an event
-// breaks here before it can break a downstream consumer.
 import {
   CATALOG_EVENT_SCHEMAS,
   CATALOG_EVENT_NAMES,
@@ -29,7 +22,6 @@ function serialized(event: DomainEvent): Record<string, unknown> {
   return JSON.parse(JSON.stringify(event)) as Record<string, unknown>;
 }
 
-// One representative, valid instance per published event.
 const samples: Record<string, DomainEvent> = {
   RestaurantCreated: new RestaurantCreated('rest-1', 'owner-1', 'Spice Garden', 'spice-garden'),
   RestaurantUpdated: new RestaurantUpdated('rest-1', ['name', 'description']),
@@ -56,9 +48,7 @@ describe('Catalog event payload contracts', () => {
     expect(event).toBeDefined();
     const payload = serialized(event);
 
-    // eventName on the serialized payload must match the registry key.
     expect(payload.eventName).toBe(name);
-    // occurredOn round-trips to an ISO string in the outbox payload.
     expect(typeof payload.occurredOn).toBe('string');
 
     expect(() => assertCatalogEventContract(name, payload)).not.toThrow();

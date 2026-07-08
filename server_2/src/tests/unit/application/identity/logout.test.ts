@@ -168,7 +168,6 @@ describe('GetActiveSessions use-case', () => {
 
     const result = await useCase.execute({ userId });
     const session = result.getValue()[0];
-    // SessionResponse interface has no refreshTokenHash field
     expect((session as any).refreshTokenHash).toBeUndefined();
   });
 

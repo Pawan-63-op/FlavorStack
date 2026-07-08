@@ -1,6 +1,3 @@
-// Domain event raised when the rider hands the order to the customer (fulfillment_module.md §5.2).
-// Terminal happy-path event. aggregateId = fulfillmentId; key payload: riderId, deliveredAt.
-// Routed to QUEUE.notification (§5.3); Engagement/Loyalty (future) react for loyalty credit.
 import { DomainEvent } from '../../shared/DomainEvent';
 import { randomUUID } from 'crypto';
 

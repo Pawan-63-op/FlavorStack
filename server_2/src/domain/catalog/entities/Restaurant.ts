@@ -59,10 +59,6 @@ function slugify(name: string): string {
 }
 
 export class Restaurant extends AggregateRoot<RestaurantProps> {
-  // The `version` present when this aggregate was loaded from persistence (0 for a
-  // freshly created one). `touch()` advances `props.version` past this on each
-  // mutation; the repository uses it as the optimistic-lock guard while writing the
-  // new `version`. See MongoRestaurantRepository.update.
   private readonly _persistedVersion: number;
 
   private constructor(props: RestaurantProps, id?: UniqueEntityId) {
@@ -315,7 +311,6 @@ export class Restaurant extends AggregateRoot<RestaurantProps> {
     return Result.ok<void>();
   }
 
-  // ── Status transitions ──────────────────────────────────────
 
   private hasActiveCategory(): boolean {
     return this.props.categories.some((c) => c.isActive);
@@ -369,7 +364,6 @@ export class Restaurant extends AggregateRoot<RestaurantProps> {
     return Result.ok<void>();
   }
 
-  // ── Opening hours ───────────────────────────────────────────
 
   public setOpeningHours(openingHours: OpeningHours): Result<void> {
     if (!(openingHours instanceof OpeningHours)) {
@@ -382,7 +376,6 @@ export class Restaurant extends AggregateRoot<RestaurantProps> {
     return Result.ok<void>();
   }
 
-  // ── Category management ─────────────────────────────────────
 
   public addCategory(label: string, sortOrder?: number): Result<Category> {
     const order = sortOrder ?? this.props.categories.length;
@@ -489,7 +482,6 @@ export class Restaurant extends AggregateRoot<RestaurantProps> {
     return Result.ok<void>();
   }
 
-  // ── Delivery zone management ────────────────────────────────
 
   public addZone(props: { polygon: GeoPolygon; feeMatrix: DeliveryFeeMatrix; minOrder: Money }): Result<DeliveryZone> {
     const zoneResult = DeliveryZone.create({
@@ -558,7 +550,6 @@ export class Restaurant extends AggregateRoot<RestaurantProps> {
     return Result.ok<void>();
   }
 
-  // ── Soft delete ──────────────────────────────────────────────
 
   public softDelete(): Result<void> {
     if (this.props.deletedAt !== null) {

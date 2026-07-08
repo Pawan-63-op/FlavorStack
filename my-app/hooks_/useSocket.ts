@@ -6,7 +6,6 @@ const SOCKET_URL = "http://localhost:8000";
 
 let socketInstance: Socket | null = null;
 
-// Singleton — one socket connection shared across components
 function getSocket(): Socket {
   if (!socketInstance) {
     socketInstance = io(SOCKET_URL, {

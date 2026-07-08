@@ -35,8 +35,6 @@ describe('NotificationPreference.setChannel / isEnabled', () => {
 
   it('default-allows a category that has no stored toggle', () => {
     const pref = NotificationPreference.createDefault('user-1');
-    // ORDER_UPDATES, DELIVERY, SECURITY, PROMOTIONS are all seeded; isEnabled must still
-    // default-allow for any category absent from the map (defensive behavior).
     expect(pref.isEnabled('UNKNOWN_CATEGORY' as any, NOTIFICATION_CHANNEL.PUSH)).toBe(true);
   });
 

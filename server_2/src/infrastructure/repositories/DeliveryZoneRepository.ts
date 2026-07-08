@@ -1,14 +1,3 @@
-// MongoDB implementation of IDeliveryZoneRepository (Catalog Phase 8).
-//
-// Delivery zones are embedded inside the Restaurant aggregate (`restaurants`
-// collection), so this repository is a read-only spatial query over that
-// collection — there is no separate `delivery_zones` collection.
-//
-// `findZoneContaining(point)` uses the `deliveryZones.polygon` 2dsphere index to
-// narrow to restaurants whose zones intersect the point, then re-checks each zone
-// with the domain's exact ray-casting `GeoPolygon.contains` (the index match is on
-// the array, so a restaurant can surface for a zone that does not actually contain
-// the point). Returns the matching DeliveryZone entities — never documents.
 import type { ClientSession } from 'mongoose';
 import { IDeliveryZoneRepository } from '../../domain/catalog/repositories/IDeliveryZoneRepository';
 import { DeliveryZone } from '../../domain/catalog/entities/DeliveryZone';

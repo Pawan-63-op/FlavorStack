@@ -1,4 +1,3 @@
-// Pino-based job lifecycle logger — registers active/completed/failed/stalled hooks on a BullMQ Worker
 import type { Job, Worker } from 'bullmq';
 import { logger } from '../../observability/logger';
 

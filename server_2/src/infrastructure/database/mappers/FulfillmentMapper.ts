@@ -1,8 +1,3 @@
-// Maps between the Fulfillment aggregate and FulfillmentModel documents (fulfillment_module.md §8).
-//
-// toPersistence flattens the aggregate's VOs to plain documents. toDomain rebuilds every VO via its
-// create() factory (trusted data: a failure means stored corruption -> DomainError via rebuildOrThrow)
-// and rehydrates the root through Fulfillment.reconstitute, which raises no events.
 import { Fulfillment, FulfillmentProps } from '../../../domain/fulfillment/entities/Fulfillment';
 import { FulfillmentLine, FulfillmentLineOption } from '../../../domain/fulfillment/value-objects/FulfillmentLine';
 import { DeliveryAddress } from '../../../domain/fulfillment/value-objects/DeliveryAddress';

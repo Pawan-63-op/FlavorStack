@@ -1,6 +1,3 @@
-// Mongoose schema — base `users` collection, discriminated on `role`.
-// Implements the persisted shape of BaseUser (src/domain/identity/entities/BaseUser.ts).
-// _id is a UUID string (UniqueEntityId), versionKey disabled (domain owns `version`).
 import { Schema, model } from 'mongoose';
 import { USER_ROLE, UserRole } from '../../../domain/identity/enums/user-role.enum';
 import { AUTH_PROVIDER, AuthProvider } from '../../../domain/identity/enums/auth-provider.enum';
@@ -65,7 +62,6 @@ export const UserSchema = new Schema<UserDocument>(
   }
 );
 
-// Partial-unique: a soft-deleted user's email/phone can be re-registered (deletedAt: null only).
 UserSchema.index({ email: 1 }, { unique: true, partialFilterExpression: { deletedAt: null } });
 UserSchema.index({ phone: 1 }, { unique: true, partialFilterExpression: { deletedAt: null } });
 UserSchema.index({ role: 1 });

@@ -1,0 +1,5 @@
+# Local TLS material — never commit certs/keys.
+nginx/certs/*.pem
+
+# Database backup archives (deploy/backup.sh) — never commit data dumps.
+backups/

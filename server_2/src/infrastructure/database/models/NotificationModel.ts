@@ -1,6 +1,3 @@
-// Mongoose schema — `notifications` collection (engagement_module.md §6).
-// Indexes: recipientUserId+createdAt (history paging); unique sparse dedupeKey
-// (at-least-once dispatch idempotency); status (unread counts).
 import { Schema, model } from 'mongoose';
 
 export interface NotificationDocument {

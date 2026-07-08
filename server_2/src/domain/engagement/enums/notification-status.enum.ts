@@ -1,4 +1,3 @@
-// Notification dispatch lifecycle states (engagement_module.md §2): PENDING → SENT | FAILED; SENT → READ.
 export const NOTIFICATION_STATUS = {
   PENDING: 'PENDING',
   SENT: 'SENT',

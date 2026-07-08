@@ -2,9 +2,6 @@ import User from '../models/User';
 import LoyaltyTransaction from '../models/LoyaltyTransaction';
 import { AuthRequest,IUser } from '@/Types/allTypes';
 import { Response } from 'express';
-// @desc    Get user loyalty info
-// @route   GET /api/loyalty/info
-// @access  Private
 export const getLoyaltyInfo = async (req:AuthRequest,res:Response) => {
   try {
     const user = await User.findById(req.user?._id);
@@ -33,9 +30,6 @@ export const getLoyaltyInfo = async (req:AuthRequest,res:Response) => {
   }
 };
 
-// @desc    Get user loyalty transactions
-// @route   GET /api/loyalty/transactions
-// @access  Private
 export const getLoyaltyTransactions = async (req:AuthRequest,res:Response) => {
   try {
     const transactions = await LoyaltyTransaction.find({ user: req.user?._id })
@@ -48,9 +42,6 @@ export const getLoyaltyTransactions = async (req:AuthRequest,res:Response) => {
   }
 };
 
-// @desc    Redeem loyalty points
-// @route   POST /api/loyalty/redeem
-// @access  Private
 export const redeemPoints = async (req:AuthRequest,res:Response) => {
   try {
     const { points, description } = req.body;

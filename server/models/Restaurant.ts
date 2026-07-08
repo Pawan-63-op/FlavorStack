@@ -61,12 +61,6 @@ const restaurantSchema = new Schema<IRestaurant>({
   toObject: { virtuals: true }
 });
 
-// // Virtual for menu items
-// restaurantSchema.virtual('menuItems', {
-//   ref: 'MenuItem',
-//   localField: '_id',
-//   foreignField: 'restaurant'
-// });
 
 const Restaurant = mongoose.model<IRestaurant>('Restaurant', restaurantSchema);
 

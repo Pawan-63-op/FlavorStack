@@ -26,7 +26,6 @@ describe('RecomputeRestaurantRating', () => {
     const result = await uc.execute({ restaurantId: 'rest-1' });
 
     expect(result.isSuccess).toBe(true);
-    // only APPROVED reviews are aggregated
     expect(reviewRepo.findByRestaurant).toHaveBeenCalledWith('rest-1', MODERATION_STATUS.APPROVED);
     expect(viewRepo.upsert).toHaveBeenCalledTimes(1);
     const view = viewRepo.upsert.mock.calls[0][0];

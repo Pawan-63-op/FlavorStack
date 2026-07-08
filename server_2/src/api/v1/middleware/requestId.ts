@@ -1,4 +1,3 @@
-// Attach x-request-id to every request for tracing
 import { randomUUID } from 'crypto';
 import { Request, Response, NextFunction } from 'express';
 

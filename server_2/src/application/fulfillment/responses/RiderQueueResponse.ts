@@ -1,4 +1,3 @@
-// Response shape for GET /riders/me/queue (fulfillment_module.md §7.2, Phase 6).
 import { RiderQueueView } from '../../../domain/fulfillment/repositories/IFulfillmentProjectionRepository';
 
 export interface RiderQueueItemResponse {

@@ -1,11 +1,3 @@
-// Domain <-> persistence mapping for the Restaurant aggregate.
-// Restaurant (src/domain/catalog/entities/Restaurant.ts) <-> RestaurantDocument.
-//
-// toPersistence flattens the aggregate (value objects -> plain fields, GeoJSON for
-// geo-indexed shapes). toDomain rebuilds every value object/entity via its create()
-// factory (trusted-data: failures are corruption -> DomainError) and rehydrates the
-// root through Restaurant.reconstitute, which raises no events. The repository never
-// hands a Mongoose document to the domain.
 import { Restaurant, RestaurantProps } from '../../../domain/catalog/entities/Restaurant';
 import { Category } from '../../../domain/catalog/entities/Category';
 import { DeliveryZone } from '../../../domain/catalog/entities/DeliveryZone';
@@ -30,7 +22,6 @@ import {
 } from '../models/RestaurantModel';
 import { rebuildOrThrow } from './rebuildOrThrow';
 
-// ── value-object <-> document helpers ──────────────────────────
 
 function moneyToPersistence(money: Money): MoneyDocument {
   return { amount: money.amount, currency: money.currency };
@@ -74,7 +65,6 @@ function polygonToPersistence(polygon: GeoPolygon): GeoJsonPolygon {
 }
 
 function polygonToDomain(doc: GeoJsonPolygon, context: string): GeoPolygon {
-  // GeoJSON stores [lng, lat]; GeoPoint.create takes (lat, lng).
   const ring = doc.coordinates[0] ?? [];
   const points = ring.map(([lng, lat]) => rebuildOrThrow(GeoPoint.create(lat, lng), context));
   return rebuildOrThrow(GeoPolygon.create(points), context);
@@ -143,7 +133,6 @@ function openingHoursToDomain(doc: OpeningHoursDocument): OpeningHours {
   );
 }
 
-// ── aggregate <-> document ─────────────────────────────────────
 
 export class RestaurantMapper {
   static toPersistence(restaurant: Restaurant): RestaurantDocument {

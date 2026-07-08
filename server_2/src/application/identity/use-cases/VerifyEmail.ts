@@ -3,6 +3,7 @@ import { NotFoundError } from '../../../domain/shared/errors/NotFoundError';
 import { ConflictError } from '../../../domain/shared/errors/ConflictError';
 import { ValidationError } from '../../../domain/shared/errors/ValidationError';
 import { Email } from '../../../domain/identity/value-objects/Email.vo';
+import { BaseUser } from '../../../domain/identity/entities/BaseUser';
 import { IUserRepository } from '../../../domain/identity/repositories/IUserRepository';
 import { IOtpStore } from '../../../domain/identity/services/IOtpStore';
 import { IUnitOfWork } from '../../shared/ports/IUnitOfWork';
@@ -23,40 +24,38 @@ export class VerifyEmail {
   ) {}
 
   async execute(dto: VerifyEmailDto): Promise<Result<UserResponse>> {
-    // 1. Validate email VO
-    const emailResult = Email.create(dto.email);
-    if (emailResult.isFailure) return Result.fail(emailResult.getError());
-    const email = emailResult.getValue();
+    let user: BaseUser | null;
+    if (dto.userId) {
+      user = await this.userRepo.findById(dto.userId);
+    } else if (dto.email) {
+      const emailResult = Email.create(dto.email);
+      if (emailResult.isFailure) return Result.fail(emailResult.getError());
+      user = await this.userRepo.findByEmail(emailResult.getValue());
+    } else {
+      return Result.fail(new ValidationError('email_or_user_id_required'));
+    }
 
-    // 2. Load user
-    const user = await this.userRepo.findByEmail(email);
     if (!user) return Result.fail(new NotFoundError('user_not_found'));
 
-    // 3. Guard: only VerifyEmail may set isEmailVerified, and only once
     if (user.isEmailVerified) {
       return Result.fail(new ConflictError('email_already_verified'));
     }
 
-    // 4. Validate OTP via IOtpStore
     const otpResult = await this.otpStore.verify(emailVerificationOtpKey(user._id), dto.code);
     if (otpResult.isFailure) {
       return Result.fail(new ValidationError(String(otpResult.getError())));
     }
     await this.otpStore.consume(emailVerificationOtpKey(user._id));
 
-    // 5. Mutate aggregate (raises UserVerified)
     user.verifyEmail();
 
-    // 6. Pull events
     const events = user.pullDomainEvents();
 
-    // 7. Atomic transaction: persist + outbox
     await this.unitOfWork.runInTransaction(async (ctx) => {
       await this.userRepo.update(user);
       await this.outboxStore.append(events, ctx);
     });
 
-    // 8. Post-commit publish
     await this.eventBus.publishAll(events);
 
     return Result.ok(toUserResponse(user));

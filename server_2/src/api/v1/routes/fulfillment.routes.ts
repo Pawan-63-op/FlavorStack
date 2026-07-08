@@ -1,12 +1,8 @@
-// Fulfillment API routes.
-//  - Phase 2: restaurant preparation flow.
-//  - Phase 3B: rider accept/reject + admin reassignment.
-//  - Phase 5A/5B: cancellation, failure.
-//  - Phase 6: read-model query endpoints (tracking, rider queue, admin dashboard).
 import { Router } from 'express';
 import { FulfillmentController } from '../controllers/fulfillment/FulfillmentController';
 import { RiderController } from '../controllers/fulfillment/RiderController';
 import { AdminFulfillmentController } from '../controllers/fulfillment/AdminFulfillmentController';
+import { DashboardAnalyticsController } from '../controllers/fulfillment/DashboardAnalyticsController';
 import { authenticate } from '../middleware/authenticate';
 import { requireRole } from '../middleware/authorize';
 import { validate } from '../middleware/validate';
@@ -24,12 +20,15 @@ import {
   failSchema,
   locationSchema,
   adminDashboardQuery,
+  analyticsQuery,
+  myOrdersQuery,
 } from '../validators/fulfillment/fulfillment.validator';
 
 export interface FulfillmentRoutesDeps {
   fulfillmentController: FulfillmentController;
   riderController: RiderController;
   adminFulfillmentController: AdminFulfillmentController;
+  dashboardAnalyticsController: DashboardAnalyticsController;
   tokenService: ITokenService;
 }
 
@@ -38,9 +37,9 @@ export function createFulfillmentRoutes(deps: FulfillmentRoutesDeps): Router {
   const ctrl = deps.fulfillmentController;
   const rider = deps.riderController;
   const admin = deps.adminFulfillmentController;
+  const analytics = deps.dashboardAnalyticsController;
   const auth = authenticate(deps.tokenService);
 
-  // ── Restaurant (Phase 2) ──────────────────────────────────────────────────
   router.post(
     '/fulfillments/:id/preparing',
     auth,
@@ -59,7 +58,6 @@ export function createFulfillmentRoutes(deps: FulfillmentRoutesDeps): Router {
     ctrl.getRestaurantFulfillments
   );
 
-  // ── Customer tracking (Phase 6) ───────────────────────────────────────────
   router.get(
     '/fulfillments/:id/tracking',
     auth,
@@ -67,12 +65,21 @@ export function createFulfillmentRoutes(deps: FulfillmentRoutesDeps): Router {
     ctrl.getTracking
   );
 
-  // ── Rider (Phase 3B) ──────────────────────────────────────────────────────
+  router.get('/me/orders', auth, validate(myOrdersQuery, 'query'), ctrl.listMyOrders);
+
   router.get(
     '/riders/me/queue',
     auth,
     requireRole(USER_ROLE.DRIVER),
     rider.getQueue
+  );
+
+  router.get(
+    '/riders/me/deliveries',
+    auth,
+    requireRole(USER_ROLE.DRIVER),
+    validate(myOrdersQuery, 'query'),
+    rider.getDeliveryHistory
   );
 
   router.post(
@@ -92,7 +99,6 @@ export function createFulfillmentRoutes(deps: FulfillmentRoutesDeps): Router {
     rider.reject
   );
 
-  // ── Rider delivery flow (Phase 4) ─────────────────────────────────────────
   router.post(
     '/fulfillments/:id/pickup',
     auth,
@@ -118,8 +124,6 @@ export function createFulfillmentRoutes(deps: FulfillmentRoutesDeps): Router {
     rider.deliver
   );
 
-  // ── Rider live location (Phase 7) ─────────────────────────────────────────
-  // HTTP fallback for the WS `location` event; both converge on RecordRiderLocation.
   router.post(
     '/fulfillments/:id/location',
     auth,
@@ -129,7 +133,6 @@ export function createFulfillmentRoutes(deps: FulfillmentRoutesDeps): Router {
     rider.location
   );
 
-  // ── Delivery failure (Phase 5B) ───────────────────────────────────────────
   router.post(
     '/fulfillments/:id/fail',
     auth,
@@ -139,7 +142,6 @@ export function createFulfillmentRoutes(deps: FulfillmentRoutesDeps): Router {
     rider.fail
   );
 
-  // ── Cancellation (Phase 5A) ───────────────────────────────────────────────
   router.post(
     '/fulfillments/:id/cancel',
     auth,
@@ -148,7 +150,6 @@ export function createFulfillmentRoutes(deps: FulfillmentRoutesDeps): Router {
     ctrl.cancel
   );
 
-  // ── Admin (Phase 3B + 5A + 6) ────────────────────────────────────────────
   router.get(
     '/admin/fulfillments',
     auth,
@@ -173,6 +174,15 @@ export function createFulfillmentRoutes(deps: FulfillmentRoutesDeps): Router {
     validate(fulfillmentIdParam, 'params'),
     validate(cancelSchema, 'body'),
     admin.cancel
+  );
+
+  router.get('/owner/analytics', auth, validate(analyticsQuery, 'query'), analytics.getOwner);
+  router.get(
+    '/admin/analytics',
+    auth,
+    requireRole(USER_ROLE.ADMIN),
+    validate(analyticsQuery, 'query'),
+    analytics.getPlatform
   );
 
   return router;

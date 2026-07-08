@@ -84,8 +84,6 @@ describe('CheckServiceability use-case', () => {
       feeMatrix: buildFeeMatrix(), // 2000
       minOrder: money(10000),
     }).getValue();
-    // Same restaurant via a second (more expensive) overlapping zone is built by the
-    // default fee matrix too; assert a single deduped entry at the lowest fee.
     const useCase = new CheckServiceability(
       zoneRepo([cheap, zone('rest-1')]),
       readRepo({ 'rest-1': summary('rest-1') })
@@ -117,7 +115,6 @@ describe('CheckServiceability use-case', () => {
       const result = await useCase.execute({ lat: 0.5, lng: 0.5 });
 
       expect(result.getValue()).toEqual(cached);
-      // On a cache hit the loader never runs, so the zone repo is untouched.
       expect(zones.findZoneContaining).not.toHaveBeenCalled();
     });
 

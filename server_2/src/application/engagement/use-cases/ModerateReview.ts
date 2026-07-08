@@ -1,7 +1,3 @@
-// UC: ModerateReview — admin approves or rejects a review (engagement_module.md §4).
-// On approve, raises ReviewModerated and triggers RecomputeRestaurantRating (only approved reviews
-// contribute to the aggregate). Canonical write shape: domain method → pullDomainEvents →
-// runInTransaction(update + outbox) → publishAll.
 import { Result } from '../../../domain/shared/Result';
 import { NotFoundError } from '../../../domain/shared/errors/NotFoundError';
 import { IReviewRepository } from '../../../domain/engagement/repositories/IReviewRepository';

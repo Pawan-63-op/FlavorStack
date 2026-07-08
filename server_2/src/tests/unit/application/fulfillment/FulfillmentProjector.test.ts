@@ -1,5 +1,3 @@
-// Unit tests for FulfillmentProjector (Phase 6).
-// All projection writes are mocked via IFulfillmentProjectionRepository.
 import { randomUUID } from 'crypto';
 import { DomainEvent } from '../../../../domain/shared/DomainEvent';
 import { FulfillmentProjector } from '../../../../application/fulfillment/projector/FulfillmentProjector';
@@ -10,12 +8,12 @@ import {
   RiderQueueView,
 } from '../../../../domain/fulfillment/repositories/IFulfillmentProjectionRepository';
 
-// ── helpers ──────────────────────────────────────────────────────────────────
 
 function makeRepo(): jest.Mocked<IFulfillmentProjectionRepository> {
   return {
     upsertCustomerTracking: jest.fn().mockResolvedValue(undefined),
     findCustomerTracking: jest.fn().mockResolvedValue(null),
+    findByCustomer: jest.fn().mockResolvedValue([]),
     upsertRestaurantView: jest.fn().mockResolvedValue(undefined),
     removeRestaurantView: jest.fn().mockResolvedValue(undefined),
     findRestaurantQueue: jest.fn().mockResolvedValue([]),
@@ -23,9 +21,11 @@ function makeRepo(): jest.Mocked<IFulfillmentProjectionRepository> {
     removeRiderQueueItem: jest.fn().mockResolvedValue(undefined),
     removeAllRiderQueueItemsForFulfillment: jest.fn().mockResolvedValue(undefined),
     findRiderQueue: jest.fn().mockResolvedValue([]),
+    findRiderCompletedDeliveries: jest.fn().mockResolvedValue([]),
     upsertAdminView: jest.fn().mockResolvedValue(undefined),
     patchAdminView: jest.fn().mockResolvedValue(undefined),
     findAdminDashboard: jest.fn().mockResolvedValue([]),
+    aggregateAnalytics: jest.fn(),
   };
 }
 
@@ -52,7 +52,6 @@ const ADDRESS = {
   coordinates: { lat: 12.97, lng: 77.59 },
 };
 
-// ── tests ─────────────────────────────────────────────────────────────────────
 
 describe('FulfillmentProjector', () => {
   let repo: jest.Mocked<IFulfillmentProjectionRepository>;
@@ -63,7 +62,6 @@ describe('FulfillmentProjector', () => {
     projector = new FulfillmentProjector(repo);
   });
 
-  // ── FulfillmentCreated ───────────────────────────────────────────────────
   describe('onFulfillmentCreated', () => {
     it('seeds CustomerTrackingView, RestaurantFulfillmentView, and AdminDashboardView', async () => {
       const event = evt('FulfillmentCreated', FULFILLMENT_ID, {
@@ -96,7 +94,6 @@ describe('FulfillmentProjector', () => {
     });
   });
 
-  // ── PreparationStarted ───────────────────────────────────────────────────
   describe('onPreparationStarted', () => {
     it('updates CustomerTracking and patches AdminView status to PREPARING', async () => {
       const existingRow: RestaurantFulfillmentView = {
@@ -129,7 +126,6 @@ describe('FulfillmentProjector', () => {
     });
   });
 
-  // ── ReadyForPickup ──────────────────────────────────────────────────────
   describe('onReadyForPickup', () => {
     it('updates CustomerTracking, RestaurantView readyAt, and AdminView', async () => {
       const existingRow: RestaurantFulfillmentView = {
@@ -158,7 +154,6 @@ describe('FulfillmentProjector', () => {
     });
   });
 
-  // ── RiderOffered ────────────────────────────────────────────────────────
   describe('onRiderOffered', () => {
     it('adds rider queue item when tracking view exists', async () => {
       const trackingView: CustomerTrackingView = {
@@ -199,7 +194,6 @@ describe('FulfillmentProjector', () => {
     });
   });
 
-  // ── RiderAssigned ───────────────────────────────────────────────────────
   describe('onRiderAssigned', () => {
     it('updates CustomerTracking rider, moves queue item to ACCEPTED, and patches AdminView', async () => {
       const existingQueueItem: RiderQueueView = {
@@ -230,7 +224,6 @@ describe('FulfillmentProjector', () => {
     });
   });
 
-  // ── RiderAssignmentExpired ──────────────────────────────────────────────
   describe('onRiderAssignmentExpired', () => {
     it('removes the rider queue item', async () => {
       await projector.onRiderAssignmentExpired(
@@ -240,7 +233,6 @@ describe('FulfillmentProjector', () => {
     });
   });
 
-  // ── DeliveryCompleted ───────────────────────────────────────────────────
   describe('onDeliveryCompleted', () => {
     it('marks DELIVERED, removes restaurant view, removes all rider queue items', async () => {
       const deliveredAt = new Date();
@@ -258,7 +250,6 @@ describe('FulfillmentProjector', () => {
     });
   });
 
-  // ── FulfillmentCancelled ────────────────────────────────────────────────
   describe('onFulfillmentCancelled', () => {
     it('marks CANCELLED with cancellation info and flags exceptionFlag in admin view', async () => {
       await projector.onFulfillmentCancelled(
@@ -281,7 +272,6 @@ describe('FulfillmentProjector', () => {
     });
   });
 
-  // ── DeliveryFailed ──────────────────────────────────────────────────────
   describe('onDeliveryFailed', () => {
     it('marks FAILED with failureReason and sets exceptionFlag', async () => {
       await projector.onDeliveryFailed(
@@ -298,7 +288,6 @@ describe('FulfillmentProjector', () => {
     });
   });
 
-  // ── RiderReassigned ─────────────────────────────────────────────────────
   describe('onRiderReassigned', () => {
     it('updates tracking riderId and removes old rider queue item', async () => {
       const NEW_RIDER = 'rider-2';
@@ -320,7 +309,6 @@ describe('FulfillmentProjector', () => {
   });
 });
 
-// ── GetFulfillment use case ──────────────────────────────────────────────────
 describe('GetFulfillment', () => {
   const { GetFulfillment } = require('../../../../application/fulfillment/use-cases/GetFulfillment');
 
@@ -359,7 +347,6 @@ describe('GetFulfillment', () => {
   });
 });
 
-// ── GetLiveTracking use case ─────────────────────────────────────────────────
 describe('GetLiveTracking', () => {
   const { GetLiveTracking } = require('../../../../application/fulfillment/use-cases/GetLiveTracking');
 
@@ -406,7 +393,6 @@ describe('GetLiveTracking', () => {
   });
 });
 
-// ── GetRiderQueue use case ───────────────────────────────────────────────────
 describe('GetRiderQueue', () => {
   const { GetRiderQueue } = require('../../../../application/fulfillment/use-cases/GetRiderQueue');
 
@@ -434,7 +420,6 @@ describe('GetRiderQueue', () => {
   });
 });
 
-// ── GetAdminDashboard use case ───────────────────────────────────────────────
 describe('GetAdminDashboard', () => {
   const { GetAdminDashboard } = require('../../../../application/fulfillment/use-cases/GetAdminDashboard');
 

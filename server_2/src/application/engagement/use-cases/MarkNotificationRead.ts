@@ -1,5 +1,3 @@
-// UC: MarkNotificationRead — recipient marks one notification read (engagement_module.md §4).
-// Ownership is enforced here (the notification must belong to the caller). No domain event is raised.
 import { Result } from '../../../domain/shared/Result';
 import { NotFoundError } from '../../../domain/shared/errors/NotFoundError';
 import { ForbiddenError } from '../../../domain/shared/errors/ForbiddenError';

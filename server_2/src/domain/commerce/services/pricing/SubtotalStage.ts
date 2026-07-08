@@ -3,10 +3,6 @@ import { ValidationError } from '../../../shared/errors/ValidationError';
 import { Money } from '../../../shared/Money';
 import { PricingLineInput } from '../../types/PricingContext';
 
-// Pricing pipeline stage 1 (Commerce Phase 7, §4.2) — pure, Money-based.
-// Computes Σ over lines of (basePrice + Σ variant priceDelta) × quantity.
-// Currency is derived from the lines themselves; Money.add rejects any mismatch,
-// so a single-currency cart is enforced implicitly.
 export class SubtotalStage {
   public static run(lines: PricingLineInput[]): Result<Money> {
     if (!Array.isArray(lines) || lines.length === 0) {
@@ -20,7 +16,6 @@ export class SubtotalStage {
         return Result.fail<Money>(new ValidationError('Line basePrice must be a valid Money value object'));
       }
 
-      // unit price = basePrice + Σ variant priceDelta
       let unitPrice = line.basePrice;
       for (const variant of line.selectedVariants ?? []) {
         if (!(variant.priceDelta instanceof Money)) {
@@ -31,7 +26,6 @@ export class SubtotalStage {
         unitPrice = addResult.getValue();
       }
 
-      // line total = unit price × quantity
       const lineTotal = unitPrice.multiply(line.quantity.value);
 
       if (subtotal === null) {

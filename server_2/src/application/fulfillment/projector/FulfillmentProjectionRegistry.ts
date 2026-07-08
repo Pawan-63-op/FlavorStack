@@ -1,5 +1,3 @@
-// Registers the FulfillmentProjector on the in-process event bus (Phase 6).
-// Mirrors registerCatalogProjector / registerFulfillmentEventHandlers.
 import { IEventBus } from '../../shared/events/IEventBus';
 import { FulfillmentProjector } from './FulfillmentProjector';
 

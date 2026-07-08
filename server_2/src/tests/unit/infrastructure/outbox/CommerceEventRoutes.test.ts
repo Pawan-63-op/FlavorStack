@@ -1,9 +1,3 @@
-// Commerce Phase 12 — CommerceEventRoutes publish-and-park routing table tests.
-//
-// Commerce publishes two outbox events at checkout: OrderRequested (→ future Ordering) and
-// CheckoutReadyForPayment (→ future Payments). Those consumer contexts don't exist yet, so the routes point
-// at parked queue names with no worker — rows persist in outbox_events with no data loss until a consumer
-// attaches. These tests freeze the table + the register fn's idempotent union behaviour.
 import { EventRouter } from '../../../../infrastructure/outbox/EventRouter';
 import {
   registerCommerceEventRoutes,

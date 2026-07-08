@@ -1,5 +1,3 @@
-// UC: GetNotificationPreferences — returns the user's toggles, or a non-persisted default when none
-// exist (default-allow, engagement_module.md §2/§4).
 import { Result } from '../../../domain/shared/Result';
 import { NotificationPreference } from '../../../domain/engagement/entities/NotificationPreference';
 import { INotificationPreferenceRepository } from '../../../domain/engagement/repositories/INotificationPreferenceRepository';

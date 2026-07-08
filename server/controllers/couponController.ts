@@ -3,17 +3,11 @@ import mongoose from 'mongoose';
 import { AuthRequest } from '@/Types/allTypes';
 import Coupon from '../models/Coupon';
 import { Express } from 'express';
-// 
 import { Response,Request } from 'express';
 import error from "express";
-// @desc    Get all active coupons
-// @route   GET /api/coupons
-// @access  Public
 export const getCoupons = async (req:Request, res:Response) => {
   try {
     const coupons = await Coupon.find({ 
-      // isActive: true,
-      // validUntil: { $gte: new Date() }
     }).sort('-createdAt');
     res.status(201).json({coupons});
   } catch (error : any ) {
@@ -21,9 +15,6 @@ export const getCoupons = async (req:Request, res:Response) => {
   }
 };
 
-// @desc    Create coupon
-// @route   POST /api/coupons
-// @access  Private/Admin
 export const createCoupon = async (req:AuthRequest, res:Response) => {
   try {
     const coupon = await Coupon.create({
@@ -41,12 +32,7 @@ export const createCoupon = async (req:AuthRequest, res:Response) => {
   }
 };
 
-// @desc    Update coupon
-// @route   PUT /api/coupons/:id
-// @access  Private/Admin
 export const updateCoupon = async (req:Request, res:Response) => {
-  // res.status(201).json({op:req.params.id , answer : type req.params.id});m
-// const objectId = new mongoose.Types.ObjectId(idString);
 
   try {
     const idString= req.params.id;
@@ -63,14 +49,9 @@ export const updateCoupon = async (req:Request, res:Response) => {
   }
 };
 
-// @desc    Delete coupon
-// @route   DELETE /api/coupons/:id
-// @access  Private/Admin
 export const deleteCoupon = async (req:Request, res:Response) => {
   try {
-    // const coupon = await Coupon.findById(req.params.id);
  const idString= req.params.id;
-  // res.status(201).json({ message: idString});
     const coupon = await Coupon.findById(new mongoose.Types.ObjectId(idString));
     if (coupon) {
       await coupon.deleteOne();
@@ -83,9 +64,6 @@ export const deleteCoupon = async (req:Request, res:Response) => {
   }
 };
 
-// @desc    Validate coupon
-// @route   POST /api/coupons/validate
-// @access  Private
 export const validateCoupon = async (req:Request, res:Response) => {
   try {
     const { code, orderTotal } = req.body;
@@ -104,7 +82,6 @@ export const validateCoupon = async (req:Request, res:Response) => {
       });
     }
 
-    // Check usage limit
     if (coupon.usageLimit && coupon.usedCount >= coupon.usageLimit) {
       return res.status(400).json({ 
         valid: false, 
@@ -112,7 +89,6 @@ export const validateCoupon = async (req:Request, res:Response) => {
       });
     }
 
-    // Check minimum order
     if (coupon.minOrder && orderTotal < coupon.minOrder) {
       return res.status(400).json({ 
         valid: false, 
@@ -120,7 +96,6 @@ export const validateCoupon = async (req:Request, res:Response) => {
       });
     }
 
-    // Calculate discount
     let discount = 0;
     if (coupon.type === 'percentage') {
       discount = (orderTotal * coupon.discount) / 100;
@@ -133,7 +108,6 @@ export const validateCoupon = async (req:Request, res:Response) => {
       discount = coupon.discount;
     }
 
-    // Increment usage count
     coupon.usedCount += 1;
     await coupon.save();
 

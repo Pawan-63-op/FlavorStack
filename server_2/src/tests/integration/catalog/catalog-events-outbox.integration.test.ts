@@ -1,11 +1,3 @@
-// Catalog Phase 12 — end-to-end outbox spine + idempotent replay.
-//
-// Proves the path the master plan calls for:
-//   aggregate change ──(same txn)──▶ outbox row ──▶ OutboxProcessor drains ──▶
-//   in-process bus ──▶ CatalogProjector rebuilds projections.
-// Then redelivers the SAME rows (at-least-once) and asserts the projections are
-// byte-for-byte unchanged — replay is idempotent (the menu_item_search upsert
-// fix from Phase 12, no E11000).
 import { randomUUID } from 'crypto';
 import { getConnection } from '../../../infrastructure/database/connection';
 import { TransactionContext } from '../../../infrastructure/database/TransactionContext';
@@ -138,7 +130,6 @@ describe('Catalog events → outbox → poller → projector (idempotent)', () =
     const afterFirst = await MenuItemSearchModel.find({ restaurantId }).sort({ _id: 1 }).lean();
     expect(afterFirst.length).toBe(3);
 
-    // At-least-once: redeliver the very same rows and drain again.
     await redeliverAll();
     await expect(processor.processBatch()).resolves.toBeUndefined();
 

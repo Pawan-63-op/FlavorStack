@@ -1,7 +1,3 @@
-// Shared aggregate builders for the Phase 6 specialized-repository integration
-// tests (Batch 5). Mirrors the builders in user-repository.integration.test.ts
-// (Batch 4) but factored out so Customer/Driver/Admin repository tests can reuse
-// them without duplicating the ~20 base fields.
 import { randomUUID } from 'crypto';
 import { Customer } from '../../../domain/identity/entities/Customer';
 import { Driver } from '../../../domain/identity/entities/Driver';
@@ -43,10 +39,6 @@ export function baseFields(role: UserRole, overrides: Record<string, unknown> = 
   };
 }
 
-// `overrides` is applied twice: once into `baseFields` (so base-user fields like
-// `name`/`email` take effect) and once on top of the subtype defaults (so
-// subtype-specific fields like `referralCode`/`isAvailable`/`permissions` can be
-// overridden too).
 
 export function buildCustomer(overrides: Record<string, unknown> = {}): Customer {
   return new Customer({

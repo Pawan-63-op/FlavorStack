@@ -1,8 +1,3 @@
-// Unit tests for the pure event→notification mapper (Fulfillment Phase 8, §5.2 / §5.3).
-//
-// Recipient resolution reads only customerId/riderId carried on the event (boundary-safe, no repo
-// read). In-scope events with a resolvable recipient produce a template; out-of-scope / internal
-// events and events without a recipient id produce null.
 import {
   mapFulfillmentEventToNotification,
   FULFILLMENT_NOTIFICATION_EVENTS,
@@ -66,7 +61,6 @@ describe('mapFulfillmentEventToNotification', () => {
   });
 
   it('returns null when an in-scope event carries no resolvable recipient', () => {
-    // ReadyForPickup carries only restaurantId in the real payload — no customer/rider id.
     expect(
       mapFulfillmentEventToNotification(event({ eventName: 'ReadyForPickup', restaurantId: 'rest-1' })),
     ).toBeNull();

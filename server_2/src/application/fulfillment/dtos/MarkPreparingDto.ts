@@ -1,5 +1,5 @@
 export interface MarkPreparingDto {
   fulfillmentId: string;
-  restaurantId: string;
+  actorUserId: string;
   prepEstimateMinutes?: number;
 }

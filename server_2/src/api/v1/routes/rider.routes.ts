@@ -1,1 +1,0 @@
-// Mounts RiderController — rider role

@@ -9,14 +9,6 @@ import { AddToCartDto } from '../dtos/AddToCartDto';
 import { CartResponseDto, toCartResponse } from '../dtos/CartResponseDto';
 import { CommerceTelemetry } from '../observability/CommerceTelemetry';
 
-// UC: AddToCart — adds a LineItemSelection to the customer's active Cart, creating
-// one if none exists. Enforces the single-restaurant + currency invariants and
-// merges identical lines (Cart.addItem). Catalog-backed validation (item available,
-// variant valid, restaurant open) and authoritative pricing are Phases 5/6 — not
-// yet wired, so `restaurantId` and `unitPrice` are trusted caller input for now.
-//
-// CartItemAdded is in-process only (not outbox-routed), published post-commit.
-// Phase 14: emits the cart-add metric + a structured log line (commerce_module.md §11).
 export class AddToCart {
   constructor(
     private readonly cartRepo: ICartRepository,

@@ -1,5 +1,3 @@
-// Notification — one dispatched message: the history record + lifecycle (engagement_module.md §2).
-// Key: notificationId. No domain events raised here (dispatch is driven by the application layer).
 import { AggregateRoot } from '../../shared/AggregateRoot';
 import { Result } from '../../shared/Result';
 import { Guard } from '../../shared/Guard';

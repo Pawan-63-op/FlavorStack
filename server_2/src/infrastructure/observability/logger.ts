@@ -1,4 +1,3 @@
-// Pino — structured JSON logs, levels per env
 import pino from 'pino';
 
 export const logger = pino({

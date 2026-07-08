@@ -5,10 +5,6 @@ import { IUnitOfWork } from '../../shared/ports/IUnitOfWork';
 import { CreateCartDto } from '../dtos/CreateCartDto';
 import { CartResponseDto, toCartResponse } from '../dtos/CartResponseDto';
 
-// UC: CreateCart — creates an empty Cart for customerId (no restaurant bound yet).
-// Idempotent: a customer already has an active cart -> returns it unchanged
-// (one active cart per customer, enforced by ICartRepository). Typically invoked
-// implicitly by AddToCart when the customer has no active cart.
 export class CreateCart {
   constructor(
     private readonly cartRepo: ICartRepository,

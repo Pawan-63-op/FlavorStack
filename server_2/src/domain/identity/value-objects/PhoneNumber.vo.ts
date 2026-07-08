@@ -26,10 +26,8 @@ export class PhoneNumber extends ValueObject<PhoneNumberProps> {
       return Result.fail<PhoneNumber>(emptyCheck.getError());
     }
 
-    // Normalize: strip spaces, dashes, parentheses
     const normalized = String(value).replace(/[\s\-()]/g, '');
 
-    // Validate E.164 format: + followed by 8 to 15 digits
     const e164Regex = /^\+[1-9]\d{7,14}$/;
     if (!e164Regex.test(normalized)) {
       return Result.fail<PhoneNumber>(

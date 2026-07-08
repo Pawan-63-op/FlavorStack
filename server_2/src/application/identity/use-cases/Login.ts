@@ -25,37 +25,30 @@ export class Login {
   ) {}
 
   async execute(dto: LoginDto): Promise<Result<AuthResponse>> {
-    // 1. Validate email VO
     const emailResult = Email.create(dto.email);
     if (emailResult.isFailure) return Result.fail(emailResult.getError());
     const email = emailResult.getValue();
 
-    // 2. Find user (no enumeration — return same error for not found)
     const user = await this.userRepo.findByEmail(email);
     if (!user) return Result.fail(new NotFoundError('invalid_credentials'));
 
-    // 3. Check if account can attempt login
     if (!user.canAttemptLogin()) {
       return Result.fail(new ForbiddenError('account_locked_or_banned'));
     }
 
-    // 4. Verify password
     const passwordMatch = await this.passwordHasher.compare(dto.password, user.passwordHash);
     if (!passwordMatch) {
       user.incrementLoginAttempts();
       if (user.shouldLockAfterAttempt()) {
         user.lockAccount();
       }
-      // Plain update — no tx, no outbox, no event
       await this.userRepo.update(user);
       return Result.fail(new ForbiddenError('invalid_credentials'));
     }
 
-    // 5. Password ok — record login
     user.recordLogin(dto.ip ?? '');
     await this.userRepo.update(user);
 
-    // 6. Build session
     const sessionId = randomUUID();
     const jti = randomUUID();
     const now = Math.floor(Date.now() / 1000);
@@ -70,14 +63,11 @@ export class Login {
       exp: now + ACCESS_TOKEN_TTL_SECONDS,
     };
 
-    // 7. Generate tokens
     const accessToken = this.tokenService.generateAccessToken(payload);
     const refreshToken = this.tokenService.generateRefreshToken(payload);
 
-    // 8. Hash refresh token before storing (SHA-256, full-length — bcrypt is passwords-only)
     const refreshTokenHash = this.refreshTokenHasher.hash(refreshToken);
 
-    // 9. Persist session
     const now2 = new Date();
     await this.sessionStore.persist({
       userId: user._id,

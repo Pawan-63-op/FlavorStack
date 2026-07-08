@@ -5,26 +5,12 @@ import { Money } from '../../shared/Money';
 import { PROMOTION_KIND, PromotionKind } from '../enums/promotion-kind.enum';
 import { AppliedPromotion } from './AppliedPromotion';
 
-// Interim promotion-catalog entry for the Commerce promotion engine (Phase 8).
-//
-// A Coupon carries the eligibility rules (kind, value, min-order, currency, optional cap)
-// and knows how to turn an eligible subtotal into an AppliedPromotion. It lives behind
-// IPromotionService so the whole concept — coupon + applied result — can be lifted into a
-// future Promotions context with no Commerce rewrite.
-//
-// Money discipline: discounts are integer minor units. A percentage discount rounds via
-// Money.multiply; every discount is capped so it can never exceed the subtotal (no negative
-// totals downstream) nor an optional maxDiscount cap.
 interface CouponProps {
   code: string;
   kind: PromotionKind;
-  // PERCENTAGE: percentageOff in (0, 100]. FIXED: ignored.
   percentageOff: number | null;
-  // FIXED: the flat amount off. PERCENTAGE: ignored.
   fixedAmountOff: Money | null;
-  // Minimum eligible subtotal; null = no minimum.
   minOrderSubtotal: Money | null;
-  // Optional cap on the computed discount (PERCENTAGE coupons especially); null = uncapped.
   maxDiscount: Money | null;
   currency: string;
 }
@@ -75,7 +61,6 @@ export class Coupon extends ValueObject<CouponProps> {
         return Result.fail<Coupon>(new ValidationError('Percentage coupon requires percentageOff in (0, 100]'));
       }
     } else {
-      // FIXED
       if (!(props.fixedAmountOff instanceof Money)) {
         return Result.fail<Coupon>(new ValidationError('Fixed coupon requires a Money fixedAmountOff'));
       }
@@ -141,7 +126,6 @@ export class Coupon extends ValueObject<CouponProps> {
       discountAmount = (this.props.fixedAmountOff as Money).amount;
     }
 
-    // Cap at maxDiscount, then never let the discount exceed the subtotal.
     if (this.props.maxDiscount) {
       discountAmount = Math.min(discountAmount, this.props.maxDiscount.amount);
     }

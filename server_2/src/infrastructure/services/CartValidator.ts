@@ -1,6 +1,3 @@
-// Implements ICartValidator (Commerce Phase 6) — pure cart-time validation against a
-// commerce_catalog_view entry. No I/O: callers fetch the CommerceCatalogRestaurantView via
-// ICommerceCatalogReadRepository.findRestaurantView(cart.restaurantId) and pass it in.
 import { Result } from '../../domain/shared/Result';
 import { Money } from '../../domain/shared/Money';
 import { Cart } from '../../domain/commerce/entities/Cart';
@@ -20,7 +17,6 @@ import {
 import { COMMERCE_RESTAURANT_STATUS } from '../../domain/commerce/enums/restaurant-status.enum';
 import { COMMERCE_CATALOG_VISIBILITY } from '../../domain/commerce/enums/catalog-visibility.enum';
 
-// getUTCDay(): 0 = Sunday .. 6 = Saturday
 const WEEKDAY_BY_INDEX = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
 
 function toMinutes(time: string): number {

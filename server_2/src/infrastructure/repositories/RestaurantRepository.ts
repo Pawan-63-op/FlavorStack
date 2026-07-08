@@ -1,20 +1,3 @@
-// MongoDB implementation of IRestaurantRepository (Catalog Phase 8).
-//
-// Persists the Restaurant aggregate (with embedded categories and delivery zones)
-// to the `restaurants` collection. All translation goes through RestaurantMapper —
-// the repository never accepts or returns Mongoose documents.
-//
-// Session propagation: the active Mongo ClientSession is read implicitly from the
-// shared TransactionContext (AsyncLocalStorage) and attached to every operation, so
-// a use-case can persist the aggregate and its outbox row in one transaction
-// without threading a `ctx` through IRestaurantRepository.
-//
-// Soft delete: every finder filters `deletedAt: null`; softDelete sets `deletedAt`.
-//
-// Optimistic locking: the domain owns `version` (incremented per mutation). update
-// guards on the version present at load (`persistedVersion`) and writes the new
-// `version`; a non-match means a concurrent writer won (or the row is gone) and
-// surfaces as a ConflictError.
 import type { ClientSession } from 'mongoose';
 import { IRestaurantRepository } from '../../domain/catalog/repositories/IRestaurantRepository';
 import { Restaurant } from '../../domain/catalog/entities/Restaurant';
@@ -41,14 +24,11 @@ export class MongoRestaurantRepository implements IRestaurantRepository {
 
   async save(restaurant: Restaurant): Promise<void> {
     const doc = RestaurantMapper.toPersistence(restaurant);
-    // Array form is required to pass per-operation options (session).
     await RestaurantModel.create([doc], { session: this.session });
   }
 
   async update(restaurant: Restaurant): Promise<void> {
     const doc = RestaurantMapper.toPersistence(restaurant) as unknown as Record<string, unknown>;
-    // `_id` is immutable and timestamps are schema-managed; `version` is written
-    // explicitly (the domain already advanced it) under the optimistic-lock guard.
     const fields = { ...doc };
     delete fields._id;
     delete fields.createdAt;
@@ -98,8 +78,10 @@ export class MongoRestaurantRepository implements IRestaurantRepository {
     return this.paginate({ deletedAt: null }, params);
   }
 
-  // Stable forward-only cursor over the UUID `_id` (lexicographic). Fetches one
-  // extra row to decide whether a further page exists.
+  async count(): Promise<number> {
+    return RestaurantModel.countDocuments({ deletedAt: null }, { session: this.session });
+  }
+
   private async paginate(
     filter: Record<string, unknown>,
     params?: CursorPaginationParams

@@ -1,4 +1,3 @@
-// Mounts OrderRequestController under /v1/order-requests (Phase 13) — customer-authenticated query (§9).
 import { Router } from 'express';
 import { OrderRequestController } from '../controllers/OrderRequestController';
 import { authenticate } from '../middleware/authenticate';

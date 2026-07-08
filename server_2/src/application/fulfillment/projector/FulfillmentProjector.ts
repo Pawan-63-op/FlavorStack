@@ -1,24 +1,3 @@
-// FulfillmentProjector — maintains the four fulfillment read models (fulfillment_module.md §11, Phase 6).
-//
-// Subscribes to all Fulfillment domain events on the in-process bus (post-commit, same process).
-// Each handler does an idempotent upsert into the relevant projection collection(s).
-//
-// Projection event mapping table:
-//
-// Event                 | CustomerTracking | RestaurantView | RiderQueueView | AdminDashboard |
-// ----------------------|-----------------|----------------|----------------|----------------|
-// FulfillmentCreated    | create (base)   | upsert         | —              | upsert         |
-// PreparationStarted    | timeline        | status update  | —              | status update  |
-// ReadyForPickup        | timeline        | readyAt+status | —              | status update  |
-// RiderOffered          | —               | —              | upsert offer   | —              |
-// RiderAssigned         | timeline+rider  | —              | status update  | rider+status   |
-// RiderAssignmentExpired| —               | —              | remove item    | —              |
-// PickupConfirmed       | timeline        | —              | status update  | status update  |
-// OutForDelivery        | timeline        | —              | status update  | status update  |
-// DeliveryCompleted     | timeline        | remove         | remove all     | terminal       |
-// FulfillmentCancelled  | timeline+cancel | remove         | remove all     | cancel+terminal|
-// DeliveryFailed        | timeline+fail   | remove         | remove all     | fail+terminal  |
-// RiderReassigned       | timeline        | —              | old→remove     | rider update   |
 
 import { DomainEvent } from '../../../domain/shared/DomainEvent';
 import {
@@ -28,7 +7,6 @@ import {
 } from '../../../domain/fulfillment/repositories/IFulfillmentProjectionRepository';
 import { IFulfillmentCacheInvalidator } from '../../../domain/fulfillment/services/IFulfillmentCache';
 
-// Typed event shapes (narrowed from DomainEvent).
 interface FulfillmentCreatedExtended extends DomainEvent {
   orderRequestId: string;
   customerId: string;
@@ -143,7 +121,6 @@ export class FulfillmentProjector {
       lineTotal: l.lineTotal,
     }));
 
-    // Seed CustomerTrackingView.
     await this.projectionRepo.upsertCustomerTracking({
       fulfillmentId,
       eventId: e.eventId,
@@ -162,7 +139,6 @@ export class FulfillmentProjector {
       timelineEntry: { eventId: e.eventId, status: 'CREATED', at: now },
     });
 
-    // Seed RestaurantFulfillmentView.
     const restaurantView: RestaurantFulfillmentView = {
       fulfillmentId,
       restaurantId: e.restaurantId,
@@ -178,7 +154,6 @@ export class FulfillmentProjector {
     };
     await this.projectionRepo.upsertRestaurantView(restaurantView);
 
-    // Seed AdminDashboardView.
     const adminView: AdminDashboardView = {
       fulfillmentId,
       orderRequestId: e.orderRequestId,
@@ -212,7 +187,6 @@ export class FulfillmentProjector {
       timelineEntry: { eventId: e.eventId, status: 'PREPARING', at: now },
     });
 
-    // Update RestaurantFulfillmentView status and prepEstimateMinutes.
     const rows = await this.projectionRepo.findRestaurantQueue(e.restaurantId);
     const row = rows.find((r) => r.fulfillmentId === fulfillmentId);
     if (row) {
@@ -297,7 +271,6 @@ export class FulfillmentProjector {
       },
     });
 
-    // Update the rider queue item from OFFERED → ACCEPTED.
     const queueItems = await this.projectionRepo.findRiderQueue(e.riderId);
     const item = queueItems.find((q) => q.fulfillmentId === fulfillmentId);
     if (item) {
@@ -473,7 +446,6 @@ export class FulfillmentProjector {
       },
     });
 
-    // Remove old rider's queue entry (new rider entry is created by a subsequent RiderAssigned event).
     await this.projectionRepo.removeRiderQueueItem(e.previousRiderId, fulfillmentId);
 
     await this.projectionRepo.patchAdminView(fulfillmentId, { riderId: e.newRiderId, updatedAt: now });

@@ -1,1 +1,0 @@
-// Interface: findActiveByUserId, save, markUsed

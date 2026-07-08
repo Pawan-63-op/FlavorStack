@@ -11,12 +11,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const isLoading       = useAuthStore((s) => s.isLoading);
   const user            = useAuthStore((s) => s.user);
-  const checkAuth       = useAuthStore((s) => s.checkAuth);
 
-  // Run checkAuth once on mount to restore session from cookie
-  useEffect(() => {
-    checkAuth();
-  }, []);
+  // Session restore (checkAuth) runs once at the root via ClientInit; this
+  // layout only reads auth state to avoid a duplicate /users/me call.
 
   // FIX: restored auth guard — was fully commented out
   useEffect(() => {

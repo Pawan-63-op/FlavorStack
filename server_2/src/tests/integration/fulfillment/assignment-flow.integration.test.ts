@@ -1,5 +1,3 @@
-// End-to-end (real Mongo replica set + in-process bus) for Phase 3B:
-//   ReadyForPickup → auto-offer → accept / reject(+re-offer), with outbox + assignment history.
 import { randomUUID } from 'crypto';
 import { Fulfillment } from '../../../domain/fulfillment/entities/Fulfillment';
 import { FulfillmentLine } from '../../../domain/fulfillment/value-objects/FulfillmentLine';
@@ -72,7 +70,6 @@ describe('Fulfillment assignment flow (Phase 3B)', () => {
     outbox = new MongoOutboxStore(txContext);
     bus = new InMemoryEventBus();
 
-    // first available rider in the pool, excluding already-tried riders
     const service = new SimpleDeliveryAssignmentService(async () => [...RIDER_POOL]);
 
     offer = new OfferRiderAssignment(repo, service, uow, outbox, bus, 60);
@@ -80,7 +77,6 @@ describe('Fulfillment assignment flow (Phase 3B)', () => {
     reject = new RejectDelivery(repo, uow, outbox, bus, offer);
     markReady = new MarkReadyForPickup(repo, uow, outbox, bus);
 
-    // Auto-offer wiring: ReadyForPickup → OfferRiderAssignment.
     const onReady = new OnReadyForPickup(offer);
     bus.subscribe('ReadyForPickup', (e) => onReady.handle(e));
   });
@@ -133,7 +129,6 @@ describe('Fulfillment assignment flow (Phase 3B)', () => {
     expect(reloaded.currentAssignment!.attempt).toBe(2);
     expect(reloaded.currentAssignment!.status.value).toBe(RIDER_ASSIGNMENT_STATUS.OFFERED);
 
-    // two offers total (rider-1 then rider-2)
     expect(await OutboxEventModel.countDocuments({ eventName: 'RiderOffered' })).toBe(2);
   });
 });

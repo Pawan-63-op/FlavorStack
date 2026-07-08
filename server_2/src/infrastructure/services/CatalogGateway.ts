@@ -1,12 +1,3 @@
-// Implements ICatalogGateway (Commerce Phase 10, ACL adapter) — synchronous authoritative read over
-// Catalog's published read ports (ICatalogReadRepository, the CheckServiceability use case, and
-// IOpeningHoursService). Query-only; never touches Catalog's write aggregates/repositories.
-//
-// This is the one sanctioned cross-context coupling (commerce_module.md §4.3, server_2/CLAUDE.md):
-// it is the ACL where Catalog's read shapes are translated into Commerce-owned contracts
-// (CatalogGatewayRead.ts). The domain stays decoupled (the port speaks only Commerce types); this
-// infrastructure adapter is the only place Catalog read types are imported. At service-split time it
-// degrades to a network call with no domain change.
 import { ICatalogGateway } from '../../domain/commerce/services/ICatalogGateway';
 import {
   CheckoutRestaurant,
@@ -34,8 +25,6 @@ export interface ICatalogServiceabilityQuery {
   execute(dto: CheckServiceabilityDto): Promise<Result<ServiceableRestaurantView[]>>;
 }
 
-// Catalog and Commerce mirror the same status set; map explicitly so the two contexts stay decoupled
-// and any unexpected value is rejected rather than blindly cast across the boundary.
 const STATUS_MAP: Record<RestaurantStatus, CommerceRestaurantStatus> = {
   DRAFT: COMMERCE_RESTAURANT_STATUS.DRAFT,
   ACTIVE: COMMERCE_RESTAURANT_STATUS.ACTIVE,

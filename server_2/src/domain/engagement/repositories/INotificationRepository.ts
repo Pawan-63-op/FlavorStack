@@ -1,4 +1,3 @@
-// Domain repository contract for the Notification aggregate (engagement_module.md §6).
 import { Notification } from '../entities/Notification';
 
 export interface FindNotificationsByRecipientQuery {

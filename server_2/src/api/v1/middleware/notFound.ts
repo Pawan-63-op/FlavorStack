@@ -1,4 +1,3 @@
-// Catch-all 404 handler
 import { Request, Response, NextFunction } from 'express';
 import { NotFoundError } from '../../../domain/shared/errors/NotFoundError';
 

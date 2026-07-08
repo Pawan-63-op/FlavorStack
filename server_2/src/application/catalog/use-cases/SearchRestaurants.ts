@@ -1,7 +1,3 @@
-// Query: full-text restaurant search over the `restaurant_summary` projection
-// (Catalog Phase 10). Delegates relevance ranking + cuisine/open filters +
-// cursor pagination to ISearchService (Mongo `$text`). Only PUBLIC + ACTIVE
-// restaurants surface; `isOpenNow` is a derived filter applied by the service.
 import { Result } from '../../../domain/shared/Result';
 import { ISearchService } from '../../../domain/catalog/services/ISearchService';
 import { CursorPage } from '../../../domain/catalog/types/CursorPagination';

@@ -1,4 +1,3 @@
-// Thin HTTP delivery for the auth use-cases — Result -> HTTP, cookie management. Zero business logic.
 import { Request, Response, NextFunction } from 'express';
 import { RegisterUser } from '../../../application/identity/use-cases/RegisterUser';
 import { Login } from '../../../application/identity/use-cases/Login';
@@ -10,7 +9,7 @@ import { ForgotPassword } from '../../../application/identity/use-cases/ForgotPa
 import { ResetPassword } from '../../../application/identity/use-cases/ResetPassword';
 import { ChangePassword } from '../../../application/identity/use-cases/ChangePassword';
 import { SendEmailOtp } from '../../../application/identity/use-cases/SendEmailOtp';
-import { VerifyEmailOtp } from '../../../application/identity/use-cases/VerifyEmailOtp';
+import { VerifyEmail } from '../../../application/identity/use-cases/VerifyEmail';
 import { SendPhoneOtp } from '../../../application/identity/use-cases/SendPhoneOtp';
 import { VerifyPhoneOtp } from '../../../application/identity/use-cases/VerifyPhoneOtp';
 import { RegisterUserDto } from '../../../application/identity/dtos/RegisterUserDto';
@@ -28,7 +27,7 @@ export interface AuthControllerDeps {
   resetPassword: ResetPassword;
   changePassword: ChangePassword;
   sendEmailOtp: SendEmailOtp;
-  verifyEmailOtp: VerifyEmailOtp;
+  verifyEmail: VerifyEmail;
   sendPhoneOtp: SendPhoneOtp;
   verifyPhoneOtp: VerifyPhoneOtp;
 }
@@ -145,8 +144,8 @@ export class AuthController {
     res.status(204).send();
   };
 
-  verifyEmailOtp = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    const result = await this.deps.verifyEmailOtp.execute({
+  verifyEmail = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const result = await this.deps.verifyEmail.execute({
       userId: req.user!.userId,
       code: req.body.code,
     });

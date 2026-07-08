@@ -1,18 +1,3 @@
-// Integration (real Mongo replica set) for Phase 9.4 — Benchmarks & Production Hardening.
-//
-// This is a baseline + safeguard harness, NOT a perf framework. It:
-//   • records cached-vs-uncached hot-read baselines (tracking + dashboard) and proves the cache
-//     elides the second projection read;
-//   • records a write-transition latency baseline over the transactional update path;
-//   • proves the read path and the projector's invalidation DEGRADE GRACEFULLY when Redis is down
-//     (cache faults fall back to Mongo / become best-effort no-ops — no hard dependency);
-//   • proves the tracking-ping throttle bounds write amplification (N pings → ~1 Mongo write/window);
-//   • proves TTL/SLA/attempt limits come from the single centralized config source;
-//   • proves outbox writes commit atomically with the aggregate (the replica-set transaction
-//     requirement) and that the DLQ wiring routes exhausted jobs to the dead-letter queue.
-//
-// Recorded numbers are echoed via console and captured in
-// fulfillment_module_phase_summary/batch_9.4_hardening.md.
 import { randomUUID } from 'crypto';
 import type { Job, Queue } from 'bullmq';
 
@@ -100,8 +85,6 @@ function buildFulfillment(): Fulfillment {
   return f;
 }
 
-// ── cache doubles ──────────────────────────────────────────────────────────────
-// A real FulfillmentCache wraps these, so the production resilience code is exercised for real.
 class InMemoryCacheStore extends CacheStore {
   private store = new Map<string, string>();
   constructor() {
@@ -124,7 +107,6 @@ class InMemoryCacheStore extends CacheStore {
   }
 }
 
-// Simulates a hard Redis outage: every command rejects.
 class DownCacheStore extends CacheStore {
   constructor() {
     super(null as unknown as RedisClient);
@@ -143,9 +125,6 @@ class DownCacheStore extends CacheStore {
   }
 }
 
-// In-process emulation of the Redis SET NX EX throttle gate (the distributed guarantee itself is
-// covered by RedisLiveLocationStore.integration.test). Lets us assert the RecordRiderLocation
-// write-amplification bound without a live Redis.
 class ThrottledLiveStore implements ILiveLocationStore {
   public setLatestCalls = 0;
   private gateExpiry = new Map<string, number>();
@@ -259,7 +238,6 @@ describe('Fulfillment benchmarks & production hardening (Phase 9.4)', () => {
       expect(cold.isSuccess).toBe(true);
       expect(warm.isSuccess).toBe(true);
       expect(findSpy).toHaveBeenCalledTimes(1); // warm read never touched Mongo
-      // eslint-disable-next-line no-console
       console.log(`[bench] tracking cold=${coldMs.toFixed(2)}ms warm=${warmMs.toFixed(2)}ms (cached)`);
       findSpy.mockRestore();
     });
@@ -283,7 +261,6 @@ describe('Fulfillment benchmarks & production hardening (Phase 9.4)', () => {
       expect(cold.getValue()).toHaveLength(25);
       expect(warm.getValue()).toHaveLength(25);
       expect(findSpy).toHaveBeenCalledTimes(1);
-      // eslint-disable-next-line no-console
       console.log(`[bench] dashboard cold=${coldMs.toFixed(2)}ms warm=${warmMs.toFixed(2)}ms (cached, 25 rows)`);
       findSpy.mockRestore();
     });
@@ -322,7 +299,6 @@ describe('Fulfillment benchmarks & production hardening (Phase 9.4)', () => {
 
       const avg = samples.reduce((a, b) => a + b, 0) / samples.length;
       const max = Math.max(...samples);
-      // eslint-disable-next-line no-console
       console.log(`[bench] write-transition avg=${avg.toFixed(2)}ms max=${max.toFixed(2)}ms n=${samples.length}`);
       expect(samples).toHaveLength(7);
     });
@@ -360,7 +336,6 @@ describe('Fulfillment benchmarks & production hardening (Phase 9.4)', () => {
 
   describe('realtime write-amplification bound (tracking pings)', () => {
     it('N pings within one throttle window persist ~1 Mongo row while every ping hits Redis', async () => {
-      // Seed a fulfillment with an ACCEPTED active rider so RecordRiderLocation's ownership guard passes.
       const f = buildFulfillment();
       await repo.save(f);
       const id = f.id.toString();
@@ -395,7 +370,6 @@ describe('Fulfillment benchmarks & production hardening (Phase 9.4)', () => {
       }
 
       const rows = await DeliveryTrackingModel.countDocuments({ fulfillmentId: id });
-      // eslint-disable-next-line no-console
       console.log(`[bench] ${PINGS} pings → mongoRows=${rows} redisSetLatest=${liveStore.setLatestCalls} (throttle ${throttleSeconds}s)`);
 
       expect(liveStore.setLatestCalls).toBe(PINGS); // every ping → Redis latest write
@@ -425,8 +399,6 @@ describe('Fulfillment benchmarks & production hardening (Phase 9.4)', () => {
         expect(cfg.readyForPickupSlaSeconds).toBe(600);
         expect(cfg.outForDeliverySlaSeconds).toBe(1800);
 
-        // The offer use cases AND the assignment-timeout job both derive the offer's expiry from
-        // this single value via offerExpiry — so aggregate and jobs cannot drift apart.
         const before = Date.now();
         const expiry = offerExpiry(cfg.offerTtlSeconds);
         expect(expiry.getTime() - before).toBeGreaterThanOrEqual(44_000);
@@ -493,7 +465,6 @@ describe('Fulfillment benchmarks & production hardening (Phase 9.4)', () => {
         })
       ).rejects.toThrow('boom');
 
-      // Nothing partially persisted: status unchanged, no outbox rows.
       const persisted = (await repo.findById(f.id.toString())) as Fulfillment;
       expect(persisted.fulfillmentStatus.value).toBe(FULFILLMENT_STATUS.CREATED);
       expect(await OutboxEventModel.countDocuments({ aggregateId: f.id.toString() })).toBe(0);

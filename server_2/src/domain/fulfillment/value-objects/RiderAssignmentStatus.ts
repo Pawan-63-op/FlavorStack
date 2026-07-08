@@ -1,7 +1,3 @@
-// Per-attempt rider-assignment state-machine VO (fulfillment_module.md §4.2). Mirrors
-// FulfillmentStatus / catalog RestaurantStatus.vo.ts: private ctor + static create(),
-// canTransitionTo(), transitionTo(): Result<VO>. The full transition table is encoded; Phase 3A
-// drives OFFERED → ACCEPTED/REJECTED. EXPIRED/CANCELLED/REASSIGNED are realized in later phases.
 import { ValueObject } from '../../shared/ValueObject';
 import { Result } from '../../shared/Result';
 import { ValidationError } from '../../shared/errors/ValidationError';
@@ -27,8 +23,6 @@ const ALLOWED_TRANSITIONS: Record<RiderAssignmentStatusValue, RiderAssignmentSta
   [RIDER_ASSIGNMENT_STATUS.REASSIGNED]: [],
 };
 
-// OFFERED and ACCEPTED are the only non-terminal ("active") states — at most one such
-// assignment may exist per fulfillment at a time (fulfillment_module.md §4.2 invariant).
 const ACTIVE_STATES: RiderAssignmentStatusValue[] = [
   RIDER_ASSIGNMENT_STATUS.OFFERED,
   RIDER_ASSIGNMENT_STATUS.ACCEPTED,

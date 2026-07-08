@@ -1,4 +1,3 @@
-// Read shape returned by Review use cases (engagement_module.md §4/§5).
 import { Review } from '../../../domain/engagement/entities/Review';
 
 export interface ReviewResponse {

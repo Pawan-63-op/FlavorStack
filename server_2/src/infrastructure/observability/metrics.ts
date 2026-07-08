@@ -1,9 +1,3 @@
-// Lightweight in-process metrics registry (Commerce Phase 14, commerce_module.md §11).
-//
-// No external dependency (no prom-client/OpenTelemetry in package.json): a small, label-aware
-// store of counters and histograms that the telemetry layer feeds and that a future `/metrics`
-// scrape endpoint — or a test — can snapshot. Keys fold the metric name + sorted labels so
-// `commerce_checkout_total{result=success}` and `{result=failure}` are tracked independently.
 import { MetricLabels } from '../../application/shared/observability/ITelemetry';
 
 export interface HistogramSnapshot {

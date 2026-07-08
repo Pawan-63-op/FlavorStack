@@ -1,9 +1,3 @@
-// Domain event raised when a Fulfillment aggregate is created from OrderRequested
-// (fulfillment_module.md §5.2). aggregateId = fulfillmentId; key payload: orderRequestId,
-// customerId, restaurantId, total.
-//
-// Payload is JSON-safe (Money serialized as { amount, currency }), following OrderRequested's
-// discipline so the shared outbox (JSON.parse(JSON.stringify(event))) serialization is lossless.
 import { DomainEvent } from '../../shared/DomainEvent';
 import { randomUUID } from 'crypto';
 
@@ -12,12 +6,30 @@ export interface MoneyJSON {
   currency: string;
 }
 
+export interface DeliveryAddressJSON {
+  label?: string;
+  street: string;
+  city: string;
+  state: string;
+  pinCode: string;
+  coordinates: { lat: number; lng: number };
+}
+
+export interface FulfillmentLineJSON {
+  menuItemId: string;
+  name: string;
+  quantity: number;
+  lineTotal: MoneyJSON;
+}
+
 export interface FulfillmentCreatedPayload {
   fulfillmentId: string;
   orderRequestId: string;
   customerId: string;
   restaurantId: string;
   total: MoneyJSON;
+  deliveryAddress: DeliveryAddressJSON;
+  lines: FulfillmentLineJSON[];
 }
 
 export class FulfillmentCreated implements DomainEvent {
@@ -30,6 +42,8 @@ export class FulfillmentCreated implements DomainEvent {
   public readonly customerId: string;
   public readonly restaurantId: string;
   public readonly total: MoneyJSON;
+  public readonly deliveryAddress: DeliveryAddressJSON;
+  public readonly lines: FulfillmentLineJSON[];
 
   constructor(payload: FulfillmentCreatedPayload) {
     this.eventId = randomUUID();
@@ -40,5 +54,7 @@ export class FulfillmentCreated implements DomainEvent {
     this.customerId = payload.customerId;
     this.restaurantId = payload.restaurantId;
     this.total = payload.total;
+    this.deliveryAddress = payload.deliveryAddress;
+    this.lines = payload.lines;
   }
 }

@@ -120,7 +120,6 @@ describe('RegisterCustomer use-case', () => {
     });
 
     it('applies referral code if a matching customer exists', async () => {
-      // Seed a referrer
       const referrer = Customer.create({
         name: 'Referrer',
         email: 'ref@example.com',
@@ -134,7 +133,6 @@ describe('RegisterCustomer use-case', () => {
       const dto: RegisterCustomerDto = { ...validDto, referralCode: 'MYCODE01' };
       const result = await useCase.execute(dto);
       expect(result.isSuccess).toBe(true);
-      // The new customer's referredBy should be set
       const saved = Array.from(userRepo.users.values()).find(
         (u) => u.email === validDto.email,
       ) as Customer;
@@ -154,9 +152,7 @@ describe('RegisterCustomer use-case', () => {
     });
 
     it('fails with ConflictError when email already exists', async () => {
-      // First registration
       await useCase.execute(validDto);
-      // Second registration with same email
       const result = await useCase.execute(validDto);
       expect(result.isFailure).toBe(true);
       const err = result.getError() as DomainError;

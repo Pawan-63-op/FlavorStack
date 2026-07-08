@@ -4,7 +4,6 @@ import { CreateFulfillmentDto } from '../../../../application/fulfillment/dtos/C
 import { Result } from '../../../../domain/shared/Result';
 import { DomainEvent } from '../../../../domain/shared/DomainEvent';
 
-// The rehydrated OrderRequested as it arrives off the in-process bus (canonical fields + spread payload).
 function orderRequestedEvent(overrides: Record<string, unknown> = {}): DomainEvent {
   return {
     eventId: 'evt-1',

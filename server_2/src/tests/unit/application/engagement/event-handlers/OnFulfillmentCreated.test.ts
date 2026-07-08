@@ -88,7 +88,6 @@ describe('OnFulfillmentCreated', () => {
       .mockResolvedValueOnce(Result.fail('boom'))
       .mockResolvedValueOnce(Result.ok({ outcome: 'DISPATCHED', dedupeKey: 'k' }));
     const errorSpy = jest.spyOn(logger, 'error').mockImplementation(() => logger);
-    // Stateful eligibility: absent on first handle, present once seeded (mirrors the DB).
     const seeded = { fulfillmentId: 'ful-1', customerId: 'cust-1', restaurantId: 'rest-1', deliveredAt: null, reviewed: false };
     let row: typeof seeded | null = null;
     const eligibilityRepo = makeEligibilityRepo({

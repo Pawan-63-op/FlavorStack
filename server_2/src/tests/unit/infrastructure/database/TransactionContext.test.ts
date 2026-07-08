@@ -1,8 +1,6 @@
 import type { ClientSession } from 'mongoose';
 import { TransactionContext } from '../../../../infrastructure/database/TransactionContext';
 
-// A bare stand-in for a Mongo ClientSession — the ALS provider never inspects
-// the object, it only stores and returns it, so an opaque token is enough.
 function fakeSession(tag: string): ClientSession {
   return { tag } as unknown as ClientSession;
 }

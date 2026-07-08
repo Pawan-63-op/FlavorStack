@@ -1,4 +1,3 @@
-// Review moderation lifecycle states (engagement_module.md §2): PENDING/AUTO_FLAGGED → APPROVED | REJECTED.
 export const MODERATION_STATUS = {
   PENDING: 'PENDING',
   AUTO_FLAGGED: 'AUTO_FLAGGED',

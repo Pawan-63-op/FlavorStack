@@ -1,4 +1,3 @@
-// Input DTOs for notification + preference use cases (engagement_module.md §4).
 import { NotificationCategoryValue } from '../../../domain/engagement/enums/notification-category.enum';
 import { NotificationChannelValue } from '../../../domain/engagement/enums/notification-channel.enum';
 

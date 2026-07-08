@@ -1,7 +1,3 @@
-// UC: GetOrderRequest — loads an immutable OrderRequest by id for history/confirmation
-// screens (Phase 13, commerce_module.md §7/§9). Enforces ownership: a customer may only
-// read their own order requests (ForbiddenError otherwise), matching the cart/checkout
-// authorization rule. No projection or ACL read — the OrderRequest is self-contained.
 import { Result } from '../../../domain/shared/Result';
 import { NotFoundError } from '../../../domain/shared/errors/NotFoundError';
 import { ForbiddenError } from '../../../domain/shared/errors/ForbiddenError';

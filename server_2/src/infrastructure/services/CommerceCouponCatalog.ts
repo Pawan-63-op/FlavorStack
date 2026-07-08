@@ -3,14 +3,6 @@ import { Money } from '../../domain/shared/Money';
 import { Result } from '../../domain/shared/Result';
 import { PROMOTION_KIND } from '../../domain/commerce/enums/promotion-kind.enum';
 
-// Interim, in-memory coupon catalog for the Commerce promotion engine (Phase 8).
-//
-// This is deliberately a hard-coded seed: it stands in for the catalog a future
-// Promotions context will own. PromotionService reads it through Coupon VOs only,
-// so swapping this for a real repository later touches nothing else.
-//
-// Construction failures here would be a programming error in the seed, not a runtime
-// domain failure, so we throw fast rather than thread Result through composition.
 function ok<T>(label: string, value: Result<T>): T {
   if (value.isFailure) {
     const err = value.getError();
@@ -23,7 +15,6 @@ export function buildDefaultCommerceCoupons(currency = 'INR'): Coupon[] {
   const money = (amount: number) => ok(`money:${amount}`, Money.create(amount, currency));
 
   return [
-    // 10% off, no minimum, capped at ₹100.
     ok(
       'SAVE10',
       Coupon.create({
@@ -34,7 +25,6 @@ export function buildDefaultCommerceCoupons(currency = 'INR'): Coupon[] {
         maxDiscount: money(10000),
       })
     ),
-    // ₹50 flat off on orders of ₹300+.
     ok(
       'FLAT50',
       Coupon.create({
@@ -45,7 +35,6 @@ export function buildDefaultCommerceCoupons(currency = 'INR'): Coupon[] {
         minOrderSubtotal: money(30000),
       })
     ),
-    // 20% off on orders of ₹500+, capped at ₹150.
     ok(
       'WELCOME20',
       Coupon.create({

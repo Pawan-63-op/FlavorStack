@@ -1,18 +1,3 @@
-// Engagement Phase 6.A — Cross-Context E2E Chains (mongodb-memory-server replica set + in-process bus
-// + the composed engagement container). These prove the full published-event → handler →
-// dispatch/eligibility → read-model walks enumerated in engagement_module.md §10 Phase 6, exercising the
-// REAL handlers, use-cases and Mongo repositories (only the BullMQ producer is faked).
-//
-// Chains covered here (the ones not already pinned by engagement-container.integration.test.ts):
-//   1. UserRegistered → default NotificationPreference seeded + welcome notification (SECURITY/EMAIL).
-//   2. Marquee: FulfillmentCreated → DeliveryCompleted (deliveredAt) → SubmitReview → ModerateReview
-//      approve → RestaurantRatingView recomputed (avg/count/distribution) over two approved reviews.
-//   3. Status chains: ReadyForPickup / RiderAssigned / OutForDelivery / FulfillmentCancelled → the right
-//      PENDING notification, recipient resolved purely from the ReviewEligibility projection.
-//   4. A disabled preference channel suppresses the dispatch (no row, no enqueue).
-//
-// Decoupling assertion: DeliveryCompleted / status events carry NO customerId — the recipient is resolved
-// only from the projection seeded at FulfillmentCreated, never from a Fulfillment/Commerce repo.
 import { getConnection } from '../../../infrastructure/database/connection';
 import { InMemoryEventBus } from '../../../application/shared/events/InMemoryEventBus';
 import { INotificationQueue } from '../../../application/shared/queues/INotificationQueue';
@@ -58,7 +43,6 @@ describe('Engagement cross-context E2E chains (Phase 6.A)', () => {
   let queue: FakeNotificationQueue;
   let container: EngagementContainer;
 
-  // Build the unique indexes up front so the first run never races the replset (documented 3.B/4.B flake).
   beforeAll(async () => {
     await Promise.all([
       NotificationModel.init(),
@@ -73,7 +57,6 @@ describe('Engagement cross-context E2E chains (Phase 6.A)', () => {
   beforeEach(async () => {
     eventBus = new InMemoryEventBus();
     queue = new FakeNotificationQueue();
-    // Building the container subscribes the nine handlers onto `eventBus`.
     container = createEngagementContainer(getConnection(), eventBus, queue);
     await seedNotificationTemplates(container.templateRepository);
   });
@@ -123,7 +106,6 @@ describe('Engagement cross-context E2E chains (Phase 6.A)', () => {
       const fulfillmentA = nextId('ful');
       const fulfillmentB = nextId('ful');
 
-      // (1) FulfillmentCreated seeds eligibility for both orders.
       for (const [fulfillmentId, customerId] of [
         [fulfillmentA, customerA],
         [fulfillmentB, customerB],
@@ -138,19 +120,15 @@ describe('Engagement cross-context E2E chains (Phase 6.A)', () => {
       }
       expect(await container.eligibilityRepository.findByFulfillmentId(fulfillmentA)).not.toBeNull();
 
-      // (2) DeliveryCompleted — note the event carries NO customerId/restaurantId; the handler resolves
-      // them from the projection. Sets deliveredAt → the order becomes reviewable.
       const deliveredAt = new Date('2026-06-17T10:00:00.000Z');
       for (const fulfillmentId of [fulfillmentA, fulfillmentB]) {
         await eventBus.publish(busEvent('DeliveryCompleted', fulfillmentId, { deliveredAt: deliveredAt.toISOString() }));
       }
       const eligA = await container.eligibilityRepository.findByFulfillmentId(fulfillmentA);
       expect(eligA?.deliveredAt?.toISOString()).toBe(deliveredAt.toISOString());
-      // delivered notification went to the customer resolved from the projection.
       const deliveredNote = await NotificationModel.findOne({ recipientUserId: customerA, templateKey: 'delivered' }).lean();
       expect(deliveredNote?.status).toBe('PENDING');
 
-      // (3) SubmitReview for both (now eligible).
       const submitA = await container.submitReview.execute({
         customerId: customerA,
         restaurantId,
@@ -170,10 +148,8 @@ describe('Engagement cross-context E2E chains (Phase 6.A)', () => {
       expect(submitA.isSuccess).toBe(true);
       expect(submitB.isSuccess).toBe(true);
 
-      // Before approval the rating view does not exist (only approved reviews contribute).
       expect(await container.ratingViewRepository.findByRestaurantId(restaurantId)).toBeNull();
 
-      // (4) ModerateReview approve → triggers RecomputeRestaurantRating.
       const approveA = await container.moderateReview.execute({
         moderatorId: 'mod-1',
         reviewId: submitA.getValue().reviewId,
@@ -187,7 +163,6 @@ describe('Engagement cross-context E2E chains (Phase 6.A)', () => {
       expect(approveA.isSuccess).toBe(true);
       expect(approveB.isSuccess).toBe(true);
 
-      // (5) RestaurantRatingView reflects both approved reviews.
       const view = await container.ratingViewRepository.findByRestaurantId(restaurantId);
       expect(view).not.toBeNull();
       expect(view?.reviewCount).toBe(2);
@@ -230,7 +205,6 @@ describe('Engagement cross-context E2E chains (Phase 6.A)', () => {
       });
       expect(reject.isSuccess).toBe(true);
 
-      // No recompute on reject → no view written.
       expect(await container.ratingViewRepository.findByRestaurantId(restaurantId)).toBeNull();
     });
   });
@@ -243,7 +217,6 @@ describe('Engagement cross-context E2E chains (Phase 6.A)', () => {
     beforeEach(async () => {
       fulfillmentId = nextId('ful');
       customerId = nextId('cust');
-      // Seed eligibility as FulfillmentCreated would (not delivered yet).
       await container.eligibilityRepository.upsert({
         fulfillmentId,
         customerId,
@@ -276,7 +249,6 @@ describe('Engagement cross-context E2E chains (Phase 6.A)', () => {
       const customerId = nextId('cust');
       const fulfillmentId = nextId('ful');
 
-      // Customer disabled ORDER_UPDATES on PUSH — the channel used by order_confirmed.
       const pref = NotificationPreference.createDefault(customerId);
       pref.setChannel(NOTIFICATION_CATEGORY.ORDER_UPDATES, NOTIFICATION_CHANNEL.PUSH, false);
       await container.preferenceRepository.save(pref);
@@ -289,9 +261,7 @@ describe('Engagement cross-context E2E chains (Phase 6.A)', () => {
         })
       );
 
-      // Eligibility is still seeded (that side-effect is unconditional)…
       expect(await container.eligibilityRepository.findByFulfillmentId(fulfillmentId)).not.toBeNull();
-      // …but no notification was persisted or enqueued.
       expect(await NotificationModel.findOne({ recipientUserId: customerId }).lean()).toBeNull();
       expect(queue.jobs).toHaveLength(0);
     });

@@ -1,17 +1,3 @@
-// Batch 4B — NotificationDispatcher (engagement_module.md §8). Drives the send lifecycle for an
-// enqueued engagement job: load the persisted PENDING Notification, select the channel by
-// `notification.channel`, send, and record the outcome via markSent/markFailed.
-//
-// Failure model (NotificationStatus: PENDING → SENT | FAILED, FAILED terminal):
-//   - channel Result.fail (e.g. no_recipient) → TERMINAL failure: markFailed + persist, no throw
-//     (retrying cannot fix a missing address).
-//   - channel THROWS (transient provider error) → propagate so the worker's BullMQ retry re-runs the
-//     still-PENDING row. We deliberately do NOT markFailed here, because FAILED is terminal and would
-//     block the retry's PENDING → SENT transition.
-//   - markExhausted(): the worker calls this once retries are exhausted, flipping PENDING → FAILED.
-//
-// Idempotency: an already-SENT row (at-least-once redelivery) is skipped without re-sending — the
-// second line of defence behind the enqueue-time dedupe jobId.
 import { INotificationRepository } from '../../domain/engagement/repositories/INotificationRepository';
 import { NotificationChannelValue } from '../../domain/engagement/enums/notification-channel.enum';
 import { NOTIFICATION_STATUS } from '../../domain/engagement/enums/notification-status.enum';
@@ -38,7 +24,6 @@ export class NotificationDispatcher {
     const notification = await this.notificationRepo.findById(notificationId);
     if (!notification) return { outcome: 'SKIPPED', reason: 'not_found' };
 
-    // Idempotency: at-least-once redelivery of an already-sent notification must not double-send.
     if (notification.status.value === NOTIFICATION_STATUS.SENT) {
       return { outcome: 'SKIPPED', reason: 'already_sent' };
     }
@@ -50,7 +35,6 @@ export class NotificationDispatcher {
       return { outcome: 'FAILED', reason: `no_channel:${channel}` };
     }
 
-    // Transient provider errors throw out of `send` and propagate to the worker (BullMQ retry).
     const result = await adapter.send(notification);
 
     if (result.isFailure) {

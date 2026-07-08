@@ -1,6 +1,3 @@
-// Mongoose schema — single shared `outbox` collection (Phase 6 plan §5.4 / §9).
-// Written atomically with aggregate saves inside MongoUnitOfWork transactions;
-// read by the (Phase 8) OutboxPoller via findPending/markProcessed.
 import { Schema, model, Types } from 'mongoose';
 
 export const OUTBOX_STATUS = {
@@ -22,8 +19,6 @@ export interface OutboxEventDocument {
   retryCount: number;
   createdAt: Date;
   processedAt: Date | null;
-  // Phase 8 (Batch 4): persisted exponential-backoff scheduling. `findPending`
-  // gates on `nextAttemptAt <= now` so retries are restart- and multi-instance-safe.
   nextAttemptAt: Date;
   lastError: string | null;
 }
@@ -48,8 +43,6 @@ const OutboxEventSchema = new Schema<OutboxEventDocument>(
   }
 );
 
-// Processor's findPending(limit): { status: 'PENDING', nextAttemptAt <= now }
-// served oldest-first by this index.
 OutboxEventSchema.index({ status: 1, nextAttemptAt: 1 });
 
 export const OutboxEventModel = model<OutboxEventDocument>('OutboxEvent', OutboxEventSchema);

@@ -1,5 +1,3 @@
-// Mongoose schema — `audit_logs` collection (Phase 6 plan §5.5).
-// Infra-only, unwired in Phase 6; ready for the Phase-10 audit middleware.
 import { Schema, model, Types } from 'mongoose';
 
 export interface AuditLogDocument {

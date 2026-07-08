@@ -5,7 +5,6 @@ import { protect } from '../middleware/authMiddleware';
 
 const router = express.Router();
 
-// Multer config for memory storage
 const storage = multer.memoryStorage();
 const upload = multer({
   storage,

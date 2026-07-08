@@ -1,12 +1,3 @@
-// Engagement Phase 3.B — Wiring & Bootstrap integration tests (mongodb-memory-server replica set +
-// in-process bus + OutboxProcessor). Exercises the composed engagement graph end-to-end:
-//   (1) outbox-in-transaction — SubmitReview persists the aggregate + the ReviewSubmitted outbox row
-//       atomically; a forced failure inside the transaction rolls back BOTH.
-//   (2) consumed-event → notification pipeline — publishing FulfillmentCreated on the same bus the
-//       container subscribed to seeds ReviewEligibility AND renders a PENDING order_confirmed
-//       Notification from the seeded template, then enqueues it.
-//   (3) DeliveryCompleted → eligibility.deliveredAt is set + a PENDING delivered Notification row.
-// Plus: the OutboxProcessor drains the publish-only ReviewSubmitted row to PROCESSED (no subscriber).
 import { getConnection } from '../../../infrastructure/database/connection';
 import { InMemoryEventBus } from '../../../application/shared/events/InMemoryEventBus';
 import { INotificationQueue } from '../../../application/shared/queues/INotificationQueue';
@@ -71,7 +62,6 @@ describe('Engagement container wiring (Phase 3.B)', () => {
   beforeEach(() => {
     eventBus = new InMemoryEventBus();
     queue = new FakeNotificationQueue();
-    // Building the container subscribes the nine handlers onto `eventBus`.
     container = createEngagementContainer(getConnection(), eventBus, queue);
   });
 
@@ -114,7 +104,6 @@ describe('Engagement container wiring (Phase 3.B)', () => {
     const fulfillmentId = 'ful-1';
 
     beforeEach(async () => {
-      // Eligibility must exist + be delivered for SubmitReview to pass.
       await container.eligibilityRepository.upsert({
         fulfillmentId,
         customerId,
@@ -144,13 +133,11 @@ describe('Engagement container wiring (Phase 3.B)', () => {
       expect(outbox).toHaveLength(1);
       expect(outbox[0].aggregateId).toBe(reviews[0]._id);
 
-      // Eligibility flips to reviewed within the same transaction.
       const eligibility = await container.eligibilityRepository.findByFulfillmentId(fulfillmentId);
       expect(eligibility?.reviewed).toBe(true);
     });
 
     it('rolls back BOTH the aggregate and the outbox row when the transaction fails', async () => {
-      // Force the outbox append to throw inside the transaction → the whole txn aborts.
       const spy = jest
         .spyOn(container.outboxStore, 'append')
         .mockRejectedValueOnce(new Error('boom-inside-txn'));
@@ -168,7 +155,6 @@ describe('Engagement container wiring (Phase 3.B)', () => {
 
       expect(await ReviewModel.countDocuments({})).toBe(0);
       expect(await OutboxEventModel.countDocuments({})).toBe(0);
-      // Eligibility.markReviewed was also in the txn → rolled back.
       const eligibility = await container.eligibilityRepository.findByFulfillmentId(fulfillmentId);
       expect(eligibility?.reviewed).toBe(false);
 
@@ -188,7 +174,6 @@ describe('Engagement container wiring (Phase 3.B)', () => {
 
       await eventBus.publish(fulfillmentCreatedEvent({ fulfillmentId, customerId, restaurantId }));
 
-      // Eligibility projection seeded (customer + restaurant), not yet delivered.
       const eligibility = await container.eligibilityRepository.findByFulfillmentId(fulfillmentId);
       expect(eligibility).not.toBeNull();
       expect(eligibility?.customerId).toBe(customerId);
@@ -196,7 +181,6 @@ describe('Engagement container wiring (Phase 3.B)', () => {
       expect(eligibility?.deliveredAt).toBeNull();
       expect(eligibility?.reviewed).toBe(false);
 
-      // PENDING notification rendered from the seeded order_confirmed template.
       const note = await NotificationModel.findOne({ recipientUserId: customerId }).lean();
       expect(note).not.toBeNull();
       expect(note?.status).toBe('PENDING');
@@ -204,7 +188,6 @@ describe('Engagement container wiring (Phase 3.B)', () => {
       expect(note?.channel).toBe('PUSH');
       expect(note?.renderedBody).toContain(fulfillmentId);
 
-      // Enqueued onto the notification queue exactly once.
       expect(queue.jobs).toHaveLength(1);
       expect(queue.jobs[0].job).toMatchObject({ type: 'engagement', channel: 'PUSH' });
     });
@@ -214,7 +197,6 @@ describe('Engagement container wiring (Phase 3.B)', () => {
       const customerId = nextId('cust');
       const restaurantId = nextId('rest');
 
-      // Seed eligibility (as FulfillmentCreated would) without a deliveredAt.
       await container.eligibilityRepository.upsert({
         fulfillmentId,
         customerId,

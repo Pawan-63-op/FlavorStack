@@ -1,6 +1,3 @@
-// Targeted branch coverage for Restaurant mutator guards that the happy-path tests
-// don't exercise: updateProfile field validation + multi-field paths, and the
-// delivery-zone update/remove not-found + VO-type guards.
 import { Restaurant } from '../../../../domain/catalog/entities/Restaurant';
 import { GeoPoint } from '../../../../domain/identity/value-objects/GeoPoint.vo';
 import { CUISINE_TYPE } from '../../../../domain/catalog/enums/cuisine-type.enum';

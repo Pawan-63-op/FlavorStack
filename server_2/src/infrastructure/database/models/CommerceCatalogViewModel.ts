@@ -1,10 +1,3 @@
-// Mongoose schema — `commerce_catalog_view` collection (Commerce Phase 5).
-//
-// Commerce's own local projection of Catalog truth: restaurant status/visibility/
-// open hours/delivery fee inputs, plus each menu item's price/variants/availability.
-// Rebuilt wholesale per-restaurant by `CommerceCatalogProjector`, keyed by
-// `restaurantId`. Read by `ICartValidator` (Phase 6) for cart-time validation;
-// checkout (Phase 10+) re-reads Catalog directly via `ICatalogGateway` instead.
 import { Schema, model } from 'mongoose';
 
 export interface CommerceCatalogDayIntervalDocument {

@@ -1,20 +1,10 @@
 /**
- * Shared types across the application
- * Re-exported from stores for convenience
+ * Shared types across the application.
+ *
+ * The legacy `restaurantStore`/`menuStore` re-exports were removed in
+ * Batch 10.3/10.4 — owner catalog data now flows through `@/lib/api`
+ * view-models (`OwnerRestaurantView`/`OwnerMenuItemView`).
  */
-
-export type { Restaurant } from "../store/restaurantStore";
-export type { MenuItem } from "../store/menuStore";
-export type { Order, OrderItem, CartItem } from "../store/cartStore";
-export type { Coupon } from "../store/couponStore";
-
-/**
- * Common utility types
- */
-
-export type OrderStatus = "pending" | "confirmed" | "preparing" | "Delivered" | "cancelled";
-export type CouponType = "percentage" | "fixed" | "shipping";
-export type PriceRange = "$" | "$$" | "$$$";
 
 /**
  * API Response types

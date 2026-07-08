@@ -1,14 +1,3 @@
-// Composition root for the Catalog read-side (Phase 9; caching added in Phase 13) —
-// binds the read-model projection writer, the projection-driven read repository, the
-// opening-hours service, the query use-cases, and the in-process read-model projector.
-//
-// Write-side command use-cases (Phase 7/8) own their own transaction boundary and
-// are wired elsewhere; here we assemble the read path and subscribe the projector
-// so committed writes keep the projections in sync.
-//
-// When a `CatalogCache` is supplied (Phase 13) the read repository is wrapped with a
-// cache-aside decorator, serviceability reads go read-through, and the projector is
-// given the cache as its invalidator — so committed writes also evict stale caches.
 import { IEventBus } from '../application/shared/events/IEventBus';
 import { TransactionContext } from '../infrastructure/database/TransactionContext';
 import { ICatalogReadRepository } from '../domain/catalog/repositories/ICatalogReadRepository';
@@ -63,7 +52,6 @@ export function createCatalogReadContainer(
   const deliveryZoneRepo = new MongoDeliveryZoneRepository(txContext);
 
   const mongoReadRepository = new MongoCatalogReadRepository();
-  // Phase 13: transparent cache-aside decorator when a cache is wired.
   const readRepository: ICatalogReadRepository = cache
     ? new CachedCatalogReadRepository(mongoReadRepository, cache)
     : mongoReadRepository;
@@ -71,8 +59,6 @@ export function createCatalogReadContainer(
   const openingHoursService = new MongoOpeningHoursService();
   const searchService = new MongoSearchService();
 
-  // The projector reads/writes through the inner Mongo repos; it only needs the
-  // cache as an invalidator (evict-after-commit), so pass `cache` directly.
   const projector = new CatalogProjector(restaurantRepo, menuItemRepo, projectionWriter, cache);
   registerCatalogProjector(eventBus, projector);
 

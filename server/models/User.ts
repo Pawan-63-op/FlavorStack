@@ -81,7 +81,6 @@ const userSchema = new Schema<IUser>({
   timestamps: true
 });
 
-// Encrypt password before saving
 userSchema.pre('save', async function(next) {
   if (!this.isModified('password')) {
     next();
@@ -90,12 +89,10 @@ userSchema.pre('save', async function(next) {
   this.password = await bcrypt.hash(this.password, salt);
 });
 
-// Match password
 userSchema.methods.matchPassword = async function(enteredPassword: string): Promise<boolean> {
   return await bcrypt.compare(enteredPassword, this.password);
 };
 
-// Update loyalty tier based on points
 userSchema.methods.updateLoyaltyTier = function(): void {
   if (this.loyaltyPoints >= 5000) {
     this.loyaltyTier = 'Platinum';

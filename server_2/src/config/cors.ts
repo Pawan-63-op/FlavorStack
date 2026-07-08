@@ -1,4 +1,3 @@
-// Allowed origins list per environment
 import { CorsOptions } from 'cors';
 
 const DEFAULT_ALLOWED_ORIGINS = ['http://localhost:3000'];

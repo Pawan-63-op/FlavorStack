@@ -1,6 +1,3 @@
-// Domain event raised when a fulfillment is cancelled by an actor (fulfillment_module.md §5.2, Phase 5A).
-// Terminal off-path event. aggregateId = fulfillmentId; key payload: cancelledBy, reason, refundHint{total}.
-// Routed to QUEUE.notification (§5.3); future Payments reacts to refundHint (refund execution is deferred).
 import { DomainEvent } from '../../shared/DomainEvent';
 import { CancelledByValue } from '../enums/cancelled-by.enum';
 import { randomUUID } from 'crypto';

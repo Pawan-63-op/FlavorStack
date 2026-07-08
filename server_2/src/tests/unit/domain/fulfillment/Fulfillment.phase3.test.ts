@@ -53,7 +53,6 @@ function future(msFromNow = 60_000): Date {
   return new Date(Date.now() + msFromNow);
 }
 
-// ─── offerToRider ────────────────────────────────────────────────────────────
 
 describe('Fulfillment.offerToRider', () => {
   it('opens an OFFERED assignment (attempt 1) and raises RiderOffered', () => {
@@ -114,7 +113,6 @@ describe('Fulfillment.offerToRider', () => {
   });
 });
 
-// ─── acceptByRider ───────────────────────────────────────────────────────────
 
 describe('Fulfillment.acceptByRider', () => {
   function offered(): Fulfillment {
@@ -157,7 +155,6 @@ describe('Fulfillment.acceptByRider', () => {
   });
 
   it('fails to accept an already-expired offer (respects expiresAt)', () => {
-    // Rehydrate a fulfillment whose current OFFERED assignment has already lapsed.
     const past = new Date(Date.now() - 60_000);
     const expiredOffer = RiderAssignment.reconstitute(
       {
@@ -203,7 +200,6 @@ describe('Fulfillment.acceptByRider', () => {
   });
 });
 
-// ─── rejectByRider ───────────────────────────────────────────────────────────
 
 describe('Fulfillment.rejectByRider', () => {
   function offered(): Fulfillment {

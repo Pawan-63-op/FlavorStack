@@ -1,5 +1,3 @@
-// UC: StartDelivery — the assigned rider departs for the customer (fulfillment_module.md §6.1, Phase 4).
-// The aggregate enforces PICKED_UP + an ACCEPTED assignment owned by the rider; emits OutForDelivery.
 import { Result } from '../../../domain/shared/Result';
 import { NotFoundError } from '../../../domain/shared/errors/NotFoundError';
 import { IFulfillmentRepository } from '../../../domain/fulfillment/repositories/IFulfillmentRepository';

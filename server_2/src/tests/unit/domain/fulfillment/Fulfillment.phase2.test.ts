@@ -44,7 +44,6 @@ function buildCreatedFulfillment(restaurantId = 'rest-1'): Fulfillment {
   return f;
 }
 
-// ─── startPreparation ──────────────────────────────────────────────────────────
 
 describe('Fulfillment.startPreparation', () => {
   it('transitions CREATED → PREPARING and raises PreparationStarted', () => {
@@ -109,7 +108,6 @@ describe('Fulfillment.startPreparation', () => {
   });
 });
 
-// ─── markReadyForPickup ────────────────────────────────────────────────────────
 
 describe('Fulfillment.markReadyForPickup', () => {
   function buildPreparingFulfillment(): Fulfillment {

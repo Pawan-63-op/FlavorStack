@@ -1,20 +1,3 @@
-// Read / processing side of the transactional outbox (Phase 6, Batch 6).
-//
-// The write side (MongoOutboxStore) appends PENDING rows inside the business
-// transaction. This repository is consumed by the (Phase 8) OutboxPoller to drain
-// them:
-//
-//   findPending(limit)   → oldest PENDING rows (served by the {status,createdAt} index)
-//   markProcessing(id)   → claim a row: PENDING → PROCESSING
-//   markProcessed(id)    → settle a row: → PROCESSED, stamp processedAt
-//
-// `save` persists a single event row (the per-event analogue of the store's bulk
-// `append`), kept here so the processing side has a complete, self-contained API.
-//
-// Session propagation mirrors the other Mongo repositories: the active
-// ClientSession is read implicitly from the shared TransactionContext and
-// attached to every operation. Poller calls run outside a transaction, where
-// getSession() is undefined and operations use the default auto-committed session.
 import type { ClientSession } from 'mongoose';
 import { DomainEvent } from '../../domain/shared/DomainEvent';
 import { TransactionContext } from '../database/TransactionContext';

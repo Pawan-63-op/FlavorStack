@@ -7,7 +7,6 @@ dotenv.config();
 
 const categories = ["Appetizer", "Main Course", "Dessert", "Beverage", "Side"];
 
-// 24 Working Dish Images (Unsplash RAW links)
 const images = [
   "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&w=800",
   "https://images.unsplash.com/photo-1551218808-94e220e084d2?auto=format&w=800",
@@ -54,7 +53,6 @@ const seedMenus = async () => {
       process.exit(0);
     }
 
-    // await menuItems.deleteMany();
     console.log("🧹 Cleared existing menu items");
 
     const allMenus = [];
@@ -62,12 +60,10 @@ const seedMenus = async () => {
     for (const r of restaurants) {
       for (const category of categories) {
         
-        // randomize names
         const selectedNames = sampleNames[category]
           .sort(() => Math.random() - 0.5)
           .slice(0, 2);
 
-        // pick 2 completely random images for each item
         const selectedImages = Array.from({ length: 2 }, () =>
           images[Math.floor(Math.random() * images.length)]
         );

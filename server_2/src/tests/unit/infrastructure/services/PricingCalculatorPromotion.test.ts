@@ -24,7 +24,6 @@ describe('PricingCalculator + promotion (Phase 8)', () => {
   const calculator = new PricingCalculator();
 
   it('folds the promotion discount into the breakdown', () => {
-    // subtotal 24000, fees 8000, discount 4000 -> taxable base 28000, tax 1400, total 29400
     const result = calculator.calculate(baseContext({ promotion: promo(4000) }));
     expect(result.isSuccess).toBe(true);
     const b = result.getValue();

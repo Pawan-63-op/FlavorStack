@@ -1,4 +1,3 @@
-// Zod schemas for admin-only identity routes
 import { z } from 'zod';
 import { USER_ROLE } from '../../../domain/identity/enums/user-role.enum';
 import { PERMISSION_RESOURCE } from '../../../domain/identity/enums/permission-resource.enum';
@@ -16,4 +15,15 @@ export const grantPermissionSchema = z.object({
 
 export const banSchema = z.object({
   reason: z.string().min(1),
+});
+
+export const listDriversQuerySchema = z.object({
+  status: z.string().optional(),
+});
+
+export const listUsersQuerySchema = z.object({
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().positive().max(100).default(20),
+  role: z.string().optional(),
+  search: z.string().trim().min(1).max(120).optional(),
 });

@@ -1,10 +1,3 @@
-// Event handler: consumes Fulfillment's ReadyForPickup → an ORDER_UPDATES push notification
-// (engagement_module.md §3/§4). The event carries no customerId, so the recipient is resolved from the
-// ReviewEligibility projection seeded at FulfillmentCreated — no Fulfillment/Commerce coupling.
-//
-// Reads only the published ACL payload (aggregateId = fulfillmentId). Idempotent (in-memory eventId guard
-// + DispatchNotification dedupeKey). Best-effort: if eligibility isn't seeded yet (out-of-order delivery)
-// the handler logs and returns WITHOUT marking the eventId, so a later redelivery re-attempts.
 import { DomainEvent } from '../../../domain/shared/DomainEvent';
 import { IReviewEligibilityRepository } from '../../../domain/engagement/repositories/IReviewEligibilityRepository';
 import { NOTIFICATION_CATEGORY } from '../../../domain/engagement/enums/notification-category.enum';

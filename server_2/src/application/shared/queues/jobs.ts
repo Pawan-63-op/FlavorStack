@@ -16,8 +16,6 @@ export type NotificationJob =
       body: string;
       data?: Record<string, string>;
     }
-  // Engagement dispatch job: carries the persisted Notification id + channel so the worker
-  // (Phase 4) loads the row and routes it through the channel abstraction, then marks SENT/FAILED.
   | {
       type: 'engagement';
       notificationId: string;

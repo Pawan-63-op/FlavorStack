@@ -23,8 +23,6 @@ export class InMemoryCartRepository implements ICartRepository {
     return null;
   }
 
-  // Returns a fresh aggregate instance whose persistedVersion reflects the
-  // currently stored version, mirroring a real repository load from the DB.
   private reconstitute(cart: Cart): Cart {
     return Cart.reconstitute(
       {

@@ -64,8 +64,6 @@ export class UpdateRestaurant {
 
     const events = restaurant.pullDomainEvents();
 
-    // Transaction boundary: persist the updated Restaurant aggregate and its
-    // outbox rows atomically; publish only after a successful commit.
     await this.unitOfWork.runInTransaction(async (ctx) => {
       await this.restaurantRepo.update(restaurant);
       if (events.length > 0) {

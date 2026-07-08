@@ -1,7 +1,3 @@
-// Builders for Cart aggregates used by the Phase 3 persistence integration tests.
-// Mirrors tests/integration/catalog/catalog-fixtures.ts — returns a domain
-// aggregate built via its create()/addItem() methods so round-trip tests
-// exercise the real reconstitution path.
 import { Cart } from '../../../domain/commerce/entities/Cart';
 import { LineItemSelection } from '../../../domain/commerce/value-objects/LineItemSelection';
 import { Money } from '../../../domain/shared/Money';
@@ -36,7 +32,6 @@ export function buildMoney(amount = 1000, currency = 'INR'): Money {
   return Money.create(amount, currency).getValue();
 }
 
-// A persisted, customer-owned cart with one line item from `restaurant-1`.
 export function buildCartWithItem(customerId: string, restaurantId = 'restaurant-1'): Cart {
   const cart = Cart.create(customerId).getValue();
   const result = cart.addItem(restaurantId, buildSelection(), buildMoney());
@@ -50,9 +45,6 @@ function rebuild<T>(result: { isFailure: boolean; getValue(): T; getError(): unk
   return result.getValue();
 }
 
-// An immutable OrderRequest produced by the checkout factory, with two lines (one carrying a variant),
-// a full pricing breakdown, a delivery address and a payment intent. Domain events are drained so the
-// round-trip assertions start from a clean slate. Used by the Phase 11 persistence integration tests.
 export function buildOrderRequest(
   customerId: string,
   overrides: Partial<{ idempotencyKey: IdempotencyKey }> = {}

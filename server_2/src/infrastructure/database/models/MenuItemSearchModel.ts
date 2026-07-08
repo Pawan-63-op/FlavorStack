@@ -1,10 +1,3 @@
-// Read-model projection — `menu_item_search` collection (Catalog Phase 9).
-//
-// Flat, denormalized item document carrying its restaurant context, used for item
-// search (Phase 10) and item-level reads (`GetMenuItem`, `GetItemsSnapshot`).
-// Rebuilt per-restaurant by the CatalogProjector: on rebuild the restaurant's old
-// search docs are replaced by the current item set (so removed items disappear).
-// `isAvailable` is the raw item toggle; effective availability is derived at read.
 import { Schema, model } from 'mongoose';
 
 export interface MenuItemSearchDocument {

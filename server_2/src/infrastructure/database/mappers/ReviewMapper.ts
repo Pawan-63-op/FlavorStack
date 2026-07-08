@@ -1,7 +1,3 @@
-// Maps between the Review aggregate and ReviewModel documents (engagement_module.md §6).
-// toDomain rebuilds Rating/ReviewComment/ModerationStatus via create() (trusted data —
-// corruption surfaces as DomainError via rebuildOrThrow) and rehydrates the root through
-// Review.reconstitute, which raises no events.
 import { Review, ReviewProps } from '../../../domain/engagement/entities/Review';
 import { Rating } from '../../../domain/engagement/value-objects/Rating';
 import { ReviewComment } from '../../../domain/engagement/value-objects/ReviewComment';

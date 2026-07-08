@@ -1,4 +1,3 @@
-// Strip HTML, block NoSQL injection operators
 import { Request, Response, NextFunction } from 'express';
 
 const HTML_TAG_REGEX = /<[^>]*>/g;

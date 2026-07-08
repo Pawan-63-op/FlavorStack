@@ -1,7 +1,3 @@
-// Domain event raised when a delivery is handed from a dropped rider to a new rider
-// (fulfillment_module.md §5.2, Phase 5B). aggregateId = fulfillmentId; key payload: previousRiderId,
-// newRiderId, attempt (the new attempt number). Routed to read models + Engagement. The folded
-// reassign() + acceptByRider() of §6.1 produces exactly one of these once the new rider takes over.
 import { DomainEvent } from '../../shared/DomainEvent';
 import { randomUUID } from 'crypto';
 

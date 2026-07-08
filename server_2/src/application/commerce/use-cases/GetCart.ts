@@ -8,13 +8,6 @@ import { CartResponseDto, toCartResponse } from '../dtos/CartResponseDto';
 import { VALIDATION_SEVERITY } from '../../../domain/commerce/types/ValidationReport';
 import { CommerceTelemetry } from '../observability/CommerceTelemetry';
 
-// UC: GetCart — loads the customer's active Cart and returns it as a CartView, including
-// an ICartValidator report (Phase 6) computed against the commerce_catalog_view projection
-// and per-line enrichment (Phase 13: current name/price/availability) derived from the same
-// projected restaurant view.
-//
-// Phase 14: each ERROR-severity validation issue increments the validation-rejection metric
-// keyed by reason code, surfacing why carts are rejected at cart-time (commerce_module.md §11).
 export class GetCart {
   constructor(
     private readonly cartRepo: ICartRepository,

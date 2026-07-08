@@ -1,5 +1,3 @@
-// Domain event raised when the rider departs the restaurant for the customer (fulfillment_module.md §5.2).
-// aggregateId = fulfillmentId; key payload: riderId. Routed to QUEUE.notification (§5.3).
 import { DomainEvent } from '../../shared/DomainEvent';
 import { randomUUID } from 'crypto';
 

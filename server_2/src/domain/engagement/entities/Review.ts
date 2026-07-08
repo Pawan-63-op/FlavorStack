@@ -1,6 +1,3 @@
-// Review — restaurant + delivery rating sharing one fulfillment consistency boundary
-// (engagement_module.md §2). Key: reviewId; uniqueness (customerId, fulfillmentId) is a
-// DB-level invariant enforced by the repository's unique index, not by this aggregate.
 import { AggregateRoot } from '../../shared/AggregateRoot';
 import { Result } from '../../shared/Result';
 import { Guard } from '../../shared/Guard';
@@ -13,7 +10,6 @@ import { MODERATION_STATUS } from '../enums/moderation-status.enum';
 import { ReviewSubmitted } from '../events/ReviewSubmitted';
 import { ReviewModerated } from '../events/ReviewModerated';
 
-// Minimal word-list profanity scan (engagement_module.md §2 "basic moderation"). No ML.
 const PROFANITY_WORDLIST = ['fuck', 'shit', 'bastard', 'asshole', 'bitch'];
 
 function containsProfanity(text: string): boolean {

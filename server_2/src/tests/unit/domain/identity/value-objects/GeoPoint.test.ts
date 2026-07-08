@@ -36,12 +36,10 @@ describe('GeoPoint Value Object', () => {
   });
 
   it('should calculate Haversine distance between two points', () => {
-    // Bangalore to Chennai approx distance ~ 290 km
     const p1 = GeoPoint.create(12.9716, 77.5946).getValue();
     const p2 = GeoPoint.create(13.0827, 80.2707).getValue();
 
     const distance = p1.distanceTo(p2);
-    // Tolerance within 5km
     expect(distance).toBeGreaterThan(280000);
     expect(distance).toBeLessThan(300000);
   });

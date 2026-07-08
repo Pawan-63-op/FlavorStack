@@ -1,6 +1,3 @@
-// No-op telemetry (Commerce Phase 14) — the safe default injected when a use case is
-// constructed without an explicit telemetry dependency (e.g. in unit tests that don't
-// assert on observability). Every method is a harmless no-op; spans return 0 elapsed ms.
 import { ITelemetry, ISpan, LogFields, MetricLabels } from './ITelemetry';
 
 const NOOP_SPAN: ISpan = {

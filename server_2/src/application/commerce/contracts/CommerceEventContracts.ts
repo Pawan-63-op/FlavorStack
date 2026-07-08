@@ -1,12 +1,3 @@
-// Commerce Phase 14 — published cross-context event payload contracts (commerce_module.md §8.1, §10).
-//
-// These Zod schemas describe the *serialized* shape of every Commerce-published domain event as it
-// lands in the shared `outbox` collection (i.e. `JSON.parse(JSON.stringify(event))`) and is therefore
-// the exact shape downstream contexts (future Ordering, future Payments) will consume off BullMQ. They
-// are the published contract — frozen by contract tests so the boundary can't drift as services split.
-//
-// Domain stays framework-free (CLAUDE.md): the event classes live under `src/domain/commerce/events/`
-// with no validation deps; these schemas live in the application layer where Zod is already allowed.
 import { z } from 'zod';
 import { PAYMENT_METHOD } from '../../../domain/commerce/enums/payment-method.enum';
 import { FEE_TYPE } from '../../../domain/commerce/enums/fee-type.enum';
@@ -16,7 +7,6 @@ const eventEnvelope = z.object({
   eventId: z.string().uuid(),
   eventName: z.string().min(1),
   aggregateId: z.string().min(1),
-  // `occurredOn` is a Date in-process; JSON serialization turns it into an ISO-8601 string.
   occurredOn: z.string().datetime(),
 });
 
@@ -60,7 +50,6 @@ const orderRequestedPricing = z.object({
 });
 
 const orderRequestedAddress = z.object({
-  // `label` is optional on the Address VO; absent → dropped by JSON serialization.
   label: z.string().optional(),
   street: z.string().min(1),
   city: z.string().min(1),
@@ -69,7 +58,6 @@ const orderRequestedAddress = z.object({
   coordinates: z.object({ lat: z.number(), lng: z.number() }),
 });
 
-// ── OrderRequested (→ future Ordering) ───────────────────────────────────────
 export const OrderRequestedSchema = eventEnvelope.extend({
   eventName: z.literal('OrderRequested'),
   customerId: z.string().min(1),
@@ -82,7 +70,6 @@ export const OrderRequestedSchema = eventEnvelope.extend({
   schemaVersion: z.number().int().positive(),
 });
 
-// ── CheckoutReadyForPayment (→ future Payments) ──────────────────────────────
 export const CheckoutReadyForPaymentSchema = eventEnvelope.extend({
   eventName: z.literal('CheckoutReadyForPayment'),
   customerId: z.string().min(1),

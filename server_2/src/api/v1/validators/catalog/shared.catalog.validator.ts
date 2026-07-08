@@ -1,5 +1,3 @@
-// Shared Zod building blocks for the catalog validators: enums, geo, address,
-// money, and a comma-separated → array coercion used by the public query params.
 import { z } from 'zod';
 import { CUISINE_TYPE } from '../../../../domain/catalog/enums/cuisine-type.enum';
 import { DIETARY_TAG } from '../../../../domain/catalog/enums/dietary-tag.enum';

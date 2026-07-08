@@ -1,7 +1,3 @@
-// mongopassword=RNH5LGAdhH4R360H
-// pavangawali75_db_user
-// import dotenv from "dotenv"
-// dotenv.config()
 import mongoose from "mongoose";
 const connectDB = async () => {
     try {

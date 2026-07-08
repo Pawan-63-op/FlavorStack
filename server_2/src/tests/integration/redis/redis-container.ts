@@ -1,4 +1,3 @@
-// Testcontainers helper — boots a disposable Redis container per suite
 import { RedisContainer, StartedRedisContainer } from '@testcontainers/redis';
 import { RedisConfig } from '../../../config/redis';
 

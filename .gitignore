@@ -6,6 +6,10 @@ artifacts_before_update/
 .DS_Store
 *.log
 *.tmp
+
+# Local dev-stack runtime artifacts (ops/dev-start.sh)
+.dev-frontend.pid
+
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

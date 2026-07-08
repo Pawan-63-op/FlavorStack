@@ -1,6 +1,3 @@
-// Shared mock factories + event builders for the engagement cross-context event-handler tests.
-// Mirrors the inline-mock style of OnOrderRequested.test.ts but extracted to cut duplication across
-// the nine handler suites.
 import { Result } from '../../../../../domain/shared/Result';
 import { DomainEvent } from '../../../../../domain/shared/DomainEvent';
 import { DispatchNotification } from '../../../../../application/engagement/use-cases/DispatchNotification';

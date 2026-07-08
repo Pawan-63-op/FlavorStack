@@ -1,8 +1,3 @@
-// FulfillmentWorker process (Phase 5B) — consumes `fulfillment-queue` and runs the delayed
-// assignment-timeout / sla-timeout jobs through the app graph's FulfillmentJobHandler.
-//
-// Bootstraps the full graph with `startOutboxProcessor: false` (the OutboxWorker owns the poller),
-// pulls the already-wired job handler off the fulfillment container, and starts a BullMQ worker.
 import { bootstrap, shutdown } from '../container';
 import { buildFulfillmentWorkerDeps } from '../container/worker.container';
 import { FulfillmentWorker } from '../infrastructure/workers/fulfillment/FulfillmentWorker';

@@ -1,5 +1,3 @@
-// UC: PreviewCheckout — dry-run of the Checkout pricing pipeline against the ACL/local projection;
-// returns a CheckoutView; no persistence, no OrderRequest created
 import { Result } from '../../../domain/shared/Result';
 import { NotFoundError } from '../../../domain/shared/errors/NotFoundError';
 import { GeoPoint } from '../../../domain/identity/value-objects/GeoPoint.vo';
@@ -10,12 +8,6 @@ import { CheckoutViewResponse, toCheckoutViewResponse } from '../responses/Check
 import { CheckoutContextAssembler } from '../services/CheckoutContextAssembler';
 import { CommerceTelemetry } from '../observability/CommerceTelemetry';
 
-// PreviewCheckout (Commerce Phase 11 Batch 3) — the dry-run pricing path (commerce_module.md §4.4 / §7).
-//
-// Loads the customer's active cart, runs the SHARED checkout assembly (authoritative ACL reads + projected
-// variants + pricing policy + re-validated promotion, see CheckoutContextAssembler), and folds the result
-// through the pure pricing pipeline into a PricingBreakdown — WITHOUT persisting anything. Because Checkout
-// (Batch 4) reuses the same assembler + calculator, the preview a customer sees matches what checkout commits.
 export class PreviewCheckout {
   constructor(
     private readonly cartRepo: ICartRepository,

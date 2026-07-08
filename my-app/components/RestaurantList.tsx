@@ -4,35 +4,21 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { motion, AnimatePresence } from "framer-motion";
-import { MapPin, Clock, Star, Filter, DollarSign, Heart } from "lucide-react";
-import { useState, useMemo, useEffect } from "react";
-import { useRouter } from "next/navigation";
-interface Restaurant {
-  id: string;
-  name: string;
-  restaurantName: string;
-  cuisine: string;
-  rating: number;
-  deliveryTime: string;
-  image: string;
-  city: string;
-  country: string;
-  priceRange: "$" | "$$" | "$$$";
-  isOpen: boolean;
-}
+import { MapPin, Filter, Loader2 } from "lucide-react";
+import { useMemo, useState } from "react";
+import { useRestaurantList } from "@/lib/api/hooks/useCatalog";
+import { cuisineLabel, type CuisineType } from "@/lib/api/adapters/restaurant";
+import { ApiError } from "@/lib/api/errors/ApiError";
 
 interface RestaurantListProps {
   searchData?: { query?: string; type?: string; cuisine?: string };
   onNavigate: (page: string, data?: any) => void;
 }
 
-import { useFavoritesStore } from "@/store/favoritesStore";
-import { toast } from "sonner";
-
 // Image component with fallback
 const ImageWithFallback = ({ src, alt, className }: any) => {
   const [imgSrc, setImgSrc] = useState(src);
-  
+
   return (
     <img
       src={imgSrc}
@@ -43,118 +29,52 @@ const ImageWithFallback = ({ src, alt, className }: any) => {
   );
 };
 
+const CUISINE_TYPES: CuisineType[] = [
+  "NORTH_INDIAN",
+  "SOUTH_INDIAN",
+  "CHINESE",
+  "ITALIAN",
+  "MEXICAN",
+  "CONTINENTAL",
+  "FAST_FOOD",
+  "BAKERY",
+  "DESSERTS",
+  "BEVERAGES",
+  "SEAFOOD",
+  "STREET_FOOD",
+];
+
 export default function RestaurantList({ searchData, onNavigate }: RestaurantListProps) {
-  const router = useRouter();
-  const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
-  const [selectedCuisine, setSelectedCuisine] = useState<string>("All");
-  const [sortBy, setSortBy] = useState<"rating" | "deliveryTime">("rating");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [selectedCuisine, setSelectedCuisine] = useState<CuisineType | "All">("All");
 
- // REMOVE THESE
+  const {
+    data,
+    isLoading,
+    isError,
+    error,
+    refetch,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useRestaurantList(
+    selectedCuisine === "All" ? {} : { cuisineTypes: [selectedCuisine] },
+  );
 
+  const restaurants = useMemo(
+    () => data?.pages.flatMap((page) => page.items) ?? [],
+    [data],
+  );
 
-// ADD THESE INSTEAD
-const favorites = useFavoritesStore((state) => state.favorites);
-const toggleFavorite = useFavoritesStore((state) => state.toggleFavorite);
-const isFavorite = (id: string) => favorites.some((f) => f.id === id);
-
-  const cuisines = ["All", "Italian", "Japanese", "Mexican", "Chinese", "Indian", "American"];
-
-  // Fetch restaurants from MongoDB via backend API
-  useEffect(() => {
-    const fetchRestaurants = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        
-        const res = await fetch("http://localhost:8000/api/restaurants");
-        
-        if (!res.ok) {
-          throw new Error(`HTTP error! status: ${res.status}`);
-        }
-        
-        const data2 = await res.json();
-        const data= data2.restaurants;
-        // Convert MongoDB _id to string id and ensure proper formatting
-        const formatted = data.map((r: any) => ({
-          id: r._id?.toString() || r.id,
-          // name: r.name,
-          restaurantName: r.restaurantName,
-          cuisine: r.cuisine,
-          rating: r.rating,
-          deliveryTime: r.deliveryTime,
-          image: r.imageUrl,
-          city: r.city,
-          country: r.country,
-          priceRange: r.priceRange,
-          isOpen: r.isOpen
-        }));
-        
-        setRestaurants(formatted);
-      } catch (error) {
-        console.error("Error fetching restaurants:", error);
-        setError(error instanceof Error ? error.message : "Failed to fetch restaurants");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchRestaurants();
-  }, []);
-
-  // Filtering + Sorting
+  // Name-only filter on the page(s) already loaded. Full-text/city/country
+  // search against the server lands in Batch 4.3 (`/catalog/search/restaurants`).
   const filteredRestaurants = useMemo(() => {
-    let filtered = restaurants;
-
-    // Apply search filter
-   
-// AFTER
-if (searchData?.query?.trim() && searchData?.type) {
-  const words = searchData.query
-    .toLowerCase()
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-
-  const matchesAnyWord = (...fields: string[]) =>
-    words.some((word) =>
-      fields.some((field) => field.toLowerCase().includes(word))
-    );
-
-  filtered = filtered.filter((r) => {
-    switch (searchData.type) {
-      case "name":
-        return matchesAnyWord(r.restaurantName);
-      case "city":
-        return matchesAnyWord(r.city);
-      case "country":
-        return matchesAnyWord(r.country);
-      case "menu":
-        return matchesAnyWord(r.cuisine);
-      default:
-        return true;
-    }
-  });
-}
-    // Apply cuisine filter
-    if (selectedCuisine !== "All") {
-      filtered = filtered.filter((r) => r.cuisine === selectedCuisine);
-    }
-
-    // Sort
-    const sorted = [...filtered].sort((a, b) => {
-      if (sortBy === "rating") {
-        return b.rating - a.rating;
-      }
-      return parseInt(a.deliveryTime) - parseInt(b.deliveryTime);
-    });
-
-    return sorted;
-  }, [searchData, selectedCuisine, sortBy, restaurants]);
+    const query = searchData?.query?.trim().toLowerCase();
+    if (!query) return restaurants;
+    return restaurants.filter((r) => r.name.toLowerCase().includes(query));
+  }, [restaurants, searchData?.query]);
 
   // Loading state
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="w-full max-w-7xl mx-auto p-8">
         <div className="text-center">
@@ -166,15 +86,16 @@ if (searchData?.query?.trim() && searchData?.type) {
   }
 
   // Error state
-  if (error) {
+  if (isError) {
+    const message = error instanceof ApiError ? error.message : "Failed to fetch restaurants";
     return (
       <div className="w-full max-w-7xl mx-auto p-8">
         <Card className="border-destructive">
           <CardContent className="pt-6">
             <div className="text-center">
               <p className="text-lg text-destructive mb-4">Error loading restaurants</p>
-              <p className="text-sm text-muted-foreground mb-4">{error}</p>
-              <Button onClick={() => window.location.reload()}>Retry</Button>
+              <p className="text-sm text-muted-foreground mb-4">{message}</p>
+              <Button onClick={() => refetch()}>Retry</Button>
             </div>
           </CardContent>
         </Card>
@@ -187,7 +108,7 @@ if (searchData?.query?.trim() && searchData?.type) {
       {/* Header */}
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
         <h2 className="text-3xl font-bold mb-2">
-          {searchData?.query!="undefined" ? `Results for "${searchData?.query}"` : "All Restaurants"}
+          {searchData?.query ? `Results for "${searchData.query}"` : "All Restaurants"}
         </h2>
         <p className="text-muted-foreground">{filteredRestaurants.length} restaurants found</p>
       </motion.div>
@@ -196,51 +117,28 @@ if (searchData?.query?.trim() && searchData?.type) {
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
         <Card className="border-2 shadow-md">
           <CardContent className="pt-6">
-            <div className="flex flex-col lg:flex-row gap-4">
-              {/* Cuisine Filter */}
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-3">
-                  <Filter className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-medium">Filter by Cuisine</span>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {cuisines.map((cuisine) => (
-                    <Button
-                      key={cuisine}
-                      variant={selectedCuisine === cuisine ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setSelectedCuisine(cuisine)}
-                    >
-                      {cuisine}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Sort */}
-              <div className="lg:w-48">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-sm font-medium">Sort by</span>
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    variant={sortBy === "rating" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setSortBy("rating")}
-                    className="flex-1"
-                  >
-                    Rating
-                  </Button>
-                  <Button
-                    variant={sortBy === "deliveryTime" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setSortBy("deliveryTime")}
-                    className="flex-1"
-                  >
-                    Delivery Time
-                  </Button>
-                </div>
-              </div>
+            <div className="flex items-center gap-2 mb-3">
+              <Filter className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium">Filter by Cuisine</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant={selectedCuisine === "All" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setSelectedCuisine("All")}
+              >
+                All
+              </Button>
+              {CUISINE_TYPES.map((cuisine) => (
+                <Button
+                  key={cuisine}
+                  variant={selectedCuisine === cuisine ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSelectedCuisine(cuisine)}
+                >
+                  {cuisineLabel(cuisine)}
+                </Button>
+              ))}
             </div>
           </CardContent>
         </Card>
@@ -261,38 +159,13 @@ if (searchData?.query?.trim() && searchData?.type) {
               <Card
                 className="overflow-hidden border-2 shadow-lg hover:shadow-xl transition-all cursor-pointer group"
                 onClick={() => onNavigate("restaurant", { id: restaurant.id })}
-                // onClick={()=> router}
               >
                 <div className="relative h-48 overflow-hidden">
                   <ImageWithFallback
-                    src={restaurant.image}
-                    alt={restaurant.restaurantName}
+                    src={restaurant.imageUrl}
+                    alt={restaurant.name}
                     className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                   />
-                <Button
-  variant="secondary"
-  size="icon"
- className="absolute top-10 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10"
-  onClick={async (e) => {
-    e.stopPropagation();
-    await toggleFavorite({
-      id: restaurant.id,
-      name: restaurant.restaurantName,
-      cuisine: restaurant.cuisine,
-      rating: restaurant.rating,
-      addedAt: Date.now(),
-      deliveryTime: restaurant.deliveryTime,
-      image: restaurant.image,
-    });
-  }}
->
-  <Heart
-    className={`h-5 w-5 ${
-      isFavorite(restaurant.id) ? "fill-red-500 text-red-500" : ""
-    }`}
-  />
-</Button>
-
                   {!restaurant.isOpen && (
                     <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
                       <Badge variant="destructive" className="text-lg">
@@ -301,39 +174,20 @@ if (searchData?.query?.trim() && searchData?.type) {
                     </div>
                   )}
 
-                  <Badge className="absolute top-3 right-3 bg-white/90 text-foreground hover:bg-white">
-                    <Star className="h-3 w-3 mr-1 fill-yellow-400 text-yellow-400" />
-                    {restaurant.rating}
+                  <Badge className="absolute top-3 left-3 bg-primary/90 border-0">
+                    {highlight(restaurant.cuisine, searchData?.query || "")}
                   </Badge>
-                 <Badge className="absolute top-3 left-3 bg-primary/90 border-0">
-  {highlight(restaurant.cuisine, searchData?.query || "")}
-</Badge>
                 </div>
 
                 <CardContent className="pt-4 space-y-3">
                   <div>
-
                     <h3 className="font-semibold text-lg mb-1">
-                {highlight(restaurant.restaurantName, searchData?.query || "")}
-              </h3>
+                      {highlight(restaurant.name, searchData?.query || "")}
+                    </h3>
 
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <MapPin className="h-3 w-3" />
-                     <span>
-  {highlight(restaurant.city, searchData?.query || "")},{" "}
-  {highlight(restaurant.country, searchData?.query || "")}
-</span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2">
-                      <Clock className="h-4 w-4 text-muted-foreground" />
-                      <span>{restaurant.deliveryTime}</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <DollarSign className="h-4 w-4 text-muted-foreground" />
-                      <span className="font-medium">{restaurant.priceRange}</span>
+                      <span>{restaurant.isOpen ? "Open now" : "Closed"}</span>
                     </div>
                   </div>
                 </CardContent>
@@ -342,6 +196,26 @@ if (searchData?.query?.trim() && searchData?.type) {
           ))}
         </div>
       </AnimatePresence>
+
+      {/* Load more */}
+      {hasNextPage && (
+        <div className="flex justify-center">
+          <Button
+            variant="outline"
+            onClick={() => fetchNextPage()}
+            disabled={isFetchingNextPage}
+          >
+            {isFetchingNextPage ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Loading...
+              </>
+            ) : (
+              "Load more"
+            )}
+          </Button>
+        </div>
+      )}
 
       {/* No Results */}
       {filteredRestaurants.length === 0 && (

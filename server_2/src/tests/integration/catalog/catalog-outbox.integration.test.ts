@@ -1,6 +1,3 @@
-// Phase 8 — atomic "aggregate + outbox row" write for catalog, proving a catalog
-// aggregate save and its domain-event outbox rows commit (or roll back) together
-// inside one Mongo transaction, exactly as the command use-cases orchestrate it.
 import { getConnection } from '../../../infrastructure/database/connection';
 import { TransactionContext } from '../../../infrastructure/database/TransactionContext';
 import { MongoUnitOfWork } from '../../../infrastructure/database/MongoUnitOfWork';

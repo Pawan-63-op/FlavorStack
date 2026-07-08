@@ -1,4 +1,3 @@
-// Aggregates all Identity routers under /api/v1, constructing controllers from AppContainer
 import { Router } from 'express';
 import { AppContainer } from '../../../container';
 import { AuthController } from '../controllers/AuthController';
@@ -21,6 +20,7 @@ import { createFulfillmentRoutes } from './fulfillment.routes';
 import { FulfillmentController } from '../controllers/fulfillment/FulfillmentController';
 import { RiderController } from '../controllers/fulfillment/RiderController';
 import { AdminFulfillmentController } from '../controllers/fulfillment/AdminFulfillmentController';
+import { DashboardAnalyticsController } from '../controllers/fulfillment/DashboardAnalyticsController';
 import { createNotificationRoutes } from './notification.routes';
 import { NotificationController } from '../controllers/NotificationController';
 import { createReviewRoutes } from './review.routes';
@@ -40,7 +40,7 @@ export function createApiRouter(app: AppContainer): Router {
     resetPassword: app.useCases.resetPassword,
     changePassword: app.useCases.changePassword,
     sendEmailOtp: app.useCases.sendEmailOtp,
-    verifyEmailOtp: app.useCases.verifyEmailOtp,
+    verifyEmail: app.useCases.verifyEmail,
     sendPhoneOtp: app.useCases.sendPhoneOtp,
     verifyPhoneOtp: app.useCases.verifyPhoneOtp,
   });
@@ -52,6 +52,15 @@ export function createApiRouter(app: AppContainer): Router {
     grantPermission: app.useCases.grantPermission,
     banUser: app.useCases.banUser,
     unbanUser: app.useCases.unbanUser,
+    setDriverAvailability: app.useCases.setDriverAvailability,
+    verifyDriver: app.useCases.verifyDriver,
+    listDrivers: app.useCases.listDrivers,
+    listUsers: app.useCases.listUsers,
+    listCustomerAddresses: app.useCases.listCustomerAddresses,
+    addCustomerAddress: app.useCases.addCustomerAddress,
+    updateCustomerAddress: app.useCases.updateCustomerAddress,
+    deleteCustomerAddress: app.useCases.deleteCustomerAddress,
+    setDefaultCustomerAddress: app.useCases.setDefaultCustomerAddress,
   });
 
   const permissionDeps: PermissionDeps = {
@@ -88,6 +97,7 @@ export function createApiRouter(app: AppContainer): Router {
   const cmd = app.catalogWrite.commands;
   const restaurantController = new RestaurantController({
     createRestaurant: cmd.createRestaurant,
+    listOwnerRestaurants: cmd.listOwnerRestaurants,
     updateRestaurant: cmd.updateRestaurant,
     publishRestaurant: cmd.publishRestaurant,
     pauseRestaurant: cmd.pauseRestaurant,
@@ -175,6 +185,7 @@ export function createApiRouter(app: AppContainer): Router {
     getRestaurantFulfillments: app.fulfillment.getRestaurantFulfillments,
     cancelFulfillment: app.fulfillment.cancelFulfillment,
     getLiveTracking: app.fulfillment.getLiveTracking,
+    listCustomerOrders: app.fulfillment.listCustomerOrders,
   });
 
   const riderController = new RiderController({
@@ -185,6 +196,7 @@ export function createApiRouter(app: AppContainer): Router {
     completeDelivery: app.fulfillment.completeDelivery,
     failDelivery: app.fulfillment.failDelivery,
     getRiderQueue: app.fulfillment.getRiderQueue,
+    getRiderDeliveryHistory: app.fulfillment.getRiderDeliveryHistory,
     recordRiderLocation: app.fulfillment.recordRiderLocation!,
   });
 
@@ -194,12 +206,17 @@ export function createApiRouter(app: AppContainer): Router {
     getAdminDashboard: app.fulfillment.getAdminDashboard,
   });
 
+  const dashboardAnalyticsController = new DashboardAnalyticsController({
+    getDashboardAnalytics: app.fulfillment.getDashboardAnalytics,
+  });
+
   router.use(
     '/',
     createFulfillmentRoutes({
       fulfillmentController,
       riderController,
       adminFulfillmentController,
+      dashboardAnalyticsController,
       tokenService: app.auth.tokenService,
     }),
   );

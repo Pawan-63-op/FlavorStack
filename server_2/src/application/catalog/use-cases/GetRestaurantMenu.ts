@@ -1,5 +1,3 @@
-// Query: full menu tree from the `restaurant_menu_view` projection. Effective item
-// availability is derived at read time (item toggle AND restaurant open-state).
 import { Result } from '../../../domain/shared/Result';
 import { NotFoundError } from '../../../domain/shared/errors/NotFoundError';
 import { ICatalogReadRepository } from '../../../domain/catalog/repositories/ICatalogReadRepository';

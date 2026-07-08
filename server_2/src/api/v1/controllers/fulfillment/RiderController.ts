@@ -1,5 +1,3 @@
-// Thin HTTP delivery for rider-side assignment use-cases (Phase 3B) and queue query (Phase 6).
-// The authenticated rider is req.user!.userId; the aggregate enforces it matches the offered rider.
 import { Request, Response, NextFunction } from 'express';
 import { AcceptDelivery } from '../../../../application/fulfillment/use-cases/AcceptDelivery';
 import { RejectDelivery } from '../../../../application/fulfillment/use-cases/RejectDelivery';
@@ -8,6 +6,7 @@ import { StartDelivery } from '../../../../application/fulfillment/use-cases/Sta
 import { CompleteDelivery } from '../../../../application/fulfillment/use-cases/CompleteDelivery';
 import { FailDelivery } from '../../../../application/fulfillment/use-cases/FailDelivery';
 import { GetRiderQueue } from '../../../../application/fulfillment/use-cases/GetRiderQueue';
+import { GetRiderDeliveryHistory } from '../../../../application/fulfillment/use-cases/GetRiderDeliveryHistory';
 import { RecordRiderLocation } from '../../../../application/fulfillment/use-cases/RecordRiderLocation';
 
 export interface RiderControllerDeps {
@@ -18,6 +17,7 @@ export interface RiderControllerDeps {
   completeDelivery: CompleteDelivery;
   failDelivery: FailDelivery;
   getRiderQueue: GetRiderQueue;
+  getRiderDeliveryHistory: GetRiderDeliveryHistory;
   recordRiderLocation: RecordRiderLocation;
 }
 
@@ -28,6 +28,19 @@ export class RiderController {
   getQueue = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const result = await this.deps.getRiderQueue.execute({
       riderId: req.user!.userId,
+    });
+    if (result.isFailure) return next(result.getError());
+    res.status(200).json(result.getValue());
+  };
+
+  /** GET /riders/me/deliveries — rider's completed-delivery history + earnings (G19) */
+  getDeliveryHistory = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const limit = req.query.limit ? Number(req.query.limit) : undefined;
+    const offset = req.query.offset ? Number(req.query.offset) : undefined;
+    const result = await this.deps.getRiderDeliveryHistory.execute({
+      riderId: req.user!.userId,
+      limit,
+      offset,
     });
     if (result.isFailure) return next(result.getError());
     res.status(200).json(result.getValue());

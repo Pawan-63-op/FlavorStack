@@ -1,6 +1,3 @@
-// Dispatches a drained FulfillmentJob to the matching use case (fulfillment_module.md §10, Phase 5B).
-// Pure application logic with no BullMQ coupling, so it is unit-testable against mocked use cases;
-// the infra FulfillmentWorker is a thin BullMQ shell that calls handle() and routes exhausted jobs to DLQ.
 import { FulfillmentJob } from './FulfillmentJob';
 import { HandleAssignmentTimeout } from '../use-cases/HandleAssignmentTimeout';
 import { HandleSlaTimeout } from '../use-cases/HandleSlaTimeout';

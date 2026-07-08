@@ -1,4 +1,3 @@
-// Mounts IdentityController admin routes — admin role + RBAC permission, super-admin bypass
 import { Router } from 'express';
 import { IdentityController } from '../controllers/IdentityController';
 import { authenticate } from '../middleware/authenticate';
@@ -9,8 +8,8 @@ import { ITokenService } from '../../../domain/identity/services/ITokenService';
 import { USER_ROLE } from '../../../domain/identity/enums/user-role.enum';
 import { PERMISSION_RESOURCE } from '../../../domain/identity/enums/permission-resource.enum';
 import { PERMISSION_ACTION } from '../../../domain/identity/enums/permission-action.enum';
-import { assignRoleSchema, grantPermissionSchema, banSchema } from '../validators/admin.validator';
-import { userIdParam, adminIdParam } from '../validators/common.validator';
+import { assignRoleSchema, grantPermissionSchema, banSchema, listDriversQuerySchema, listUsersQuerySchema } from '../validators/admin.validator';
+import { userIdParam, adminIdParam, driverIdParam } from '../validators/common.validator';
 
 export interface AdminRoutesDeps {
   controller: IdentityController;
@@ -24,6 +23,16 @@ export function createAdminRoutes(deps: AdminRoutesDeps): Router {
   const auth = authenticate(deps.tokenService);
   const requireAdmin = requireRole(USER_ROLE.ADMIN);
   const requireUserUpdate = requirePermission(deps.permissionDeps, PERMISSION_RESOURCE.USER, PERMISSION_ACTION.UPDATE);
+  const requireUserRead = requirePermission(deps.permissionDeps, PERMISSION_RESOURCE.USER, PERMISSION_ACTION.READ);
+
+  router.get(
+    '/users',
+    auth,
+    requireAdmin,
+    requireUserRead,
+    validate(listUsersQuerySchema, 'query'),
+    c.listUsers,
+  );
 
   router.post(
     '/users/:userId/role',
@@ -66,6 +75,25 @@ export function createAdminRoutes(deps: AdminRoutesDeps): Router {
     audit('admin.unban-user'),
     validate(userIdParam, 'params'),
     c.unbanUser,
+  );
+
+  router.get(
+    '/drivers',
+    auth,
+    requireAdmin,
+    requireUserRead,
+    validate(listDriversQuerySchema, 'query'),
+    c.listDrivers,
+  );
+
+  router.post(
+    '/drivers/:id/verify',
+    auth,
+    requireAdmin,
+    requireUserUpdate,
+    audit('admin.verify-driver'),
+    validate(driverIdParam, 'params'),
+    c.verifyDriver,
   );
 
   return router;

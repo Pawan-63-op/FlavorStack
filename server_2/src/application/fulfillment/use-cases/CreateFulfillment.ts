@@ -1,11 +1,3 @@
-// UC: CreateFulfillment — turn an OrderRequested into a persisted Fulfillment (fulfillment_module.md
-// §6.1, Phase 1). Flow: validate DTO → idempotency lookup → build VOs → Fulfillment.createFromOrderRequested()
-// → atomic { repo.save + outboxStore.append } in one Mongo transaction → post-commit eventBus.publishAll.
-//
-// Idempotency (the highest-priority invariant, §15.3): the unique `orderRequestId` index is the backbone.
-// A duplicate OrderRequested is a no-op — we first look up findByOrderRequestId and return the existing
-// fulfillment; a concurrent racer that slips past the lookup surfaces as a ConflictError on save, which we
-// resolve by re-reading and returning the winner. Either way exactly one fulfillment row is created.
 import { Result } from '../../../domain/shared/Result';
 import { Money } from '../../../domain/shared/Money';
 import { ValidationError } from '../../../domain/shared/errors/ValidationError';
@@ -30,7 +22,6 @@ export class CreateFulfillment {
   ) {}
 
   async execute(dto: CreateFulfillmentDto): Promise<Result<FulfillmentResponse>> {
-    // Idempotency: a duplicate OrderRequested for an already-ingested order request is a no-op.
     const existing = await this.fulfillmentRepo.findByOrderRequestId(dto.orderRequestId);
     if (existing) {
       return Result.ok<FulfillmentResponse>(toFulfillmentResponse(existing));
@@ -64,7 +55,6 @@ export class CreateFulfillment {
         await this.outboxStore.append(events, ctx);
       });
     } catch (err) {
-      // A concurrent OrderRequested won the race — treat as an idempotent no-op by returning the winner.
       if (err instanceof ConflictError) {
         const winner = await this.fulfillmentRepo.findByOrderRequestId(dto.orderRequestId);
         if (winner) return Result.ok<FulfillmentResponse>(toFulfillmentResponse(winner));
@@ -72,7 +62,6 @@ export class CreateFulfillment {
       throw err;
     }
 
-    // Post-commit, best-effort publish onto the in-process bus (mirrors Checkout/RegisterCustomer).
     await this.eventBus.publishAll(events);
 
     return Result.ok<FulfillmentResponse>(toFulfillmentResponse(fulfillment));

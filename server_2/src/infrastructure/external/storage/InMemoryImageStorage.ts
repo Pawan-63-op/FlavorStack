@@ -1,7 +1,3 @@
-// IImageStorage stand-in used until the Cloudinary provider (cloudinary SDK +
-// circuit breaker) is wired. Keeps the API edge fully functional and testable:
-// the domain only ever stores the returned URL, so swapping this for
-// CloudinaryImageStorage later is a container-only change (no domain/app churn).
 import { randomUUID } from 'crypto';
 import { IImageStorage, UploadedImage } from '../../../domain/catalog/services/IImageStorage';
 

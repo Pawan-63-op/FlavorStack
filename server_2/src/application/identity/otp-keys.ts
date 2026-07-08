@@ -1,7 +1,3 @@
-// Canonical IOtpStore key conventions, shared across identity use-cases
-// (VerifyEmail/ForgotPassword/ResetPassword now; SendEmailOtp/VerifyEmailOtp/
-// SendPhoneOtp/VerifyPhoneOtp in Batch 3) so issuers and verifiers agree on
-// the same key for a given purpose + user.
 export const OTP_TTL_SECONDS = {
   EMAIL_VERIFICATION: 15 * 60,
   PASSWORD_RESET: 15 * 60,

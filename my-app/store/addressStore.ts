@@ -1,142 +1,98 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 import { toast } from "sonner";
+import type { Address } from "@/lib/address/types";
+import { addressService } from "@/lib/api/services/address";
 
-const BASE = "http://localhost:8000/api/addresses";
+export type { Address };
 
-export interface Address {
-  _id: string;
-  label: string;
-  name: string;
-  phone: string;
-  address: string;
-  isDefault: boolean;
-}
-
+/**
+ * Server-backed address book (Phase 15 / G12). Addresses now live on the
+ * Customer aggregate server-side (`GET/POST/PATCH/DELETE /users/me/addresses`),
+ * so a fresh browser/device can still check out. localStorage remains only a
+ * cache: `hydrate()` fetches server truth and every mutation replaces the local
+ * list with the server's returned list (which flags the default). This mirrors
+ * the owner registry-as-cache pattern (`useOwnerRestaurants`).
+ */
 interface AddressState {
   addresses: Address[];
-  isLoading: boolean;
-
-  fetchAddresses: () => Promise<void>;
-  addAddress: (data: Omit<Address, "_id">) => Promise<void>;
-  updateAddress: (id: string, data: Partial<Address>) => Promise<void>;
+  hydrated: boolean;
+  loading: boolean;
+  hydrate: () => Promise<void>;
+  clear: () => void;
+  addAddress: (data: Omit<Address, "id">) => Promise<void>;
+  updateAddress: (id: string, data: Omit<Address, "id">) => Promise<void>;
   deleteAddress: (id: string) => Promise<void>;
   setDefault: (id: string) => Promise<void>;
   getDefault: () => Address | undefined;
 }
 
-export const useAddressStore = create<AddressState>((set, get) => ({
-  addresses: [],
-  isLoading: false,
+export const useAddressStore = create<AddressState>()(
+  persist(
+    (set, get) => ({
+      addresses: [],
+      hydrated: false,
+      loading: false,
 
-  fetchAddresses: async () => {
-    set({ isLoading: true });
-    try {
-      const res = await fetch(BASE, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch addresses");
-      const data = await res.json();
-      set({ addresses: data.addresses || [], isLoading: false });
-    } catch (err) {
-      console.error("fetchAddresses:", err);
-      set({ isLoading: false });
-    }
-  },
+      hydrate: async () => {
+        if (get().loading) return;
+        set({ loading: true });
+        try {
+          const addresses = await addressService.list();
+          set({ addresses, hydrated: true });
+        } catch {
+        } finally {
+          set({ loading: false });
+        }
+      },
 
-  addAddress: async (data) => {
-    try {
-      const res = await fetch(BASE, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message);
-      }
-      const result = await res.json();
-      // If new address is default, unset all others locally
-      set((s) => ({
-        addresses: [
-          ...(data.isDefault
-            ? s.addresses.map((a) => ({ ...a, isDefault: false }))
-            : s.addresses),
-          result.address,
-        ],
-      }));
-      toast.success(`"${data.label}" address saved!`);
-    } catch (err: any) {
-      toast.error(err.message || "Failed to save address");
-    }
-  },
+      clear: () => set({ addresses: [], hydrated: false }),
 
-  updateAddress: async (id, data) => {
-    try {
-      const res = await fetch(`${BASE}/${id}`, {
-        method: "PATCH",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message);
-      }
-      const result = await res.json();
-      set((s) => ({
-        addresses: s.addresses.map((a) =>
-          a._id === id
-            ? result.address
-            : data.isDefault
-            ? { ...a, isDefault: false }
-            : a
-        ),
-      }));
-      toast.success("Address updated!");
-    } catch (err: any) {
-      toast.error(err.message || "Failed to update address");
-    }
-  },
+      addAddress: async (data) => {
+        try {
+          const addresses = await addressService.create(data);
+          set({ addresses });
+          toast.success(`"${data.label}" address saved!`);
+        } catch {
+          toast.error("Couldn't save the address. Please try again.");
+        }
+      },
 
-  deleteAddress: async (id) => {
-    const { addresses } = get();
-    const wasDefault = addresses.find((a) => a._id === id)?.isDefault;
-    // Optimistic update
-    const remaining = addresses.filter((a) => a._id !== id);
-    if (wasDefault && remaining.length > 0) remaining[0].isDefault = true;
-    set({ addresses: remaining });
+      updateAddress: async (id, data) => {
+        try {
+          const addresses = await addressService.update(id, data);
+          set({ addresses });
+          toast.success("Address updated!");
+        } catch {
+          toast.error("Couldn't update the address. Please try again.");
+        }
+      },
 
-    try {
-      const res = await fetch(`${BASE}/${id}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to delete");
-      toast.success("Address removed");
-    } catch (err: any) {
-      // Roll back
-      set({ addresses });
-      toast.error(err.message || "Failed to delete address");
-    }
-  },
+      deleteAddress: async (id) => {
+        try {
+          const addresses = await addressService.remove(id);
+          set({ addresses });
+          toast.success("Address removed");
+        } catch {
+          toast.error("Couldn't remove the address. Please try again.");
+        }
+      },
 
-  setDefault: async (id) => {
-    // Optimistic update
-    set((s) => ({
-      addresses: s.addresses.map((a) => ({ ...a, isDefault: a._id === id })),
-    }));
-    try {
-      const res = await fetch(`${BASE}/${id}/set-default`, {
-        method: "PATCH",
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to set default");
-      toast.success("Default address updated");
-    } catch (err: any) {
-      // Re-fetch to restore correct state
-      get().fetchAddresses();
-      toast.error(err.message || "Failed to set default");
-    }
-  },
+      setDefault: async (id) => {
+        try {
+          const addresses = await addressService.setDefault(id);
+          set({ addresses });
+          toast.success("Default address updated");
+        } catch {
+          toast.error("Couldn't update the default address. Please try again.");
+        }
+      },
 
-  getDefault: () => get().addresses.find((a) => a.isDefault),
-}));
+      getDefault: () => get().addresses.find((a) => a.isDefault),
+    }),
+    {
+      name: "address-book-storage",
+      partialize: (state) => ({ addresses: state.addresses }),
+    },
+  ),
+);

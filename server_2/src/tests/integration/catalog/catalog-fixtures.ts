@@ -1,6 +1,3 @@
-// Builders for fully-populated catalog aggregates used by the Phase 8 persistence
-// integration tests. Each helper returns a domain aggregate (via its create()
-// factory + mutators) so round-trip tests exercise the real reconstitution path.
 import { Restaurant } from '../../../domain/catalog/entities/Restaurant';
 import { MenuItem } from '../../../domain/catalog/entities/MenuItem';
 import { ItemVariantGroup } from '../../../domain/catalog/entities/ItemVariantGroup';
@@ -31,7 +28,6 @@ export function buildLocation(lat = 18.5204, lng = 73.8567): GeoPoint {
   return GeoPoint.create(lat, lng).getValue();
 }
 
-// A small square polygon (closed ring) around the given centre.
 export function buildSquarePolygon(centerLat: number, centerLng: number, half = 0.01): GeoPolygon {
   const points = [
     GeoPoint.create(centerLat - half, centerLng - half).getValue(),

@@ -1,5 +1,3 @@
-// NotificationPreference — per-user, per-category channel toggles (engagement_module.md §2).
-// Key: userId. No domain events are raised here (not part of the §3 events table).
 import { AggregateRoot } from '../../shared/AggregateRoot';
 import { Result } from '../../shared/Result';
 import { Guard } from '../../shared/Guard';

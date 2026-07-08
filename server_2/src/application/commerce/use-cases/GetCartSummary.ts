@@ -7,9 +7,6 @@ import {
   toCartSummaryResponse,
 } from '../responses/CartSummaryResponse';
 
-// UC: GetCartSummary — lightweight count + subtotal for the header/badge (Phase 13).
-// Unlike GetCart, an absent active cart is not an error: it returns an empty summary
-// so the badge can be rendered unconditionally. No catalog projection read is needed.
 export class GetCartSummary {
   constructor(private readonly cartRepo: ICartRepository) {}
 

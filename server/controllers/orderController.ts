@@ -1,4 +1,3 @@
-// Backend Controller Example for Order Management
 import { IUser } from '@/Types/allTypes';
 import Order from '../models/Order';
 import User from '../models/User';
@@ -6,7 +5,6 @@ import LoyaltyTransaction from '../models/LoyaltyTransaction';
 import { sendEmail } from '../config/email';
 import { Response } from 'express';
 import { AuthRequest } from '@/Types/allTypes';
-// Create new order
 export const createOrder = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?._id; // Assuming you have auth middleware
@@ -26,7 +24,6 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
       pointsEarned
     } = req.body;
 
-    // Validate required fields
     if (!restaurant || !restaurantName || !items || items.length === 0) {
       console.log(restaurant,restaurantName,items,items.length);
       return res.status(400).json({
@@ -42,7 +39,6 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    // Create order
     const order = await Order.create({
       user: userId,
       restaurant,
@@ -63,14 +59,12 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
     });
     
 
-    // Update user's loyalty points if applicable
     if (pointsEarned && pointsEarned > 0) {
       await User.findByIdAndUpdate(userId, {
         $inc: { loyaltyPoints: pointsEarned }
       });
     }
 
-    // Create loyalty transaction
     await LoyaltyTransaction.create({
       user: req.user?._id,
       type: 'earned',
@@ -79,7 +73,6 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
       order: order._id,
       date: new Date(),
     });
-    // Populate order details
     const populatedOrder = await Order.findById(order._id)
       .populate('restaurant', 'name image')
       .populate('user', 'name email');
@@ -99,7 +92,6 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// Get all orders for a user
 export const getUserOrders = async (req:  AuthRequest, res: Response) => {
   try {
     const userId = req.user?._id;
@@ -121,7 +113,6 @@ export const getUserOrders = async (req:  AuthRequest, res: Response) => {
   }
 };
 
-// Get single order by ID
 export const getOrderById = async (req: AuthRequest, res: Response) => {
   try {
     const { orderId } = req.params;
@@ -153,16 +144,13 @@ export const getOrderById = async (req: AuthRequest, res: Response) => {
     });
   }
 };
-// import Order from "../models/orderModel.js";
 
 export const getOrderByOrderId = async (req:AuthRequest, res:Response) => {
   try {
     const { orderId } = req.params;
-    // res.status(201).json(orderId);
     console.log("Fetching getorderByorderId:", orderId);
 const order = await Order.findOne({ orderId:orderId })
 
-    // const order = await Order.findOne({ orderId }) // NOT _id
       .populate("restaurant")
       .populate("user", "name email");
 
@@ -178,7 +166,6 @@ const order = await Order.findOne({ orderId:orderId })
 };
 
 
-// Update order status (Admin/Restaurant)
 export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
   try {
     const { orderId } = req.params;
@@ -193,7 +180,6 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    // const order = await Order.findone(orderId);
     const order=await Order.findOne({orderId:orderId});
 
     if (!order) {
@@ -203,13 +189,6 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    // Prevent status update if order is already delivered or cancelled
-    // if (order.status === "Delivered" || order.status === "cancelled") {
-    //   return res.status(400).json({
-    //     success: false,
-    //     message: `Cannot update ${order.status} order`
-    //   });
-    // }
 
     order.status = status;
     await order.save();
@@ -228,7 +207,6 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// Cancel order (User)
 export const cancelOrder = async (req: AuthRequest, res: Response) => {
   try {
     const { orderId } = req.params;
@@ -246,7 +224,6 @@ export const cancelOrder = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    // Only allow cancellation if order is pending or confirmed
     if (!['pending', 'confirmed'].includes(order.status)) {
       return res.status(400).json({
         success: false,
@@ -257,7 +234,6 @@ export const cancelOrder = async (req: AuthRequest, res: Response) => {
     order.status = 'cancelled';
     await order.save();
 
-    // Optionally refund loyalty points if needed
     if (order.pointsEarned > 0) {
       await User.findByIdAndUpdate(userId, {
         $inc: { loyaltyPoints: -order.pointsEarned }
@@ -278,7 +254,6 @@ export const cancelOrder = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// Get all orders for restaurant (Restaurant/Admin)
 export const getRestaurantOrders = async (req: AuthRequest, res: Response) => {
   try {
     const { restaurantId } = req.params;
@@ -307,7 +282,6 @@ export const getRestaurantOrders = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// Get order statistics for restaurant
 export const getOrderStats = async (req: AuthRequest, res: Response) => {
   try {
     const { restaurantId } = req.params;

@@ -1,4 +1,3 @@
-// Notification categories a user can independently toggle per channel (engagement_module.md §2).
 export const NOTIFICATION_CATEGORY = {
   ORDER_UPDATES: 'ORDER_UPDATES',
   DELIVERY: 'DELIVERY',

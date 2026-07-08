@@ -1,14 +1,3 @@
-// Phase 8 (Batch 4) — reliable dispatch of the transactional outbox.
-//
-// Polls MongoOutboxRepository.findPending() every `pollIntervalMs`, claims each
-// row (markProcessing CAS), rehydrates a DomainEvent from the stored payload, and
-// publishes it to the in-process IEventBus (InMemoryEventBus). On success the row
-// is markProcessed; on failure it is rescheduled with persisted exponential
-// backoff (recordFailure) until `maxRetries` is reached, after which it is moved
-// to the terminal FAILED state (markFailed) and never re-served.
-//
-// BullMQ-backed cross-boundary delivery is Phase 11 (OutboxPoller.ts); this
-// processor is the in-process spine the master plan calls for.
 import { DomainEvent } from '../../domain/shared/DomainEvent';
 import { IEventBus } from '../../application/shared/events/IEventBus';
 import { OutboxConfig } from '../../config/outbox';

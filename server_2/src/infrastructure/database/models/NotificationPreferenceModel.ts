@@ -1,5 +1,3 @@
-// Mongoose schema — `notification_preferences` collection (engagement_module.md §6).
-// Key: unique userId. domain owns version/timestamps.
 import { Schema, model } from 'mongoose';
 
 export interface ChannelToggleDocument {

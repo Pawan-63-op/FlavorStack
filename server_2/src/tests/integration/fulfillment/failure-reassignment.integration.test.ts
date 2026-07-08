@@ -1,8 +1,3 @@
-// Integration (real Mongo replica set + in-process bus) for Phase 5B failure & reassignment:
-//   • Reassignment: an ACCEPTED rider is dropped and the delivery handed to a new rider — the prior
-//     attempt is preserved as REASSIGNED in history, the new rider is ACCEPTED (attempt 2), and a
-//     single RiderReassigned lands in the outbox.
-//   • Failure: a PICKED_UP delivery fails — terminal FAILED, failureReason persisted, one DeliveryFailed.
 import { randomUUID } from 'crypto';
 import { DomainEvent } from '../../../domain/shared/DomainEvent';
 import { Fulfillment } from '../../../domain/fulfillment/entities/Fulfillment';

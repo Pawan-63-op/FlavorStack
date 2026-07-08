@@ -1,5 +1,3 @@
-// Dispatching mapper for the BaseUser hierarchy. Selects the per-role mapper
-// (CustomerMapper / DriverMapper / AdminMapper) based on the `role` discriminator.
 import { BaseUser } from '../../../domain/identity/entities/BaseUser';
 import { Customer } from '../../../domain/identity/entities/Customer';
 import { Driver } from '../../../domain/identity/entities/Driver';

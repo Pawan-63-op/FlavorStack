@@ -6,10 +6,14 @@ import { GeoPoint } from './GeoPoint.vo';
 
 interface AddressProps {
   label?: string;
+  recipientName?: string;
+  phone?: string;
   street: string;
   city: string;
   state: string;
   pinCode: string;
+  landmark?: string;
+  deliveryInstructions?: string;
   coordinates: GeoPoint;
 }
 
@@ -20,6 +24,22 @@ export class Address extends ValueObject<AddressProps> {
 
   get label(): string | undefined {
     return this.props.label;
+  }
+
+  get recipientName(): string | undefined {
+    return this.props.recipientName;
+  }
+
+  get phone(): string | undefined {
+    return this.props.phone;
+  }
+
+  get landmark(): string | undefined {
+    return this.props.landmark;
+  }
+
+  get deliveryInstructions(): string | undefined {
+    return this.props.deliveryInstructions;
   }
 
   get street(): string {
@@ -49,10 +69,14 @@ export class Address extends ValueObject<AddressProps> {
 
   public static create(props: {
     label?: string;
+    recipientName?: string;
+    phone?: string;
     street: string;
     city: string;
     state: string;
     pinCode: string;
+    landmark?: string;
+    deliveryInstructions?: string;
     coordinates: GeoPoint;
   }): Result<Address> {
     const streetCheck = Guard.againstEmptyString(props.street, 'Street');
@@ -78,10 +102,16 @@ export class Address extends ValueObject<AddressProps> {
     return Result.ok<Address>(
       new Address({
         label: props.label ? String(props.label).trim() : undefined,
+        recipientName: props.recipientName ? String(props.recipientName).trim() : undefined,
+        phone: props.phone ? String(props.phone).trim() : undefined,
         street: String(props.street).trim(),
         city: String(props.city).trim(),
         state: String(props.state).trim(),
         pinCode: pinCodeStr,
+        landmark: props.landmark ? String(props.landmark).trim() : undefined,
+        deliveryInstructions: props.deliveryInstructions
+          ? String(props.deliveryInstructions).trim()
+          : undefined,
         coordinates: props.coordinates,
       })
     );

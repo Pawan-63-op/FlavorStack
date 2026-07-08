@@ -1,7 +1,3 @@
-// PinoTelemetry (Commerce Phase 14, commerce_module.md §11) — the concrete ITelemetry the
-// container injects. Structured logging rides the existing pino `logger`; metrics land in the
-// in-process MetricsRegistry; spans log start/end with elapsed ms AND record a duration
-// histogram so the checkout flow (load→ACL→price→persist→publish) is traceable.
 import { ITelemetry, ISpan, LogFields, MetricLabels } from '../../application/shared/observability/ITelemetry';
 import { logger } from './logger';
 import { MetricsRegistry, metrics as defaultRegistry } from './metrics';

@@ -6,8 +6,6 @@ import { IEventBus } from '../../shared/events/IEventBus';
 import { ClearCartDto } from '../dtos/ClearCartDto';
 import { CartResponseDto, toCartResponse } from '../dtos/CartResponseDto';
 
-// UC: ClearCart — empties all line items and resets restaurantId/currency.
-// CartCleared is in-process only (not outbox-routed), published post-commit.
 export class ClearCart {
   constructor(
     private readonly cartRepo: ICartRepository,

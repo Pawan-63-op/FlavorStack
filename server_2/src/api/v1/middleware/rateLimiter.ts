@@ -1,5 +1,3 @@
-// Redis sliding-window rate limit, keyed by user id (authed) or IP (public routes).
-// Fails open (logs + allows) if the limiter itself errors, e.g. Redis unavailable.
 import { Request, Response, NextFunction, RequestHandler } from 'express';
 import { RateLimiter, RateLimitAction } from '../../../infrastructure/redis/RateLimiter';
 import { logger } from '../../../infrastructure/observability/logger';

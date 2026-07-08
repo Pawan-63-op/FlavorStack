@@ -5,9 +5,6 @@ import uploadImageOnCloudinary from '@/utils_original/imageUpload';
 import MenuItem from '@/models/MenuItem';
 import { object } from 'zod';
 import { Types } from 'mongoose';
-// @desc    Get all restaurants
-// @route   GET /api/restaurants
-// @access  Public
 export const getRestaurants = async (req: Request, res: Response) => {
   try {
     const { cuisine, city, priceRange } = req.query;
@@ -32,9 +29,6 @@ export const getRestaurants = async (req: Request, res: Response) => {
   }
 };
 
-// @desc    Get restaurant by ID
-// @route   GET /api/restaurants/:id
-// @access  Public
 export const getRestaurantById = async (req: Request, res: Response) => {
   try {
     const restaurant = await Restaurant.findById(req.params.id);
@@ -48,54 +42,13 @@ export const getRestaurantById = async (req: Request, res: Response) => {
     res.status(500).json({ message: "internal server error" });
   }
 };
-// export const getRestaurantMenu = async (req:AuthRequest, res:Response) => {
-//   try {
-//     const { restaurantId } = req.params;
 
-//     // Find restaurant by ID
-//     const restaurant = await Restaurant.findById(restaurantId);
 
-//     if (!restaurant) {
-//       return res.status(404).json({ success: false, message: "Restaurant not found" });
-//     }
-//     const menuData= restaurant.menus;
-//   const formattedItems: any[] = await Promise.all(
-//   menuData.map(async (current: any) => {
-//     const item = await MenuItem.findById(current as ObjectId);
-//     return {
-//       id: item._id?.toString() || item.id,
-//       name: item.name,
-//       description: item.description,
-//       price: item.price,
-//       image: item.image,
-//       category: item.category,
-//       isVegetarian: item.isVegetarian || false,
-//       isSpicy: item.isSpicy || false,
-//       calories: item.calories || 0
-//     };
-//     })
-// );
-//     // Return menus array
-//     return res.status(200).json({
-//       success: true,
-//       restaurant: restaurant.restaurantName,
-//       totalMenus: restaurant.menus.length,
-//       menus: restaurant.menus
-//     });
-//   } catch (error) {
-//     console.error("Error fetching menus:", error);
-//     res.status(500).json({ success: false, message: "Server error" });
-//   }
-// };
 
-// @desc    Create restaurant
-// @route   POST /api/restaurants
-// @access  Private/Admin
 export const getRestaurantMenu = async (req: AuthRequest, res: Response) => {
   try {
     const { restaurantId } = req.params;
 
-    // Find restaurant by ID
     const restaurant = await Restaurant.findById(restaurantId);
 
     if (!restaurant) {
@@ -109,7 +62,6 @@ export const getRestaurantMenu = async (req: AuthRequest, res: Response) => {
         const objectId = new Types.ObjectId(current);
         const item = await MenuItem.findById(objectId);
         
-        // Handle case where menu item might not exist
         if (!item) {
           return null;
         }
@@ -129,10 +81,8 @@ export const getRestaurantMenu = async (req: AuthRequest, res: Response) => {
       })
     );
 
-    // Filter out any null values (deleted menu items)
     const validMenus = formattedItems.filter(item => item !== null);
 
-    // Return formatted menus array
     return res.status(200).json({
       success: true,
       restaurant: restaurant.restaurantName,
@@ -178,9 +128,6 @@ export const createRestaurant = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// @desc    Update restaurant
-// @route   PUT /api/restaurants/:id
-// @access  Private/Admin
 export const updatedRestaurant = async (req: AuthRequest, res: Response) => {
   try {
      const restaurant = await Restaurant.findOne({
@@ -194,7 +141,6 @@ export const updatedRestaurant = async (req: AuthRequest, res: Response) => {
                 message: "Restaurant not found"
             })
         };
-    // Only update fields that exist in req.body (partial update)
     for (const key in req.body) {
       if (Object.prototype.hasOwnProperty.call(req.body, key)) {
         (restaurant as any)[key] = req.body[key];
@@ -216,14 +162,10 @@ export const updatedRestaurant = async (req: AuthRequest, res: Response) => {
    return res.status(500).json({ message:req.params.id,
     x: req.user?._id
      })
-    // res.status(500).json({ message: (error as Error).message });
   }
 };
 
 
-// @desc    Delete restaurant
-// @route   DELETE /api/restaurants/:id
-// @access  Private/Admin
 export const deleteRestaurant = async (req: AuthRequest, res: Response) => {
   try {
     const restaurant = await Restaurant.findById(req.params.id);
@@ -239,9 +181,6 @@ return     res.status(500).json({message: "Internal Server Error"});
   }
 };
 
-// @desc    Search restaurants
-// @route   GET /api/restaurants/search
-// @access  Public
 export const searchRestaurants = async (req: Request, res: Response): Promise<void> => {
   try {
     const { query, type } = req.query;
@@ -256,25 +195,20 @@ export const searchRestaurants = async (req: Request, res: Response): Promise<vo
       return;
     }
 
-    // Clean query: remove spaces and lowercase
     const cleaned = query.replace(/\s+/g, "").toLowerCase();
 
-    // Create regex for fuzzy match: "ne" → n.*e
     const fuzzyPattern = cleaned.split("").join(".*");
     const regex = new RegExp(fuzzyPattern, "i");
 
-    // Validate allowed search fields
     const allowedTypes = ["name", "city", "country", "cuisine"];
     if (!allowedTypes.includes(type)) {
       res.status(400).json({ message: `Invalid type '${type}'. Must be one of: ${allowedTypes.join(", ")}` });
       return;
     }
 
-    // Build dynamic query object
     const searchCondition: any = {};
     searchCondition[type] = regex;
 
-    // Find matching restaurants
     const restaurants = await Restaurant.find(searchCondition);
 
     if (restaurants.length === 0) {

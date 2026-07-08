@@ -57,7 +57,6 @@ describe('MongoRestaurantRepository', () => {
       expect(r.deliveryZones[0].minOrder.amount).toBe(10000);
       expect(r.openingHours?.equals(original.openingHours!)).toBe(true);
       expect(r.version).toBe(original.version);
-      // reconstitute raises no domain events
       expect(r.pullDomainEvents()).toEqual([]);
     });
 

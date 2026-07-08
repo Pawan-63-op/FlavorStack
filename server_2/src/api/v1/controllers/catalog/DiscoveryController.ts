@@ -1,7 +1,3 @@
-// Thin HTTP delivery for the public catalog read/query use-cases. No auth, no
-// actor context. Validated query params are already coerced to the right types
-// by the route's `validate(schema, 'query')`; the query use-cases filter out
-// non-public / closed / unavailable rows.
 import { Request, Response, NextFunction } from 'express';
 import { GetRestaurant } from '../../../../application/catalog/use-cases/GetRestaurant';
 import { ListRestaurants } from '../../../../application/catalog/use-cases/ListRestaurants';

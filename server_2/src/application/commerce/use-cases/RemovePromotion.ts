@@ -5,7 +5,6 @@ import { IUnitOfWork } from '../../shared/ports/IUnitOfWork';
 import { RemovePromotionDto } from '../dtos/ApplyPromotionDto';
 import { CartResponseDto, toCartResponse } from '../dtos/CartResponseDto';
 
-// UC: RemovePromotion — clears the Cart's appliedPromotion (Phase 8) and persists.
 export class RemovePromotion {
   constructor(
     private readonly cartRepo: ICartRepository,

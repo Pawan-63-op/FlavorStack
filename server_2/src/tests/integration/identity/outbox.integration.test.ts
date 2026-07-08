@@ -1,9 +1,3 @@
-// Batch 6 integration tests — outbox persistence.
-//
-// Covers the write side (MongoOutboxStore.append, transactional + idempotent) and
-// the read/processing side (MongoOutboxRepository.save / findPending /
-// markProcessing / markProcessed), plus the atomic "aggregate save + outbox
-// append" guarantee and its rollback behavior via MongoUnitOfWork.
 import { randomUUID } from 'crypto';
 import { getConnection } from '../../../infrastructure/database/connection';
 import { TransactionContext } from '../../../infrastructure/database/TransactionContext';

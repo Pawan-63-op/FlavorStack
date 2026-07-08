@@ -1,4 +1,3 @@
-// Per-category push/email toggle (engagement_module.md §2). Used by NotificationPreference.
 import { ValueObject } from '../../shared/ValueObject';
 import { Result } from '../../shared/Result';
 import { ValidationError } from '../../shared/errors/ValidationError';

@@ -149,7 +149,6 @@ describe('CreateFulfillment', () => {
 });
 
 function buildExisting(): Fulfillment {
-  // A minimal already-persisted fulfillment built via the public factory.
   const { Money } = require('../../../../domain/shared/Money');
   const { GeoPoint } = require('../../../../domain/identity/value-objects/GeoPoint.vo');
   const { DeliveryAddress } = require('../../../../domain/fulfillment/value-objects/DeliveryAddress');

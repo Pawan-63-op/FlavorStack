@@ -1,6 +1,3 @@
-// Thin controller for the OrderRequest query API: GET /v1/order-requests/:id (commerce_module.md §9, Phase 13).
-// customerId is always derived from the authenticated actor; the use case enforces ownership (ForbiddenError
-// if the requester is not the owner, NotFoundError if no such order request).
 import { Request, Response, NextFunction } from 'express';
 import { GetOrderRequest } from '../../../application/commerce/use-cases/GetOrderRequest';
 

@@ -1,4 +1,3 @@
-// Password hashing only — refresh tokens use Sha256RefreshTokenHasher (see that file for why).
 import bcrypt from 'bcrypt';
 import { IPasswordHasher } from '../../domain/identity/services/IPasswordHasher';
 

@@ -1,7 +1,9 @@
 import { MarkPreparing } from '../../../../application/fulfillment/use-cases/MarkPreparing';
 import { IFulfillmentRepository } from '../../../../domain/fulfillment/repositories/IFulfillmentRepository';
+import { IRestaurantDirectory } from '../../../../application/fulfillment/ports/IRestaurantDirectory';
 import { Fulfillment } from '../../../../domain/fulfillment/entities/Fulfillment';
 import { NotFoundError } from '../../../../domain/shared/errors/NotFoundError';
+import { ForbiddenError } from '../../../../domain/shared/errors/ForbiddenError';
 import { IUnitOfWork } from '../../../../application/shared/ports/IUnitOfWork';
 import { IOutboxStore } from '../../../../application/shared/outbox/IOutboxStore';
 import { IEventBus } from '../../../../application/shared/events/IEventBus';
@@ -13,7 +15,10 @@ import { DeliveryAddress } from '../../../../domain/fulfillment/value-objects/De
 
 function money(n: number) { return Money.create(n, 'INR').getValue(); }
 
-function buildCreatedFulfillment(restaurantId = 'rest-1'): Fulfillment {
+const RESTAURANT_ID = 'rest-1';
+const OWNER_ID = 'owner-1';
+
+function buildCreatedFulfillment(restaurantId = RESTAURANT_ID): Fulfillment {
   const f = Fulfillment.createFromOrderRequested({
     orderRequestId: 'order-req-1',
     customerId: 'cust-1',
@@ -37,6 +42,15 @@ function makeRepo(overrides: Partial<IFulfillmentRepository> = {}): jest.Mocked<
   } as jest.Mocked<IFulfillmentRepository>;
 }
 
+function makeDirectory(ownerId: string | null = OWNER_ID): jest.Mocked<IRestaurantDirectory> {
+  return {
+    getOwnerId: jest.fn().mockResolvedValue(ownerId),
+    listRestaurantIdsByOwner: jest.fn().mockResolvedValue([]),
+    getRestaurantNames: jest.fn().mockResolvedValue({}),
+    countAll: jest.fn().mockResolvedValue(0),
+  } as jest.Mocked<IRestaurantDirectory>;
+}
+
 function makeUnitOfWork(): IUnitOfWork {
   return { runInTransaction: jest.fn(<T>(work: (ctx: unknown) => Promise<T>) => work({})) };
 }
@@ -54,16 +68,16 @@ function makeEventBus(): jest.Mocked<IEventBus> {
 }
 
 describe('MarkPreparing', () => {
-  it('updates status to PREPARING, appends PreparationStarted, publishes', async () => {
+  it('updates status to PREPARING when the actor owns the restaurant, appends PreparationStarted, publishes', async () => {
     const fulfillment = buildCreatedFulfillment();
     const repo = makeRepo({ findById: jest.fn().mockResolvedValue(fulfillment) });
     const outbox = makeOutbox();
     const bus = makeEventBus();
-    const uc = new MarkPreparing(repo, makeUnitOfWork(), outbox, bus);
+    const uc = new MarkPreparing(repo, makeDirectory(), makeUnitOfWork(), outbox, bus);
 
     const result = await uc.execute({
       fulfillmentId: fulfillment.id.toString(),
-      restaurantId: 'rest-1',
+      actorUserId: OWNER_ID,
     });
 
     expect(result.isSuccess).toBe(true);
@@ -81,11 +95,11 @@ describe('MarkPreparing', () => {
   it('carries prepEstimateMinutes in the response', async () => {
     const fulfillment = buildCreatedFulfillment();
     const repo = makeRepo({ findById: jest.fn().mockResolvedValue(fulfillment) });
-    const uc = new MarkPreparing(repo, makeUnitOfWork(), makeOutbox(), makeEventBus());
+    const uc = new MarkPreparing(repo, makeDirectory(), makeUnitOfWork(), makeOutbox(), makeEventBus());
 
     const result = await uc.execute({
       fulfillmentId: fulfillment.id.toString(),
-      restaurantId: 'rest-1',
+      actorUserId: OWNER_ID,
       prepEstimateMinutes: 30,
     });
 
@@ -95,35 +109,50 @@ describe('MarkPreparing', () => {
 
   it('returns NotFoundError when fulfillment does not exist', async () => {
     const repo = makeRepo({ findById: jest.fn().mockResolvedValue(null) });
-    const uc = new MarkPreparing(repo, makeUnitOfWork(), makeOutbox(), makeEventBus());
+    const uc = new MarkPreparing(repo, makeDirectory(), makeUnitOfWork(), makeOutbox(), makeEventBus());
 
-    const result = await uc.execute({ fulfillmentId: 'nonexistent', restaurantId: 'rest-1' });
+    const result = await uc.execute({ fulfillmentId: 'nonexistent', actorUserId: OWNER_ID });
 
     expect(result.isFailure).toBe(true);
     expect(result.getError()).toBeInstanceOf(NotFoundError);
     expect(repo.update).not.toHaveBeenCalled();
   });
 
-  it('returns ForbiddenError when restaurantId does not own the fulfillment', async () => {
-    const fulfillment = buildCreatedFulfillment('rest-1');
+  it('returns ForbiddenError when the actor is NOT the restaurant owner', async () => {
+    const fulfillment = buildCreatedFulfillment();
     const repo = makeRepo({ findById: jest.fn().mockResolvedValue(fulfillment) });
-    const uc = new MarkPreparing(repo, makeUnitOfWork(), makeOutbox(), makeEventBus());
+    const directory = makeDirectory(OWNER_ID); // restaurant owned by OWNER_ID
+    const uc = new MarkPreparing(repo, directory, makeUnitOfWork(), makeOutbox(), makeEventBus());
 
-    const result = await uc.execute({ fulfillmentId: fulfillment.id.toString(), restaurantId: 'wrong-rest' });
+    const result = await uc.execute({ fulfillmentId: fulfillment.id.toString(), actorUserId: 'someone-else' });
 
     expect(result.isFailure).toBe(true);
+    expect(result.getError()).toBeInstanceOf(ForbiddenError);
+    expect(directory.getOwnerId).toHaveBeenCalledWith(RESTAURANT_ID);
+    expect(repo.update).not.toHaveBeenCalled();
+  });
+
+  it('returns ForbiddenError when the restaurant owner cannot be resolved', async () => {
+    const fulfillment = buildCreatedFulfillment();
+    const repo = makeRepo({ findById: jest.fn().mockResolvedValue(fulfillment) });
+    const uc = new MarkPreparing(repo, makeDirectory(null), makeUnitOfWork(), makeOutbox(), makeEventBus());
+
+    const result = await uc.execute({ fulfillmentId: fulfillment.id.toString(), actorUserId: OWNER_ID });
+
+    expect(result.isFailure).toBe(true);
+    expect(result.getError()).toBeInstanceOf(ForbiddenError);
     expect(repo.update).not.toHaveBeenCalled();
   });
 
   it('returns failure on illegal state transition without persisting', async () => {
     const fulfillment = buildCreatedFulfillment();
-    fulfillment.startPreparation('rest-1');
+    fulfillment.startPreparation(RESTAURANT_ID);
     fulfillment.pullDomainEvents(); // already PREPARING
     const repo = makeRepo({ findById: jest.fn().mockResolvedValue(fulfillment) });
     const outbox = makeOutbox();
-    const uc = new MarkPreparing(repo, makeUnitOfWork(), outbox, makeEventBus());
+    const uc = new MarkPreparing(repo, makeDirectory(), makeUnitOfWork(), outbox, makeEventBus());
 
-    const result = await uc.execute({ fulfillmentId: fulfillment.id.toString(), restaurantId: 'rest-1' });
+    const result = await uc.execute({ fulfillmentId: fulfillment.id.toString(), actorUserId: OWNER_ID });
 
     expect(result.isFailure).toBe(true);
     expect(repo.update).not.toHaveBeenCalled();

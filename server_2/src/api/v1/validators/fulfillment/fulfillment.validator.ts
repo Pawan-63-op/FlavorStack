@@ -42,10 +42,26 @@ export const locationSchema = z.object({
   lng: z.number().min(-180).max(180),
 });
 
+export const myOrdersQuery = z.object({
+  limit: z.string().regex(/^\d+$/).optional(),
+  offset: z.string().regex(/^\d+$/).optional(),
+});
+
 export const adminDashboardQuery = z.object({
   status: z.string().optional(),
   slaBreached: z.enum(['true', 'false']).optional(),
   restaurantId: z.string().optional(),
   limit: z.string().regex(/^\d+$/).optional(),
   offset: z.string().regex(/^\d+$/).optional(),
+});
+
+export const analyticsQuery = z.object({
+  days: z
+    .string()
+    .regex(/^\d+$/)
+    .refine((v) => {
+      const n = Number(v);
+      return n >= 1 && n <= 365;
+    }, 'days must be between 1 and 365')
+    .optional(),
 });

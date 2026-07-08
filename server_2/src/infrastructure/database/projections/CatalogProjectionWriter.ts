@@ -1,10 +1,3 @@
-// CatalogProjectionWriter — maps catalog aggregates to read-model documents and
-// upserts the three projection collections (Catalog Phase 9).
-//
-// Called by the CatalogProjector AFTER the write transaction commits, so it uses
-// plain (session-less) Mongo writes. `rebuildRestaurant` is a wholesale rebuild:
-// summary + menu-view are replaced (upsert by _id) and the restaurant's search
-// docs are swapped for the current item set, so removed items vanish.
 import { ICatalogProjectionWriter } from '../../../domain/catalog/repositories/ICatalogProjectionWriter';
 import { Restaurant } from '../../../domain/catalog/entities/Restaurant';
 import { MenuItem } from '../../../domain/catalog/entities/MenuItem';
@@ -49,7 +42,6 @@ export class CatalogProjectionWriter implements ICatalogProjectionWriter {
     const location = restaurant.location.toGeoJson();
     const openingHours = openingHoursToDoc(restaurant);
 
-    // ── restaurant_summary ───────────────────────────────────────
     const summary: RestaurantSummaryDocument = {
       _id: restaurantId,
       name: restaurant.name,
@@ -65,7 +57,6 @@ export class CatalogProjectionWriter implements ICatalogProjectionWriter {
     };
     await RestaurantSummaryModel.replaceOne({ _id: restaurantId }, summary, { upsert: true });
 
-    // ── restaurant_menu_view (active categories, items grouped) ──
     const activeCategories = restaurant.categories.filter((c: Category) => c.isActive);
     const itemsByCategory = new Map<string, MenuViewItemDocument[]>();
     for (const item of items) {
@@ -99,11 +90,6 @@ export class CatalogProjectionWriter implements ICatalogProjectionWriter {
     };
     await RestaurantMenuViewModel.replaceOne({ _id: restaurantId }, menuView, { upsert: true });
 
-    // ── menu_item_search (idempotent upsert + prune) ─────────────
-    // Outbox delivery is at-least-once, so a rebuild can run more than once for
-    // the same event. Upserting each current doc (instead of delete-then-insert)
-    // makes replay a no-op rather than an E11000 duplicate-key error, then we
-    // prune any docs for items that no longer belong to this restaurant.
     const searchDocs: MenuItemSearchDocument[] = items.map((item) => {
       const view = menuItemToViewDoc(item);
       return {

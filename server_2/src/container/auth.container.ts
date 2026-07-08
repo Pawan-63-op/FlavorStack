@@ -1,4 +1,3 @@
-// Composition root for Identity auth/crypto/session/messaging interfaces (Phase 9, Batch 1).
 import { getAuthConfig, getEmailConfig } from '../config';
 import { ITokenService } from '../domain/identity/services/ITokenService';
 import { IPasswordHasher } from '../domain/identity/services/IPasswordHasher';

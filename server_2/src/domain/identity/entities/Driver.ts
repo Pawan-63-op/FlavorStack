@@ -1,4 +1,3 @@
-// src/modules/user/domain/entities/Driver.ts
 
 import { BaseUser } from './BaseUser'
 import { DRIVER_STATUS, DriverStatus } from '../enums/driver-status.enum'
@@ -7,7 +6,6 @@ import { VehicleInfo } from '../value-objects/VehicleInfo.vo'
 import { USER_ROLE } from '../enums/user-role.enum'
 import { CreateDriverInput } from '../types/CreateDriverInput'
 
-// Imports added for Batch 4
 import { DomainError } from '../../shared/errors/DomainError';
 import { ValidationError } from '../../shared/errors/ValidationError';
 import { ForbiddenError } from '../../shared/errors/ForbiddenError';
@@ -16,26 +14,19 @@ import { DriverVerified } from '../events/DriverVerified';
 import { DriverSuspended } from '../events/DriverSuspended';
 
 export class Driver extends BaseUser {
-    // Verification
     driverStatus: DriverStatus
 
-    //vehicle info
     vehicle!: VehicleInfo
-    //location
     currentLocation: GeoPoint | null
     locationUpdatedAt!: Date | null
-    // availability
     isAvailable: boolean
     activeOrderId: string | null
-    // earnings
     totalEarnings: number
     pendingPayout: number
     stripeAccountId: string | null
-    // ratings
     averageRating: number
     totalDeliveries: number
     totalRatings: number
-    // notifications
     fcmTokens: string[]
 
     constructor(data: Partial<Driver>) {
@@ -56,10 +47,8 @@ export class Driver extends BaseUser {
         this.stripeAccountId = data.stripeAccountId ?? null
     }
 
-    // ── Abstract ──────────────────────────────────────────
     get displayName() { return `${this.name} (Driver)` }
 
-    // ── Virtuals ──────────────────────────────────────────
     get isVerified() {
         return (
             this.driverStatus !== DRIVER_STATUS.PENDING_VERIFICATION &&
@@ -70,7 +59,6 @@ export class Driver extends BaseUser {
     get isOnline() { return this.isAvailable && this.driverStatus === DRIVER_STATUS.ACTIVE }
     get earningsFormatted() { return `₹${(this.totalEarnings / 100).toFixed(2)}` }
 
-    // ── Availability ──────────────────────────────────────
     goOnline() {
         if (!this.isVerified) {
             throw new ForbiddenError('driver_not_verified');
@@ -94,7 +82,6 @@ export class Driver extends BaseUser {
         this.currentLocation = pt
     }
 
-    // ── Order lifecycle ───────────────────────────────────
     assignOrder(orderId: string) {
         if (this.isBusy) {
             throw new DomainError('driver_already_busy');
@@ -134,9 +121,7 @@ export class Driver extends BaseUser {
         return this.activeOrderId;
     }
 
-    // ── Verification management ───────────────────────────
     verifyDriver(): void {
-        // Allow both initial verification and re-verification after suspension.
         if (
             this.driverStatus === DRIVER_STATUS.PENDING_VERIFICATION ||
             this.driverStatus === DRIVER_STATUS.SUSPENDED
@@ -152,7 +137,6 @@ export class Driver extends BaseUser {
         this.addDomainEvent(new DriverSuspended(this._id, reason, new Date()));
     }
 
-    // ── Earnings methods  ──────────────────────────────────────────
     creditEarnings(amount: number) {
         if (amount <= 0) {
             throw new ValidationError('invalid_earning_amount');
@@ -167,7 +151,6 @@ export class Driver extends BaseUser {
     
     clearPendingPayout() { this.pendingPayout = 0 }
 
-    // ── Ratings ───────────────────────────────────────────
     receiveRating(rating: number) {
         if (rating < 1 || rating > 5) {
             throw new ValidationError('invalid_rating');
@@ -176,7 +159,6 @@ export class Driver extends BaseUser {
         this.averageRating = ((this.averageRating * (this.totalRatings - 1)) + rating) / this.totalRatings
     }
 
-    // ── FCM tokens ────────────────────────────────────────
     registerFcmToken(token: string) {
         if (!this.fcmTokens.includes(token)) this.fcmTokens.push(token)
     }
@@ -185,7 +167,6 @@ export class Driver extends BaseUser {
         this.fcmTokens = this.fcmTokens.filter(t => t !== token)
     }
 
-    // ── Static factory ────────────────────────────────────
     static create(input: CreateDriverInput): Driver {
         const driver = new Driver({
             ...input,

@@ -31,7 +31,6 @@ const favoriteSchema = new Schema<IFavorite>({
   timestamps: true
 });
 
-// One favorite document per user
 favoriteSchema.index({ user: 1 }, { unique: true });
 
 const Favorite = mongoose.model<IFavorite>('Favorite', favoriteSchema);

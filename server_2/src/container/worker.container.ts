@@ -1,8 +1,3 @@
-// Minimal dependency graphs for the EmailWorker / NotificationWorker processes (Phase 11, Batch 1).
-//
-// Unlike `bootstrap()` / `assertRequiredConfig()`, these builders are scoped to what each
-// worker actually touches: the EmailWorker needs Resend, the NotificationWorker needs
-// nothing (LoggerPushProvider has no credentials). Neither requires the JWT key pair.
 import { Queue } from 'bullmq';
 
 import { getEmailConfig } from '../config/email';

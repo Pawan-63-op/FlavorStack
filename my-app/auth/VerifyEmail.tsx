@@ -1,12 +1,12 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuthStore } from "@/store/authStore";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { UtensilsCrossed, Loader2, Mail, CheckCircle } from "lucide-react";
+import { UtensilsCrossed, Loader2, Mail } from "lucide-react";
 
 const OTP_COOLDOWN = 30; // seconds
 
@@ -15,29 +15,41 @@ export default function VerifyEmail() {
   const searchParams                    = useSearchParams();
   const { verifyEmail, resendOtp, isLoading, isAuthenticated, user } = useAuthStore();
 
-  // FIX: get email from URL param first, fall back to store curr_email
+  // Email is for display only now — the OTP endpoints are authed (server uses
+  // the session). Prefer the authed user's email; fall back to the journey hints.
   const urlEmail                        = searchParams.get("email") || "";
   const storeEmail                      = useAuthStore((s) => s.curr_email);
-  const email                           = urlEmail || storeEmail || "";
+  const email                           = user?.email || urlEmail || storeEmail || "";
 
-  const [otp, setOtp]                   = useState("");
+  const [code, setCode]                 = useState("");
   const [error, setError]               = useState("");
   const [timer, setTimer]               = useState(0);
-  const [isVerified, setIsVerified]     = useState(false);
 
-  // FIX: redirect guard — already verified → go home
+  // Must be logged in for the authed OTP routes; the register journey auto-logs
+  // in before reaching here. A direct, logged-out visit → back to login.
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      router.replace("/login");
+    }
+  }, [isAuthenticated, isLoading, router]);
+
+  // Email already verified → skip straight to the phone step.
   useEffect(() => {
     if (!isLoading && isAuthenticated && user?.isVerified) {
-      router.replace("/");
+      router.replace("/verify-phone");
     }
-  }, [isAuthenticated, isLoading, user]);
+  }, [isAuthenticated, isLoading, user, router]);
 
-  // FIX: no email at all → redirect back to register
+  // Send the email OTP once on mount (guards against StrictMode double-invoke).
+  const sentRef = useRef(false);
   useEffect(() => {
-    if (!email) {
-      router.replace("/register");
-    }
-  }, [email]);
+    if (sentRef.current) return;
+    if (!isAuthenticated || user?.isVerified) return;
+    sentRef.current = true;
+    resendOtp()
+      .then(() => setTimer(OTP_COOLDOWN))
+      .catch((err) => setError(err instanceof Error ? err.message : "Failed to send code."));
+  }, [isAuthenticated, user, resendOtp]);
 
   // Countdown timer
   useEffect(() => {
@@ -47,15 +59,14 @@ export default function VerifyEmail() {
   }, [timer]);
 
   const handleVerify = async () => {
-    if (otp.length < 6) return;
+    if (code.length < 6) return;
     setError("");
     try {
-      await verifyEmail(email, otp);
-      setIsVerified(true);
-      setTimeout(() => router.push("/"), 1500);
+      await verifyEmail(code);
+      router.replace("/verify-phone");
     } catch (err: any) {
       setError(err.message || "Verification failed. Please check your code.");
-      setOtp("");
+      setCode("");
     }
   };
 
@@ -63,27 +74,12 @@ export default function VerifyEmail() {
     if (timer > 0) return;
     setError("");
     try {
-      // FIX: uses real email — not hardcoded "pavan@example.com"
-      await resendOtp(email);
+      await resendOtp();
       setTimer(OTP_COOLDOWN);
     } catch (err: any) {
       setError(err.message || "Failed to resend code.");
     }
   };
-
-  if (isVerified) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-accent/30 p-4">
-        <Card className="w-full max-w-md shadow-lg text-center">
-          <CardContent className="pt-12 pb-12">
-            <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
-            <h2 className="text-2xl font-semibold mb-2">Email Verified!</h2>
-            <p className="text-muted-foreground">Redirecting you to the app...</p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-accent/30 p-4">
@@ -118,7 +114,7 @@ export default function VerifyEmail() {
 
           {/* OTP input */}
           <div className="flex flex-col items-center gap-2">
-            <InputOTP value={otp} maxLength={6} onChange={setOtp}>
+            <InputOTP value={code} maxLength={6} onChange={setCode}>
               <InputOTPGroup>
                 {[...Array(6)].map((_, i) => (
                   <InputOTPSlot key={i} index={i} />
@@ -130,7 +126,7 @@ export default function VerifyEmail() {
 
           {/* Verify button */}
           <Button className="w-full" onClick={handleVerify}
-            disabled={isLoading || otp.length < 6}>
+            disabled={isLoading || code.length < 6}>
             {isLoading
               ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Verifying...</>
               : "Verify Email"}

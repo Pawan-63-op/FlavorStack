@@ -1,4 +1,3 @@
-// Thin HTTP delivery for notification preferences + history use-cases. Zero business logic.
 import { Request, Response, NextFunction } from 'express';
 import { UpdateNotificationPreferences } from '../../../application/engagement/use-cases/UpdateNotificationPreferences';
 import { GetNotificationPreferences } from '../../../application/engagement/use-cases/GetNotificationPreferences';

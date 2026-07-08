@@ -5,12 +5,6 @@ import { Fee } from '../../value-objects/Fee';
 import { FEE_TYPE } from '../../enums/fee-type.enum';
 import { DeliveryFeeInput } from '../../types/PricingContext';
 
-// Pricing pipeline stage 3 (Commerce Phase 7, §4.2) — pure.
-// Resolves the DELIVERY fee via a commerce-local distance→tier lookup with a
-// free-above-subtotal threshold. This deliberately mirrors Catalog's
-// DeliveryFeeMatrix.feeFor logic WITHOUT importing it — cross-context coupling
-// is forbidden (CLAUDE.md), and the tier inputs arrive as plain data on the
-// PricingContext (sourced from the Catalog snapshot/ACL read upstream).
 export class DeliveryFeeStage {
   public static run(input: DeliveryFeeInput, subtotal: Money): Result<Fee> {
     if (!(subtotal instanceof Money)) {

@@ -4,18 +4,18 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter,usePathname } from "next/navigation";
 import { useAuthStore } from "../store/authStore";
-//  import { useCartStore } from "../store/cartStore";
-import { useCartStore } from "@/admin_new/src/store/cartStore";
+import { useCartSummary } from "@/lib/api/hooks/useCart";
 import { useThemeStore } from "../store/themeStore";
 // import { useAuthStore } from "@/store/authStore";
 // import { UseBoundStore } from ""
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
-import { ShoppingCart, UtensilsCrossed, Menu, Moon, Sun, Heart, Trophy, LogOut, User, Search } from "lucide-react";
+import { ShoppingCart, UtensilsCrossed, Menu, Moon, Sun, LogOut, User, Search } from "lucide-react";
 import { CartDrawer } from "./CartDrawer";
 import { ShoppingBag } from "lucide-react";
 import CartPage from "./CartPage";
-import { ChatSupport, ChatButton } from "./ChatSupport";
+import { NotificationBell } from "./notifications/NotificationBell";
+import { isEnabled } from "@/lib/config/featureFlags";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,17 +33,16 @@ export function Layout_comp({ children }: LayoutProps) {
   const [cartOpen, setCartOpen] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
-  const [chatOpen, setChatOpen] = useState(false);
   // const location = useLocation();
   // const navigate = useNavigate();
   // const navigate = useRouter().push;
   const user = useAuthStore((state) => state.user);
   const logout = useAuthStore((state) => state.logout);
-  const getCartCount = useCartStore((state) => state.getCartCount);
+  const { data: cartSummary } = useCartSummary();
   const theme = useThemeStore((state) => state.theme);
   const toggleTheme = useThemeStore((state) => state.toggleTheme);
 
-  const cartCount = getCartCount();
+  const cartCount = cartSummary?.itemCount ?? 0;
 
 const handleLogout = async() => {
 //  const onSubmit = async
@@ -78,24 +77,6 @@ const handleLogout = async() => {
                 <Link href="/">Home</Link>
               </Button>
               
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant={pathname.includes("/recipes") ? "default" : "ghost"}
-                  >
-                    Recipes
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                  <DropdownMenuItem asChild>
-                    <Link href="/recipes">Browse Recipes</Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link href="/recipes/suggestions">Recipe Suggestions</Link>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              
               <Button
                 variant={pathname === "/search" ? "default" : "ghost"}
                 className="gap-2"
@@ -120,9 +101,6 @@ const handleLogout = async() => {
                     <Link href="/search">Search</Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
-                    <Link href="/reviews">All Reviews</Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
                     <Link href="/reviews/my-reviews">My Reviews</Link>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
@@ -133,28 +111,6 @@ const handleLogout = async() => {
                 asChild
               >
                 <Link href="/orders">Orders</Link>
-              </Button>
-              
-              <Button
-                variant={pathname === "/favorites" ? "default" : "ghost"}
-                className="gap-2"
-                asChild
-              >
-                <Link href="/favorites">
-                  <Heart className="h-4 w-4" />
-                  <span className="hidden lg:inline">Favorites</span>
-                </Link>
-              </Button>
-              
-              <Button
-                variant={pathname === "/loyalty" ? "default" : "ghost"}
-                className="gap-2"
-                asChild
-              >
-                <Link href="/loyalty">
-                  <Trophy className="h-4 w-4" />
-                  <span className="hidden lg:inline">Rewards</span>
-                </Link>
               </Button>
 
               {!user?.isAdmin && (
@@ -180,16 +136,7 @@ const handleLogout = async() => {
                     <Link href="/">Home</Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
-                    <Link href="/recipes">Browse Recipes</Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link href="/recipes/suggestions">Recipe Suggestions</Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
                     <Link href="/search">Search</Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link href="/reviews">All Reviews</Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
                     <Link href="/reviews/my-reviews">My Reviews</Link>
@@ -197,12 +144,6 @@ const handleLogout = async() => {
                   <DropdownMenuSeparator />
                   <DropdownMenuItem asChild>
                     <Link href="/orders">Orders</Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link href="/favorites">Favorites</Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link href="/loyalty">Rewards</Link>
                   </DropdownMenuItem>
                   {!user?.isAdmin && (
                     <>
@@ -247,6 +188,9 @@ const handleLogout = async() => {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+
+            {/* Notifications (Phase 8) — gated by the notifications flag */}
+            {isEnabled("notifications") && <NotificationBell />}
 
             {/* Theme Toggle */}
             <Button
@@ -303,10 +247,6 @@ const handleLogout = async() => {
   View Cart
 </Button> */}
 
-
-      {/* Chat Support */}
-      {!chatOpen && <ChatButton onClick={() => setChatOpen(true)} />}
-      {chatOpen && <ChatSupport isOpen={chatOpen} onClose={() => setChatOpen(false)} />}
     </div>
   );
 }

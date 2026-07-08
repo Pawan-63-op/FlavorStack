@@ -1,19 +1,3 @@
-// Integration (real Mongo replica set) for Phase 9.3 — Concurrency Hardening.
-//
-// Proves the aggregate version guard + status-machine invariants hold under concurrent and replayed
-// transitions (fulfillment_module.md §10):
-//   • Optimistic concurrency: two readers loaded at the same version, both mutate, exactly ONE update()
-//     commits; the loser fails with ConflictError and no illegal state is persisted.
-//     Scenarios: two accepts, accept-vs-cancel, double pickup, double completion, duplicate transition.
-//   • Genuine contention: two AcceptDelivery use cases fired with Promise.allSettled — one winner.
-//   • "One non-terminal assignment at a time" invariant under contention.
-//   • Replay safety: at-least-once jobs (assignment timeout, SLA timeout) re-run on an already-advanced
-//     or terminal aggregate are guarded no-ops.
-//   • Version increments monotonically — one bump per successful transition.
-//
-// The deterministic conflict tests load the SAME persisted version into two in-memory aggregates
-// (mirroring two workers that both read before either wrote): the repository's optimistic-concurrency
-// guard keys on the version captured at load time, so the second update() finds matchedCount === 0.
 import { randomUUID } from 'crypto';
 import { Fulfillment } from '../../../domain/fulfillment/entities/Fulfillment';
 import { FulfillmentLine } from '../../../domain/fulfillment/value-objects/FulfillmentLine';
@@ -104,8 +88,6 @@ describe('Fulfillment concurrency hardening (Phase 9.3)', () => {
     await OutboxEventModel.deleteMany({});
   });
 
-  // Reload → mutate once → update, mirroring a use case's load-time version capture. Used to seed
-  // a fulfillment into a precise state before forking it into two concurrent readers.
   async function step(id: string, mutate: (f: Fulfillment) => Result<void>): Promise<void> {
     const f = (await repo.findById(id)) as Fulfillment;
     const r = mutate(f);
@@ -119,7 +101,6 @@ describe('Fulfillment concurrency hardening (Phase 9.3)', () => {
     return (doc as { version: number }).version;
   }
 
-  // Seed a saved fulfillment, run the supplied seed steps, and return its id.
   async function seed(steps: Array<(f: Fulfillment) => Result<void>> = []): Promise<string> {
     const f = buildFulfillment();
     await repo.save(f);
@@ -137,7 +118,6 @@ describe('Fulfillment concurrency hardening (Phase 9.3)', () => {
       ]);
       const baseVersion = await storedVersion(id);
 
-      // Two workers both load the OFFERED state at the same version.
       const a = (await repo.findById(id)) as Fulfillment;
       const b = (await repo.findById(id)) as Fulfillment;
       expect(a.acceptByRider(RIDER_1).isSuccess).toBe(true);
@@ -169,7 +149,6 @@ describe('Fulfillment concurrency hardening (Phase 9.3)', () => {
       await expect(repo.update(canceller)).rejects.toBeInstanceOf(ConflictError);
 
       const reloaded = (await repo.findById(id)) as Fulfillment;
-      // Only the accept landed; the order is NOT cancelled.
       expect(reloaded.fulfillmentStatus.value).toBe(FULFILLMENT_STATUS.READY_FOR_PICKUP);
       expect(reloaded.currentAssignment!.status.value).toBe(RIDER_ASSIGNMENT_STATUS.ACCEPTED);
       expect(reloaded.cancellation).toBeNull();
@@ -264,7 +243,6 @@ describe('Fulfillment concurrency hardening (Phase 9.3)', () => {
       expect(successes).toHaveLength(1);
       expect(losers).toHaveLength(1);
 
-      // A thrown loser must be a ConflictError (version guard), never a partial write.
       const rejected = settled.find((s) => s.status === 'rejected') as PromiseRejectedResult | undefined;
       if (rejected) expect(rejected.reason).toBeInstanceOf(ConflictError);
 
@@ -314,8 +292,6 @@ describe('Fulfillment concurrency hardening (Phase 9.3)', () => {
   });
 
   describe('replay safety — assignment-timeout job (HandleAssignmentTimeout)', () => {
-    // maxAssignmentAttempts = 1 → after the single offer expires, attempts are exhausted and the
-    // handler auto-cancels (SYSTEM). This keeps the re-offer path deterministic (no rider pool needed).
     function buildTimeoutHandler(): HandleAssignmentTimeout {
       const service = new SimpleDeliveryAssignmentService(async () => []);
       const offer = new OfferRiderAssignment(repo, service, uow, outbox, bus, 60);
@@ -324,8 +300,6 @@ describe('Fulfillment concurrency hardening (Phase 9.3)', () => {
     }
 
     it('first run expires the offer (and exhausts → cancels); a replay is a guarded no-op', async () => {
-      // Offer with a 5ms TTL then let it lapse — RiderAssignment rejects an expiresAt <= offeredAt,
-      // so the offer must be valid at creation time and only become expired by the wall clock.
       const id = await seed([
         (f) => f.startPreparation(RESTAURANT_ID),
         (f) => f.markReadyForPickup(RESTAURANT_ID),
@@ -342,7 +316,6 @@ describe('Fulfillment concurrency hardening (Phase 9.3)', () => {
       const versionAfterFirst = await storedVersion(id);
       expect(await OutboxEventModel.countDocuments({ eventName: 'RiderAssignmentExpired' })).toBe(1);
 
-      // Replay the SAME at-least-once job — terminal aggregate → no-op.
       const replay = await handler.execute({ fulfillmentId: id, attempt: 1 });
       expect(replay.isSuccess).toBe(true);
       expect(await storedVersion(id)).toBe(versionAfterFirst); // no further version bump
@@ -398,7 +371,6 @@ describe('Fulfillment concurrency hardening (Phase 9.3)', () => {
       const cancel = new CancelFulfillment(repo, uow, outbox, bus);
       const handler = new HandleSlaTimeout(repo, cancel);
 
-      // Timer was armed for PREPARING, but the order already advanced to READY_FOR_PICKUP.
       const result = await handler.execute({ fulfillmentId: id, stage: FULFILLMENT_STATUS.PREPARING });
       expect(result.isSuccess).toBe(true);
 

@@ -1,5 +1,3 @@
-// Maps between the NotificationTemplate aggregate and NotificationTemplateModel documents
-// (engagement_module.md §6). reconstitute() is faithful since the aggregate has no internal VOs.
 import {
   NotificationTemplate,
   NotificationTemplateProps,

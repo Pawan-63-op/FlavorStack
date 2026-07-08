@@ -1,7 +1,3 @@
-// Batch 4B — IdentityRecipientResolver is the composition-root bridge that satisfies the Engagement
-// INotificationRecipientResolver port using Identity-owned data (via the IUserRepository interface).
-// This is the ONLY place Engagement notification delivery touches Identity, and it does so through an
-// interface — Engagement infrastructure (the channels) never imports an Identity repository.
 import { IdentityRecipientResolver } from '../../../../infrastructure/notifications/IdentityRecipientResolver';
 import { IUserRepository } from '../../../../domain/identity/repositories/IUserRepository';
 import { Customer } from '../../../../domain/identity/entities/Customer';
@@ -21,7 +17,6 @@ function makeUserRepo(findByIdImpl: IUserRepository['findById']): jest.Mocked<IU
 }
 
 function buildCustomer(over: Partial<Customer> = {}): Customer {
-  // Rehydration constructor (Partial<T>) — avoids the create() factory's required hash/events for a unit test.
   return new Customer({ name: 'Alice', email: 'alice@example.com', fcmTokens: [], ...over });
 }
 

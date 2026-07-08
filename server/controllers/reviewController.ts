@@ -3,15 +3,10 @@ import Restaurant from '../models/Restaurant';
 import Order from '../models/Order';
 import { AuthRequest } from '@/Types/allTypes';
 import { Response } from 'express';
-// @desc    Create new review
-// @route   POST /api/reviews
-// @access  Private
 export const createReview = async (req:AuthRequest, res:Response) => {
   try {
     const { restaurant, order, rating, comment, photos } = req.body;
 console.log(restaurant,order,rating,comment,photos);
-    // Check if order exists and belongs to user
-    // const orderDoc = await Order.findById(order);
     const orderDoc = await Order.findOne({ orderId: order });
 
     if (!orderDoc) {
@@ -23,12 +18,7 @@ console.log(restaurant,order,rating,comment,photos);
       return res.status(403).json({ message: "Unauthorized review attempt by user:",x: req.user?._id,y:orderDoc.user });
     }
 
-    // if (orderDoc.status !== 'delivered') {
-    //   return res.status(400).json({ message: 'Can only review delivered orders' });
-    // }
 
-    // Check if already reviewed
-    // const existingReview = await Review.findOne({ user: req.user?._id, order });
     const existingReview = await Review.findOne({
   user: req.user?._id,
   orderId: order  // string compare
@@ -38,7 +28,6 @@ console.log(restaurant,order,rating,comment,photos);
       return res.status(400).json({ message: 'Order already reviewed' });
     }
 
-    // Create review
     const review = await Review.create({
   user: req.user?._id,
   restaurant,
@@ -49,20 +38,10 @@ console.log(restaurant,order,rating,comment,photos);
   photos: photos || []
 });
 
-    // const review = await Review.create({
-    //   user: req.user?._id,
-    //   restaurant,
-    //   order,
-    //   rating,
-    //   comment,
-    //   photos: photos || []
-    // });
 
-    // Update order
     orderDoc.hasReview = true;
     await orderDoc.save();
 
-    // Update restaurant rating
     const reviews = await Review.find({ restaurant });
     const totalRating = reviews.reduce((sum, r) => sum + r.rating, 0);
     const avgRating = totalRating / reviews.length;
@@ -85,9 +64,6 @@ console.log(restaurant,order,rating,comment,photos);
   }
 };
 
-// @desc    Get all reviews
-// @route   GET /api/reviews
-// @access  Public
 export const getReviews = async (req:AuthRequest, res:Response) => {
   try {
     const reviews = await Review.find()
@@ -101,9 +77,6 @@ export const getReviews = async (req:AuthRequest, res:Response) => {
   }
 };
 
-// @desc    Get logged in user reviews
-// @route   GET /api/reviews/myreviews
-// @access  Private
 export const getMyReviews = async (req:AuthRequest, res:Response) => {
   try {
     const reviews = await Review.find({ user: req.user?._id })
@@ -116,9 +89,6 @@ export const getMyReviews = async (req:AuthRequest, res:Response) => {
   }
 };
 
-// @desc    Get restaurant reviews
-// @route   GET /api/reviews/restaurant/:id
-// @access  Public
 export const getRestaurantReviews = async (req:AuthRequest, res:Response) => {
   try {
     const reviews = await Review.find({ 
@@ -133,19 +103,14 @@ export const getRestaurantReviews = async (req:AuthRequest, res:Response) => {
   }
 };
 
-// @desc    Delete review
-// @route   DELETE /api/reviews/:id
-// @access  Private
 export const deleteReview = async (req:AuthRequest, res:Response) => {
   try {
     const review = await Review.findById(req.params.id);
 
     if (review) {
-      // Check if user owns the review or is admin
       if (review.user === (req.user?._id) || req.user?.role === 'admin') {
         await review.deleteOne();
         
-        // Update restaurant rating
         const reviews = await Review.find({ restaurant: review.restaurant });
         if (reviews.length > 0) {
           const totalRating = reviews.reduce((sum, r) => sum + r.rating, 0);

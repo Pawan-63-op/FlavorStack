@@ -1,7 +1,3 @@
-// VO: frozen PricingBreakdown stored on the OrderRequest; schemaVersion-tagged for reproducibility
-// (Commerce Phase 9, commerce_module.md §3.3/§6.4). `PricingBreakdown` is itself an immutable VO whose
-// `create()` enforces the total == subtotal + Σfees − discount + tax invariant; PricingSnapshot wraps
-// an already-validated breakdown and stamps it with the schema version in effect at checkout time.
 import { ValueObject } from '../../../shared/ValueObject';
 import { Result } from '../../../shared/Result';
 import { ValidationError } from '../../../shared/errors/ValidationError';

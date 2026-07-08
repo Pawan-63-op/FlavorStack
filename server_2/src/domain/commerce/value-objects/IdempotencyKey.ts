@@ -1,7 +1,3 @@
-// VO: UUID per checkout request — dedupes repeated Checkout calls; same key always returns the same OrderRequest
-// (Commerce Phase 11, commerce_module.md §3.3/§4.4). The unique `order_requests.idempotencyKey` index is the
-// persistence-level duplicate guard (Phase 12 ratified this single index rather than a separate
-// `commerce_idempotency` collection); this VO enforces the shape end-to-end.
 import { ValueObject } from '../../shared/ValueObject';
 import { Result } from '../../shared/Result';
 import { Guard } from '../../shared/Guard';

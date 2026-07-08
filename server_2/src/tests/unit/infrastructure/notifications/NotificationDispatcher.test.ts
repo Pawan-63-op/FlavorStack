@@ -1,11 +1,3 @@
-// Batch 4B — NotificationDispatcher orchestrates the send lifecycle for an enqueued engagement job:
-// load the PENDING row → idempotency short-circuit if already SENT → select channel by
-// notification.channel → send → markSent(provider)/markFailed(reason) + persist.
-//
-// Failure semantics (driven by NotificationStatus: PENDING → SENT | FAILED, FAILED terminal):
-//   - channel returns Result.fail (e.g. no_recipient) → TERMINAL: markFailed + update, no throw.
-//   - channel THROWS (transient provider error)       → propagate, row stays PENDING for BullMQ retry.
-//   - markExhausted(): called by the worker after retries are exhausted → flips PENDING → FAILED.
 import { NotificationDispatcher } from '../../../../infrastructure/notifications/NotificationDispatcher';
 import { INotificationChannel } from '../../../../infrastructure/notifications/INotificationChannel';
 import { INotificationRepository } from '../../../../domain/engagement/repositories/INotificationRepository';

@@ -1,4 +1,3 @@
-// ioredis client — singleton, reconnect strategy, health-check method
 import Redis from 'ioredis';
 import { getRedisConfig, RedisConfig } from '../../config/redis';
 import { logger } from '../observability/logger';
@@ -95,7 +94,6 @@ export class RedisClient {
       });
 
       void this.client.quit().catch(() => {
-        // 'end' (above) or the disconnect() fallback resolves this promise either way
       });
     });
   }

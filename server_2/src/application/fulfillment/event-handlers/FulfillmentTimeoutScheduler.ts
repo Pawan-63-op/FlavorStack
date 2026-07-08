@@ -1,13 +1,3 @@
-// Event handler: arm BullMQ delayed jobs when the fulfillment reaches a state with a deadline
-// (fulfillment_module.md §10, Phase 5B). Subscribed to the in-process bus (which OutboxProcessor also
-// replays onto), so it must be idempotent — BullMQ jobId de-dup provides exactly that: a re-arm with
-// the same jobId is ignored.
-//
-//   • RiderOffered   → assignment-timeout at expiresAt   (jobId = <id>:assignment:<attempt>)
-//   • ReadyForPickup → sla-timeout for READY_FOR_PICKUP   (jobId = <id>:sla:READY_FOR_PICKUP)
-//   • OutForDelivery → sla-timeout for OUT_FOR_DELIVERY   (jobId = <id>:sla:OUT_FOR_DELIVERY)
-//
-// Best-effort: a scheduling failure is logged, never thrown (it must not break the write path).
 import { DomainEvent } from '../../../domain/shared/DomainEvent';
 import { FULFILLMENT_STATUS } from '../../../domain/fulfillment/enums/fulfillment-status.enum';
 import { IFulfillmentJobScheduler } from '../jobs/FulfillmentJob';

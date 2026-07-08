@@ -1,11 +1,3 @@
-// Mongoose schema — `menu_items` collection (Catalog Phase 8).
-// Persisted shape of the MenuItem aggregate root
-// (src/domain/catalog/entities/MenuItem.ts). MenuItem is an INDEPENDENT aggregate
-// that references `restaurantId` + `categoryId` (eventually consistent with the
-// Restaurant aggregate); variant groups and their options are embedded.
-//
-// _id is a UUID string (UniqueEntityId); versionKey disabled (the domain owns
-// `version`).
 import { Schema, model } from 'mongoose';
 import { VARIANT_SELECTION_TYPE, VariantSelectionType } from '../../../domain/catalog/enums/variant-selection-type.enum';
 import { MoneyDocument } from './RestaurantModel';

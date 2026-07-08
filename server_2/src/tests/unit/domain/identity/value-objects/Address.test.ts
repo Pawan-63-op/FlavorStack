@@ -26,6 +26,43 @@ describe('Address Value Object', () => {
     expect(addr.toString()).toBe('[Home] 100 Feet Road, Indiranagar, Bangalore, Karnataka - 560038');
   });
 
+  it('should carry the optional contact/extra fields when provided', () => {
+    const addressResult = Address.create({
+      label: 'Home',
+      recipientName: 'Asha Rao',
+      phone: '+919876543210',
+      street: '100 Feet Road, Indiranagar',
+      city: 'Bangalore',
+      state: 'Karnataka',
+      pinCode: '560038',
+      landmark: 'Opposite the metro pillar 42',
+      deliveryInstructions: 'Ring the bell twice',
+      coordinates: coords,
+    });
+
+    expect(addressResult.isSuccess).toBe(true);
+    const addr = addressResult.getValue();
+    expect(addr.recipientName).toBe('Asha Rao');
+    expect(addr.phone).toBe('+919876543210');
+    expect(addr.landmark).toBe('Opposite the metro pillar 42');
+    expect(addr.deliveryInstructions).toBe('Ring the bell twice');
+  });
+
+  it('should leave the optional contact/extra fields undefined when omitted', () => {
+    const addr = Address.create({
+      street: '100 Feet Road, Indiranagar',
+      city: 'Bangalore',
+      state: 'Karnataka',
+      pinCode: '560038',
+      coordinates: coords,
+    }).getValue();
+
+    expect(addr.recipientName).toBeUndefined();
+    expect(addr.phone).toBeUndefined();
+    expect(addr.landmark).toBeUndefined();
+    expect(addr.deliveryInstructions).toBeUndefined();
+  });
+
   it('should create without optional label', () => {
     const addressResult = Address.create({
       street: '100 Feet Road, Indiranagar',

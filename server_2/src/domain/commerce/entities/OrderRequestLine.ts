@@ -1,7 +1,3 @@
-// Entity (within OrderRequest, immutable): menuItem: MenuItemSnapshot, selectedOptions: VariantSnapshot[],
-// quantity: Quantity, lineTotal: Money (Commerce Phase 11, commerce_module.md §3.2). Enforces the
-// Price-Integrity invariant at the line level: lineTotal == (basePrice + Σ variant priceDelta) × quantity,
-// all sharing one currency. Built once at checkout from authoritative snapshots; never mutated.
 import { Entity } from '../../shared/Entity';
 import { Result } from '../../shared/Result';
 import { UniqueEntityId } from '../../shared/UniqueEntityId';
@@ -58,8 +54,6 @@ export class OrderRequestLine extends Entity<OrderRequestLineProps> {
       return Result.fail<OrderRequestLine>(new ValidationError('OrderRequestLine lineTotal must be a valid Money value object'));
     }
 
-    // Price-Integrity invariant: unitPrice = basePrice + Σ variant priceDelta; lineTotal = unitPrice × quantity.
-    // Money.add rejects currency mismatches, so this also enforces single-currency lines.
     let unitPrice = props.menuItem.basePrice;
     for (const option of props.selectedOptions) {
       const addResult = unitPrice.add(option.priceDelta);

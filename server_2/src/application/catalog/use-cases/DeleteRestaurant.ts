@@ -22,8 +22,6 @@ export class DeleteRestaurant {
     const softDeleteResult = restaurant.softDelete();
     if (softDeleteResult.isFailure) return Result.fail(softDeleteResult.getError());
 
-    // Soft-delete raises no domain event; persist within the transaction boundary
-    // for consistency with other write use-cases.
     await this.unitOfWork.runInTransaction(async () => {
       await this.restaurantRepo.update(restaurant);
     });

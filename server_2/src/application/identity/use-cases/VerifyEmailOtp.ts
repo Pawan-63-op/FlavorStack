@@ -4,8 +4,6 @@ import { IOtpStore } from '../../../domain/identity/services/IOtpStore';
 import { VerifyEmailOtpDto } from '../dtos/VerifyEmailOtpDto';
 import { emailVerificationOtpKey } from '../otp-keys';
 
-// Generic, low-level OTP check only. Does NOT touch the aggregate and NEVER
-// marks an email verified — that is VerifyEmail's sole responsibility.
 export class VerifyEmailOtp {
   constructor(private otpStore: IOtpStore) {}
 

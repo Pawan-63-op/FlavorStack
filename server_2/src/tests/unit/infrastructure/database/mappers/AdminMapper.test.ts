@@ -102,14 +102,12 @@ describe('AdminMapper', () => {
     expect(rehydrated.twoFactorSecret).toBe(original.twoFactorSecret);
     expect(rehydrated.lastActivityAt).toEqual(original.lastActivityAt);
 
-    // Permission VOs rebuilt via create() and equal-by-value
     expect(rehydrated.permissions).toHaveLength(2);
     expect(rehydrated.permissions[0].equals(original.permissions[0])).toBe(true);
     expect(rehydrated.permissions[1].equals(original.permissions[1])).toBe(true);
     expect(rehydrated.permissions[0].scope).toBe('region:pune');
     expect(rehydrated.permissions[1].scope).toBeUndefined();
 
-    // AuditEntry struct passthrough
     expect(rehydrated.auditLog).toEqual(original.auditLog);
   });
 

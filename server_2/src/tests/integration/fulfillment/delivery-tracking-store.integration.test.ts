@@ -1,5 +1,3 @@
-// Integration test for MongoDeliveryTrackingStore (Phase 7) against a real Mongo (via setup.ts).
-// Verifies append writes to `delivery_tracking` and that the TTL index exists (self-pruning).
 import { MongoDeliveryTrackingStore } from '../../../infrastructure/repositories/DeliveryTrackingStore';
 import { DeliveryTrackingModel } from '../../../infrastructure/database/models/DeliveryTrackingModel';
 

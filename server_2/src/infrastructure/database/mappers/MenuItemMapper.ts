@@ -1,10 +1,3 @@
-// Domain <-> persistence mapping for the MenuItem aggregate.
-// MenuItem (src/domain/catalog/entities/MenuItem.ts) <-> MenuItemDocument.
-//
-// toPersistence flattens the aggregate (value objects -> plain fields). toDomain
-// rebuilds every value object/entity via its create() factory (trusted-data:
-// failures are corruption -> DomainError) and rehydrates the root through
-// MenuItem.reconstitute, which raises no events.
 import { MenuItem, MenuItemProps } from '../../../domain/catalog/entities/MenuItem';
 import { ItemVariantGroup } from '../../../domain/catalog/entities/ItemVariantGroup';
 import { ItemOption } from '../../../domain/catalog/entities/ItemOption';

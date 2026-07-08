@@ -1,12 +1,3 @@
-// Commerce Checkout API e2e (Phase 12 Batch 1; Phase 13 read endpoints) — black-box over the real HTTP API
-// (supertest + createApp) against MongoMemoryReplSet (tests/setup.ts) + a disposable Redis.
-//
-// Scope: the HTTP surface introduced by this batch — auth, the required Idempotency-Key header
-// (requireIdempotencyKey), body validation (checkoutSchema), and the controller → Checkout use-case wiring.
-// The checkout green-path pricing + idempotent replay are proven deterministically at the unit
-// (Checkout.test.ts) and integration (checkout.integration.test.ts) tiers without depending on the async
-// catalog projection; here we assert the request reaches the use case (a valid request with no cart returns
-// 404), keeping this suite fast and free of catalog seeding.
 import { generateKeyPairSync, randomUUID } from 'crypto';
 import request from 'supertest';
 import type { Express } from 'express';
@@ -140,8 +131,6 @@ describe('Commerce Checkout API e2e (Phase 12)', () => {
     expect(res.status).toBe(404);
   });
 
-  // PreviewCheckout (Phase 13). The green-path pricing depends on the async catalog projection/ACL
-  // and is proven at the unit tier (PreviewCheckout.test.ts); here we assert the HTTP surface only.
   describe('POST /checkout/preview', () => {
     const POINT = { deliveryPoint: { lat: 12.97, lng: 77.59 } };
 
@@ -167,8 +156,6 @@ describe('Commerce Checkout API e2e (Phase 12)', () => {
     });
   });
 
-  // OrderRequest query (Phase 13). Ownership/happy paths need a persisted OrderRequest (full checkout
-  // flow) and are proven at the unit tier (GetOrderRequest.test.ts); here we assert the HTTP surface only.
   describe('GET /order-requests/:id', () => {
     it('rejects unauthenticated access (401)', async () => {
       const res = await agent.get(`/api/v1/order-requests/${randomUUID()}`);

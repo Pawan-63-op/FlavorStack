@@ -1,5 +1,3 @@
-// Mongoose model — `rider_queue_views` collection (fulfillment_module.md §11, Phase 6).
-// One document per (riderId × fulfillmentId). Removed when terminal status is reached.
 import { Schema, model } from 'mongoose';
 
 export interface RiderQueueViewDocument {
@@ -64,12 +62,7 @@ const RiderQueueViewSchema = new Schema<RiderQueueViewDocument>(
   }
 );
 
-// Rider's active offers/assignments ordered by offer time (findRiderQueue filters by riderId and
-// sorts offeredAt desc — no assignmentStatus filter, so the trailing key serves the sort directly).
-// (Batch 9.2: replaces `{riderId,assignmentStatus,offeredAt}` whose middle key was never filtered
-//  and forced a blocking SORT.)
 RiderQueueViewSchema.index({ riderId: 1, offeredAt: -1 });
-// Lookup by fulfillmentId (removeAllRiderQueueItemsForFulfillment deleteMany on terminal events).
 RiderQueueViewSchema.index({ fulfillmentId: 1 });
 
 export const RiderQueueViewModel = model<RiderQueueViewDocument>(

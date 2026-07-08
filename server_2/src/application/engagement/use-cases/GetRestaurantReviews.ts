@@ -1,4 +1,3 @@
-// UC: GetRestaurantReviews — public, approved-only, paginated (engagement_module.md §5).
 import { Result } from '../../../domain/shared/Result';
 import { MODERATION_STATUS } from '../../../domain/engagement/enums/moderation-status.enum';
 import { IReviewRepository } from '../../../domain/engagement/repositories/IReviewRepository';

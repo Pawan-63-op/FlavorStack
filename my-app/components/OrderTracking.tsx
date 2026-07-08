@@ -1,386 +1,386 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+
+import { useState } from "react";
+import Link from "next/link";
 import { Card, CardContent } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { Progress } from "./ui/progress";
 import { Separator } from "./ui/separator";
-import { motion, AnimatePresence } from "motion/react";
+import { Textarea } from "./ui/textarea";
+import { Label } from "./ui/label";
 import {
-  CheckCircle, ChefHat, Truck, Package,
-  Sparkles, MapPin, Phone, User, Clock,
-  RefreshCw, XCircle,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
+  AlertDialogTitle, AlertDialogTrigger,
+} from "./ui/alert-dialog";
+import {
+  Package, Clock, CheckCircle, XCircle, ChefHat,
+  Truck, MapPin, Loader2, User, Radio, Navigation, Star,
 } from "lucide-react";
-import { toast } from "sonner";
-import { useRouter } from "next/navigation";
+import { isOrderCancellable, useCancelOrder, useTracking } from "@/lib/api/hooks/useTracking";
+import { isOrderReviewable } from "@/lib/api/hooks/useReviews";
+import { isEnabled } from "@/lib/config/featureFlags";
+import { useTrackingSocket, type TrackingSocketState } from "@/hooks_/useTrackingSocket";
+import {
+  getDeliveryStatusInfo, getFulfillmentStatusInfo,
+  type StatusColorToken, type StatusIconKey, type StatusInfo,
+} from "@/lib/orders/statusMap";
+import { formatDate } from "@/lib/api/format/date";
+import {
+  trackingAdapter,
+  type CancellationVM,
+  type TrackingView,
+} from "@/lib/api/adapters/tracking";
+import type { TrackingStatusEvent } from "@/lib/realtime/trackingSocket";
 
-// ── Status config ─────────────────────────────────────────────────────────────
-const STEPS = [
-  { key: "pending",             label: "Order Confirmed",      icon: CheckCircle, color: "text-green-500",  bg: "bg-green-500",  ring: "ring-green-500" },
-  { key: "confirmed",           label: "Confirmed",            icon: CheckCircle, color: "text-blue-500",   bg: "bg-blue-500",   ring: "ring-blue-500" },
-  { key: "preparing",           label: "Preparing Food",       icon: ChefHat,     color: "text-orange-500", bg: "bg-orange-500", ring: "ring-orange-500" },
-  { key: "out-for-delivery",    label: "Out for Delivery",     icon: Truck,       color: "text-purple-500", bg: "bg-purple-500", ring: "ring-purple-500" },
-  { key: "Delivered",           label: "Delivered",            icon: Package,     color: "text-green-600",  bg: "bg-green-600",  ring: "ring-green-600" },
-];
-
-const STATUS_MESSAGES: Record<string, string> = {
-  pending:           "Your order has been received and is awaiting confirmation.",
-  confirmed:         "The restaurant confirmed your order! Preparing soon.",
-  preparing:         "The kitchen is preparing your food right now.",
-  "out-for-delivery":"Your order is on its way! Keep an eye out.",
-  Delivered:         "Your order has been delivered. Enjoy your meal!",
-  cancelled:         "This order has been cancelled.",
+const STATUS_COLOR_CLASS: Record<StatusColorToken, string> = {
+  neutral: "bg-gray-500",
+  info: "bg-blue-500",
+  warning: "bg-yellow-500",
+  success: "bg-green-500",
+  danger: "bg-red-500",
 };
 
-const STEP_KEYS = STEPS.map((s) => s.key);
+const STATUS_ICON: Record<StatusIconKey, React.ReactNode> = {
+  placed: <Clock className="h-4 w-4" />,
+  preparing: <ChefHat className="h-4 w-4" />,
+  ready: <Package className="h-4 w-4" />,
+  pickedUp: <Package className="h-4 w-4" />,
+  onTheWay: <Truck className="h-4 w-4" />,
+  delivered: <CheckCircle className="h-4 w-4" />,
+  cancelled: <XCircle className="h-4 w-4" />,
+  failed: <XCircle className="h-4 w-4" />,
+  unassigned: <Clock className="h-4 w-4" />,
+  assigned: <CheckCircle className="h-4 w-4" />,
+  enRoute: <Truck className="h-4 w-4" />,
+  atRestaurant: <MapPin className="h-4 w-4" />,
+  unknown: <Package className="h-4 w-4" />,
+};
 
-function getStepIndex(status: string) {
-  const idx = STEP_KEYS.indexOf(status);
-  return idx === -1 ? 0 : idx;
+export interface TerminalBanner {
+  variant: "cancelled" | "failed";
+  message: string;
 }
 
-function getProgress(status: string) {
-  if (status === "cancelled") return 0;
-  const idx = getStepIndex(status);
-  return Math.round(((idx + 1) / STEPS.length) * 100);
+function cancellationMessage(cancellation: CancellationVM): string {
+  return `Cancelled by ${cancellation.cancelledBy}: ${cancellation.reason}`;
 }
 
-// ── ETA helpers ───────────────────────────────────────────────────────────────
-
-function parseDeliveryMinutes(str: string): number {
-  // Handles "25-35 min", "30 min", "30-40 min"
-  const nums = str?.match(/\d+/g);
-  if (!nums) return 35;
-  const values = nums.map(Number);
-  return Math.round(values.reduce((a, b) => a + b, 0) / values.length);
+/**
+ * Derives the cancellation/failure banner (if any) from a tracking view.
+ * Pure so it's testable without rendering; cancellation takes precedence
+ * since the two states shouldn't co-occur in practice.
+ */
+export function terminalBannerFor(view: TrackingView): TerminalBanner | null {
+  if (view.cancellation) {
+    return { variant: "cancelled", message: cancellationMessage(view.cancellation) };
+  }
+  if (view.failureReason) {
+    return { variant: "failed", message: view.failureReason };
+  }
+  return null;
 }
 
-function useCountdown(targetMs: number | null) {
-  const [remaining, setRemaining] = useState<number | null>(null);
-
-  useEffect(() => {
-    if (!targetMs) return;
-    const tick = () => {
-      const diff = targetMs - Date.now();
-      setRemaining(diff > 0 ? diff : 0);
-    };
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [targetMs]);
-
-  return remaining;
-}
-
-function formatCountdown(ms: number) {
-  const totalSec = Math.floor(ms / 1000);
-  const min = Math.floor(totalSec / 60);
-  const sec = totalSec % 60;
-  return `${min}:${sec.toString().padStart(2, "0")}`;
-}
-
-// ── Component ─────────────────────────────────────────────────────────────────
-
-interface Props {
-  orderMongoId: string;   // MongoDB _id — used to poll
-  orderId: string;        // display ID e.g. ORD-123
-  restaurantName: string;
-  total: number;
-  pointsEarned?: number;
-  deliveryTime?: string;  // e.g. "25-35 min" from restaurant
-}
-
-export function OrderTracking({
-  orderMongoId,
-  orderId,
-  restaurantName,
-  total,
-  pointsEarned = 0,
-  deliveryTime = "30-40 min",
-}: Props) {
-  const router = useRouter();
-  const [status, setStatus] = useState<string>("pending");
-  const [deliveryAddress, setDeliveryAddress] = useState<{
-    name: string; phone: string; address: string;
-  } | null>(null);
-  const [createdAt, setCreatedAt] = useState<number | null>(null);
-  const [isPolling, setIsPolling] = useState(true);
-  const prevStatusRef = useRef<string>("pending");
-  const POLL_INTERVAL = 8000; // 8 seconds
-
-  // ETA target — createdAt + avg delivery minutes
-  const etaMs = createdAt
-    ? createdAt + parseDeliveryMinutes(deliveryTime) * 60 * 1000
-    : null;
-  const countdown = useCountdown(
-    status !== "Delivered" && status !== "cancelled" ? etaMs : null
+/**
+ * Folds a live `tracking:status` event into a tracking view (Batch 7.4): the
+ * event supersedes `currentStatus`, recomputes the derived label/terminal flag
+ * via `statusMap`, and appends a timeline entry unless that exact status/`at`
+ * is already present (snapshots already include past statuses). Pure/testable.
+ */
+export function applyStatusEvent(view: TrackingView, event: TrackingStatusEvent): TrackingView {
+  const info = getFulfillmentStatusInfo(event.status);
+  const alreadyPresent = view.timeline.some(
+    (t) => t.status === event.status && t.at === event.at,
   );
+  return {
+    ...view,
+    currentStatus: event.status,
+    currentStatusLabel: info.label,
+    isTerminal: info.isTerminal,
+    timeline: alreadyPresent
+      ? view.timeline
+      : [...view.timeline, { status: event.status, statusLabel: info.label, at: event.at }],
+    ...(event.riderId != null ? { riderId: event.riderId } : {}),
+  };
+}
 
-  // ── Polling ────────────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!orderMongoId) return;
+/**
+ * Picks the view to render (Batch 7.4): the live socket snapshot is authoritative
+ * when present (adapted to a `TrackingView`), otherwise the Batch 7.3 HTTP query
+ * is the fallback. A live `tracking:status` event is folded on top. Returns
+ * `null` when neither source has data yet. Pure/testable.
+ */
+export function resolveTrackingView(
+  httpData: TrackingView | undefined,
+  socket: TrackingSocketState,
+): TrackingView | null {
+  const base = socket.snapshot ? trackingAdapter(socket.snapshot) : (httpData ?? null);
+  if (!base) return null;
+  return socket.status ? applyStatusEvent(base, socket.status) : base;
+}
 
-    const poll = async () => {
-      try {
-        const res = await fetch(
-          `http://localhost:8000/api/orders/${orderMongoId}`,
-          { credentials: "include" }
-        );
-        if (!res.ok) return;
-        const data = await res.json();
-        const order = data.order || data;
+function StatusBadge({ status }: { status: StatusInfo }) {
+  return (
+    <Badge className={`${STATUS_COLOR_CLASS[status.color]} border-0 text-white gap-1`}>
+      {STATUS_ICON[status.icon]}
+      {status.label}
+    </Badge>
+  );
+}
 
-        const newStatus: string = order.status;
+/**
+ * Customer cancel action (Phase 15 / G7) — only rendered for a pre-pickup
+ * fulfillment (`isOrderCancellable`). Opens a confirm dialog that requires a
+ * reason (the server's `cancelSchema` mandates 1–500 chars); on confirm it
+ * `POST`s `/fulfillments/:id/cancel`. The aggregate is the final authority on
+ * the cancellation window, so a late cancel surfaces the server error inline.
+ */
+function CancelOrderButton({ fulfillmentId }: { fulfillmentId: string }) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const cancelOrder = useCancelOrder(fulfillmentId);
+  const trimmed = reason.trim();
 
-        // Fire toast when status changes
-        if (prevStatusRef.current !== newStatus) {
-          prevStatusRef.current = newStatus;
-          if (newStatus === "confirmed") {
-            toast.success("Order confirmed by restaurant!", { icon: "✅" });
-          } else if (newStatus === "preparing") {
-            toast.success("Kitchen started preparing your food!", { icon: "👨‍🍳" });
-          } else if (newStatus === "out-for-delivery") {
-            toast.success("Your order is on its way!", { icon: "🛵" });
-          } else if (newStatus === "Delivered") {
-            toast.success("Order delivered! Enjoy your meal!", { icon: "🎉" });
-          } else if (newStatus === "cancelled") {
-            toast.error("Your order was cancelled.");
-          }
-        }
-
-        setStatus(newStatus);
-
-        if (order.deliveryAddress) setDeliveryAddress(order.deliveryAddress);
-        if (order.createdAt) setCreatedAt(new Date(order.createdAt).getTime());
-
-        // Stop polling when terminal state
-        if (["Delivered", "cancelled"].includes(newStatus)) {
-          setIsPolling(false);
-        }
-      } catch (err) {
-        console.error("Polling error:", err);
-      }
-    };
-
-    poll(); // immediate first call
-    if (!isPolling) return;
-    const id = setInterval(poll, POLL_INTERVAL);
-    return () => clearInterval(id);
-  }, [orderMongoId, isPolling]);
-
-  const currentStepIdx = getStepIndex(status);
-  const progress = getProgress(status);
-  const isCancelled = status === "cancelled";
-  const isDelivered = status === "Delivered";
+  const handleConfirm = () => {
+    cancelOrder.mutate(
+      { reason: trimmed },
+      { onSuccess: () => setOpen(false) },
+    );
+  };
 
   return (
-    <div className="w-full max-w-2xl mx-auto p-4">
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-      >
-        <Card className="border-2 shadow-2xl overflow-hidden">
-          <CardContent className="pt-10 pb-10">
-            <div className="space-y-8">
+    <AlertDialog open={open} onOpenChange={setOpen}>
+      <AlertDialogTrigger asChild>
+        <Button variant="outline" className="w-full text-destructive hover:text-destructive">
+          <XCircle className="h-4 w-4" /> Cancel order
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Cancel this order?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Cancellation is only possible before the rider picks up your order. Tell us why so the
+            restaurant can stop preparing it.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <div className="space-y-2">
+          <Label htmlFor="cancel-reason">Reason</Label>
+          <Textarea
+            id="cancel-reason"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            maxLength={500}
+            placeholder="e.g. Ordered by mistake"
+          />
+          {cancelOrder.isError && (
+            <p className="text-sm text-destructive">
+              {cancelOrder.error instanceof Error
+                ? cancelOrder.error.message
+                : "We couldn't cancel this order."}
+            </p>
+          )}
+        </div>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={cancelOrder.isPending}>Keep order</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={(e) => {
+              e.preventDefault();
+              handleConfirm();
+            }}
+            disabled={!trimmed || cancelOrder.isPending}
+            className="bg-destructive text-white hover:bg-destructive/90"
+          >
+            {cancelOrder.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              "Cancel order"
+            )}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
 
-              {/* ── Success icon ── */}
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ delay: 0.2, type: "spring", bounce: 0.5 }}
-                className="flex justify-center"
-              >
-                <div className={`h-24 w-24 rounded-full flex items-center justify-center relative ${
-                  isCancelled ? "bg-red-500/20" : "bg-green-500/20"
-                }`}>
-                  <div className={`h-20 w-20 rounded-full flex items-center justify-center ${
-                    isCancelled ? "bg-red-500/30" : "bg-green-500/30"
-                  }`}>
-                    {isCancelled
-                      ? <XCircle className="h-12 w-12 text-red-500" />
-                      : <CheckCircle className="h-12 w-12 text-green-500" />
-                    }
-                  </div>
-                  {!isCancelled && (
-                    <motion.div
-                      initial={{ scale: 0.8, opacity: 0 }}
-                      animate={{ scale: 2, opacity: 0 }}
-                      transition={{ duration: 1.5, repeat: Infinity }}
-                      className="absolute inset-0 rounded-full border-2 border-green-500"
-                    />
-                  )}
-                </div>
-              </motion.div>
+function LoadingState() {
+  return (
+    <Card className="border-2">
+      <CardContent className="pt-12 pb-12 text-center">
+        <Loader2 className="h-6 w-6 mx-auto animate-spin text-muted-foreground" />
+      </CardContent>
+    </Card>
+  );
+}
 
-              {/* ── Order info ── */}
-              <div className="text-center space-y-2">
-                <h2 className="text-2xl font-bold">
-                  {isCancelled ? "Order Cancelled" : "Order Placed Successfully!"}
-                </h2>
-                <p className="text-muted-foreground font-mono text-sm">{orderId}</p>
-                <Badge variant="secondary" className="text-lg px-6 py-1.5">
-                  ${total.toFixed(2)}
-                </Badge>
-                <p className="text-sm text-muted-foreground">from {restaurantName}</p>
-              </div>
+function ErrorState() {
+  return (
+    <Card className="border-2">
+      <CardContent className="pt-12 pb-12 text-center space-y-2">
+        <XCircle className="h-10 w-10 mx-auto text-destructive" />
+        <h3>We couldn&apos;t load tracking for this order</h3>
+        <p className="text-muted-foreground">
+          The fulfillment may not exist, or you don&apos;t have access to it.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
 
-              {/* ── Points earned ── */}
-              {pointsEarned > 0 && !isCancelled && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: 0.4 }}
-                  className="flex items-center justify-center gap-2 p-3 bg-amber-500/10 rounded-lg border border-amber-500/20"
-                >
-                  <Sparkles className="h-4 w-4 text-amber-500" />
-                  <p className="text-sm font-medium">
-                    You earned{" "}
-                    <span className="text-amber-600 font-bold">{pointsEarned}</span>{" "}
-                    loyalty points!
-                  </p>
-                  <Sparkles className="h-4 w-4 text-amber-500" />
-                </motion.div>
-              )}
+/** No `fulfillmentId` known yet — the order↔fulfillment linkage gap (Phase_7.md). */
+function UnknownFulfillmentState() {
+  return (
+    <Card className="border-2">
+      <CardContent className="pt-12 pb-12 text-center space-y-2">
+        <Clock className="h-10 w-10 mx-auto text-muted-foreground" />
+        <h3>Tracking isn&apos;t available yet</h3>
+        <p className="text-muted-foreground">
+          We&apos;ll show live tracking here as soon as the restaurant accepts your order.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
 
-              {/* ── Status message ── */}
-              <div className="text-center p-4 bg-accent/50 rounded-xl border">
-                <p className="text-sm text-muted-foreground">
-                  {STATUS_MESSAGES[status] || "Processing your order..."}
-                </p>
-              </div>
+/**
+ * Order/tracking detail screen (Phase 7, Batch 7.3) — renders
+ * `GET /fulfillments/:id/tracking` via `useTracking`: current status,
+ * delivery sub-status, status timeline, delivery address, and
+ * cancellation/failure banners. `fulfillmentId` is nullable because the
+ * order↔fulfillment linkage is only known once discovered (tracking fetch
+ * or, from Batch 7.4, the socket snapshot) — this renders a placeholder
+ * rather than an error while it's still unknown.
+ */
+export function OrderTracking({ fulfillmentId }: { fulfillmentId: string | null }) {
+  const socket = useTrackingSocket(fulfillmentId);
+  // When the socket is connected it's authoritative; HTTP stops polling and only
+  // serves as the disconnect fallback (Batch 7.4). On `tracking:error` (not owner
+  // / unknown id) we surface a friendly message rather than crashing.
+  const { data: httpData, isLoading, isError } = useTracking(fulfillmentId, {
+    socketConnected: socket.connected,
+  });
 
-              {!isCancelled && (
-                <>
-                  {/* ── Progress bar ── */}
-                  <div className="space-y-2">
-                    <Progress value={progress} className="h-2.5" />
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>Order placed</span>
-                      <span>{progress}%</span>
-                      <span>Delivered</span>
-                    </div>
-                  </div>
+  const data = resolveTrackingView(httpData, socket);
 
-                  {/* ── Step indicators ── */}
-                  <div className="grid grid-cols-5 gap-2">
-                    {STEPS.map((step, index) => {
-                      const Icon = step.icon;
-                      const isActive = index <= currentStepIdx;
-                      const isCurrent = index === currentStepIdx;
+  if (!fulfillmentId) return <UnknownFulfillmentState />;
+  if (socket.error && !data) return <ErrorState />;
+  if (!data && isLoading) return <LoadingState />;
+  if (!data && isError) return <ErrorState />;
+  if (!data) return <LoadingState />;
 
-                      return (
-                        <motion.div
-                          key={step.key}
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: 0.3 + index * 0.08 }}
-                          className="flex flex-col items-center gap-1.5"
-                        >
-                          <div className={`h-11 w-11 rounded-full border-2 flex items-center justify-center transition-all ${
-                            isCurrent
-                              ? `${step.color} border-current ${step.bg}/10 ring-2 ${step.ring} ring-offset-2`
-                              : isActive
-                              ? `${step.color} border-current ${step.bg}/10`
-                              : "border-muted text-muted-foreground"
-                          }`}>
-                            {isActive
-                              ? <Icon className="h-5 w-5" />
-                              : <div className="h-2 w-2 rounded-full bg-muted-foreground/30" />
-                            }
-                          </div>
-                          <p className={`text-xs text-center leading-tight ${
-                            isActive ? step.color : "text-muted-foreground"
-                          }`}>
-                            {step.label}
-                          </p>
-                        </motion.div>
-                      );
-                    })}
-                  </div>
+  const banner = terminalBannerFor(data);
+  const deliveryInfo = getDeliveryStatusInfo(data.deliveryStatus);
+  const currentInfo = getFulfillmentStatusInfo(data.currentStatus);
 
-                  {/* ── ETA countdown ── */}
-                  {countdown !== null && countdown > 0 && !isDelivered && (
-                    <motion.div
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="flex items-center justify-center gap-3 p-4 bg-primary/5 border border-primary/20 rounded-xl"
-                    >
-                      <Clock className="h-5 w-5 text-primary" />
-                      <div className="text-center">
-                        <p className="text-xs text-muted-foreground">Estimated arrival</p>
-                        <p className="text-2xl font-bold text-primary font-mono">
-                          {formatCountdown(countdown)}
-                        </p>
-                      </div>
-                      <Clock className="h-5 w-5 text-primary" />
-                    </motion.div>
-                  )}
-                </>
-              )}
+  return (
+    <Card className="border-2 shadow-md">
+      <CardContent className="pt-6 space-y-6">
+        <div className="flex items-start justify-between flex-wrap gap-2">
+          <div>
+            <h3 className="mb-1">Order Tracking</h3>
+            <p className="text-sm text-muted-foreground font-mono">{data.orderRequestId}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            {socket.connected && (
+              <Badge className="bg-emerald-500 border-0 text-white gap-1">
+                <Radio className="h-3 w-3" />
+                Live
+              </Badge>
+            )}
+            <StatusBadge status={currentInfo} />
+          </div>
+        </div>
 
-              {/* ── Delivery address ── */}
-              {deliveryAddress && (
-                <>
-                  <Separator />
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium">Delivering to</p>
-                    <div className="p-3 bg-accent rounded-xl space-y-1.5">
-                      <div className="flex items-center gap-2 text-sm">
-                        <User className="h-3.5 w-3.5 text-muted-foreground" />
-                        <span>{deliveryAddress.name}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm">
-                        <Phone className="h-3.5 w-3.5 text-muted-foreground" />
-                        <span>{deliveryAddress.phone}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm">
-                        <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
-                        <span>{deliveryAddress.address}</span>
-                      </div>
-                    </div>
-                  </div>
-                </>
-              )}
+        {banner && (
+          <div className="p-3 rounded-lg text-sm bg-red-500/10 text-red-600">{banner.message}</div>
+        )}
 
-              {/* ── Polling indicator ── */}
-              {isPolling && !isDelivered && !isCancelled && (
-                <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
-                  <RefreshCw className="h-3 w-3 animate-spin" />
-                  <span>Tracking your order live...</span>
-                </div>
-              )}
+        {socket.error && (
+          <div className="p-3 rounded-lg text-sm bg-yellow-500/10 text-yellow-700">
+            Live updates are unavailable ({socket.error}); showing the latest known status.
+          </div>
+        )}
 
-              {/* ── Actions ── */}
-              <div className="flex gap-3">
-                <Button
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => router.push("/orders")}
-                >
-                  View All Orders
-                </Button>
-                {isDelivered && (
-                  <Button
-                    className="flex-1"
-                    onClick={() => router.push(`/feedback/${orderMongoId}`)}
-                  >
-                    Leave Review
-                  </Button>
-                )}
-                {!isDelivered && !isCancelled && (
-                  <Button
-                    className="flex-1"
-                    onClick={() => router.push("/restaurants")}
-                  >
-                    Order More
-                  </Button>
-                )}
-              </div>
+        {!data.isTerminal && (
+          <div className="flex items-center gap-2 text-sm">
+            <User className="h-4 w-4 text-muted-foreground" />
+            <span className="text-muted-foreground">Rider</span>
+            <StatusBadge status={deliveryInfo} />
+          </div>
+        )}
 
+        {socket.latestLocation && (
+          <div className="flex items-start gap-2 text-sm">
+            <Navigation className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+            <div>
+              <p>Rider location</p>
+              <p className="text-muted-foreground font-mono">
+                {socket.latestLocation.lat.toFixed(5)}, {socket.latestLocation.lng.toFixed(5)}
+              </p>
+              <p className="text-muted-foreground">
+                Updated {formatDate(socket.latestLocation.recordedAt)}
+              </p>
             </div>
-          </CardContent>
-        </Card>
-      </motion.div>
-    </div>
+          </div>
+        )}
+
+        <Separator />
+
+        <div>
+          <h4 className="mb-3">Status Timeline</h4>
+          <div className="space-y-3">
+            {data.timeline.length === 0 && (
+              <p className="text-sm text-muted-foreground">No status updates yet.</p>
+            )}
+            {data.timeline.map((entry, i) => (
+              <div key={`${entry.status}-${entry.at}-${i}`} className="flex items-start gap-3 text-sm">
+                <div className="mt-0.5">{STATUS_ICON[getFulfillmentStatusInfo(entry.status).icon]}</div>
+                <div className="flex-1">
+                  <p>{entry.statusLabel}</p>
+                  <p className="text-muted-foreground">{formatDate(entry.at)}</p>
+                  {entry.note && <p className="text-muted-foreground">{entry.note}</p>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <Separator />
+
+        <div className="space-y-1 text-sm">
+          <div className="flex items-start gap-2">
+            <MapPin className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+            <p className="text-muted-foreground">
+              {data.deliveryAddress.street}, {data.deliveryAddress.city}, {data.deliveryAddress.state}{" "}
+              {data.deliveryAddress.pinCode}
+            </p>
+          </div>
+          <div className="flex justify-between pt-2">
+            <span className="text-muted-foreground">Total</span>
+            <span>{data.formattedTotal}</span>
+          </div>
+        </div>
+
+        {isOrderCancellable(data.currentStatus) && (
+          <>
+            <Separator />
+            <CancelOrderButton fulfillmentId={data.fulfillmentId} />
+          </>
+        )}
+
+        {/* Post-delivery review entry point (G8) — only once DELIVERED. The
+            verified-purchase ReviewForm at /feedback/[orderId] does the final
+            eligibility + already-reviewed gating. */}
+        {isEnabled("reviews") && isOrderReviewable(data.fulfillmentId, data.currentStatus) && (
+          <>
+            <Separator />
+            <Button asChild className="w-full gap-2">
+              <Link href={`/feedback/${encodeURIComponent(data.orderRequestId)}`}>
+                <Star className="h-4 w-4" /> Leave a review
+              </Link>
+            </Button>
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }

@@ -1,4 +1,3 @@
-// Trimmed, length-capped review comment (engagement_module.md §2). Max 1000 chars.
 import { ValueObject } from '../../shared/ValueObject';
 import { Result } from '../../shared/Result';
 import { Guard } from '../../shared/Guard';

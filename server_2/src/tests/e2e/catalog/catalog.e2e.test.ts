@@ -1,12 +1,3 @@
-// Catalog API e2e (Phase 11) — black-box over the real HTTP API (supertest +
-// createApp) against MongoMemoryReplSet (tests/setup.ts) + a disposable Redis.
-//
-// Exercises the Phase-11 done-when path end to end:
-//   owner create → category → item → publish → make public
-//   → public browse / detail / menu / search / nearby surface it
-//   → non-owner write rejected (403)
-//   → unauthenticated write rejected (401)
-//   → closed restaurant hidden from public reads (404)
 import { generateKeyPairSync, randomUUID } from 'crypto';
 import request from 'supertest';
 import type { Express } from 'express';
@@ -94,7 +85,6 @@ describe('Catalog API e2e (Phase 11)', () => {
     process.env = { ...ORIGINAL_ENV };
   });
 
-  // ── owner write flow ───────────────────────────────────────────────────
 
   it('rejects an unauthenticated create (401)', async () => {
     const res = await agent.post('/api/v1/catalog/restaurants').send({
@@ -200,7 +190,6 @@ describe('Catalog API e2e (Phase 11)', () => {
     expect(vis.body.visibility).toBe('PUBLIC');
   });
 
-  // ── public reads surface it ─────────────────────────────────────────────
 
   it('public list includes the published restaurant', async () => {
     const res = await agent.get('/api/v1/catalog/restaurants');
@@ -241,7 +230,6 @@ describe('Catalog API e2e (Phase 11)', () => {
     expect(ids).toContain(restaurantId);
   });
 
-  // ── closed restaurant is hidden ─────────────────────────────────────────
 
   it('closing the restaurant hides it from public reads (404)', async () => {
     const close = await agent

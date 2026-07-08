@@ -1,14 +1,3 @@
-// Composition root for the Fulfillment bounded context (fulfillment_module.md).
-//
-// Phase 1: CreateFulfillment + OnOrderRequested handler.
-// Phase 2: MarkPreparing, MarkReadyForPickup, GetRestaurantFulfillments.
-// Phase 3B: OfferRiderAssignment, AssignRider, AcceptDelivery, RejectDelivery + auto-offer on
-//           ReadyForPickup (OnReadyForPickup) + IDeliveryAssignmentService.
-// Phase 5A: CancelFulfillment.
-// Phase 5B: FailDelivery, ReassignRider + BullMQ timeout/SLA jobs.
-// Phase 6: Read-model projections (FulfillmentProjector) + query use cases.
-// Phase 7: Realtime tracking — RecordRiderLocation + TrackingStatusBridge (wired only when the
-//          realtime deps bundle is supplied, i.e. the API process; see container/index.ts).
 import type { Connection } from 'mongoose';
 import { IFulfillmentRepository } from '../domain/fulfillment/repositories/IFulfillmentRepository';
 import { IDeliveryAssignmentService } from '../domain/fulfillment/services/IDeliveryAssignmentService';
@@ -19,7 +8,11 @@ import {
 } from '../domain/fulfillment/services/IFulfillmentCache';
 import { MongoFulfillmentRepository } from '../infrastructure/repositories/FulfillmentRepository';
 import { MongoFulfillmentProjectionRepository } from '../infrastructure/repositories/FulfillmentProjectionRepository';
-import { SimpleDeliveryAssignmentService } from '../infrastructure/services/SimpleDeliveryAssignmentService';
+import {
+  SimpleDeliveryAssignmentService,
+  AvailableRidersProvider,
+} from '../infrastructure/services/SimpleDeliveryAssignmentService';
+import { IRestaurantDirectory } from '../application/fulfillment/ports/IRestaurantDirectory';
 import { MongoUnitOfWork } from '../infrastructure/database/MongoUnitOfWork';
 import { MongoOutboxStore } from '../infrastructure/database/MongoOutboxStore';
 import { TransactionContext } from '../infrastructure/database/TransactionContext';
@@ -33,8 +26,11 @@ import { MarkReadyForPickup } from '../application/fulfillment/use-cases/MarkRea
 import { GetRestaurantFulfillments } from '../application/fulfillment/use-cases/GetRestaurantFulfillments';
 import { GetFulfillment } from '../application/fulfillment/use-cases/GetFulfillment';
 import { GetLiveTracking } from '../application/fulfillment/use-cases/GetLiveTracking';
+import { ListCustomerOrders } from '../application/fulfillment/use-cases/ListCustomerOrders';
 import { GetRiderQueue } from '../application/fulfillment/use-cases/GetRiderQueue';
+import { GetRiderDeliveryHistory } from '../application/fulfillment/use-cases/GetRiderDeliveryHistory';
 import { GetAdminDashboard } from '../application/fulfillment/use-cases/GetAdminDashboard';
+import { GetDashboardAnalytics } from '../application/fulfillment/use-cases/GetDashboardAnalytics';
 import { OfferRiderAssignment } from '../application/fulfillment/use-cases/OfferRiderAssignment';
 import { AssignRider } from '../application/fulfillment/use-cases/AssignRider';
 import { AcceptDelivery } from '../application/fulfillment/use-cases/AcceptDelivery';
@@ -86,8 +82,11 @@ export interface FulfillmentContainer {
   getRestaurantFulfillments: GetRestaurantFulfillments;
   getFulfillment: GetFulfillment;
   getLiveTracking: GetLiveTracking;
+  listCustomerOrders: ListCustomerOrders;
   getRiderQueue: GetRiderQueue;
+  getRiderDeliveryHistory: GetRiderDeliveryHistory;
   getAdminDashboard: GetAdminDashboard;
+  getDashboardAnalytics: GetDashboardAnalytics;
   offerRiderAssignment: OfferRiderAssignment;
   assignRider: AssignRider;
   acceptDelivery: AcceptDelivery;
@@ -104,10 +103,8 @@ export interface FulfillmentContainer {
   onOrderRequested: OnOrderRequested;
   onReadyForPickup: OnReadyForPickup;
   projector: FulfillmentProjector;
-  // Phase 7 — present only when realtime deps were supplied.
   recordRiderLocation?: RecordRiderLocation;
   trackingStatusBridge?: TrackingStatusBridge;
-  // Phase 8 — present only when an INotificationQueue was supplied.
   notificationDispatcher?: FulfillmentNotificationDispatcher;
 }
 
@@ -124,7 +121,14 @@ export function createFulfillmentContainer(
   jobScheduler?: IFulfillmentJobScheduler,
   realtime?: FulfillmentRealtimeDeps,
   notificationQueue?: INotificationQueue,
-  cache?: FulfillmentReadCacheDeps
+  cache?: FulfillmentReadCacheDeps,
+  restaurantDirectory: IRestaurantDirectory = {
+    getOwnerId: async () => null,
+    listRestaurantIdsByOwner: async () => [],
+    getRestaurantNames: async () => ({}),
+    countAll: async () => 0,
+  },
+  availableRidersProvider: AvailableRidersProvider = async () => []
 ): FulfillmentContainer {
   const txContext = new TransactionContext();
   const fulfillmentRepository = new MongoFulfillmentRepository(txContext);
@@ -134,18 +138,22 @@ export function createFulfillmentContainer(
   const { offerTtlSeconds, maxAssignmentAttempts, readyForPickupSlaSeconds, outForDeliverySlaSeconds } =
     getFulfillmentConfig();
 
-  const assignmentService: IDeliveryAssignmentService = new SimpleDeliveryAssignmentService(async () => []);
+  const assignmentService: IDeliveryAssignmentService = new SimpleDeliveryAssignmentService(
+    availableRidersProvider
+  );
 
   const createFulfillment = new CreateFulfillment(fulfillmentRepository, unitOfWork, outboxStore, eventBus);
-  const markPreparing = new MarkPreparing(fulfillmentRepository, unitOfWork, outboxStore, eventBus);
-  const markReadyForPickup = new MarkReadyForPickup(fulfillmentRepository, unitOfWork, outboxStore, eventBus);
+  const markPreparing = new MarkPreparing(fulfillmentRepository, restaurantDirectory, unitOfWork, outboxStore, eventBus);
+  const markReadyForPickup = new MarkReadyForPickup(fulfillmentRepository, restaurantDirectory, unitOfWork, outboxStore, eventBus);
   const getRestaurantFulfillments = new GetRestaurantFulfillments(fulfillmentRepository);
 
-  // Phase 6 query use cases (read from projections).
   const getFulfillment = new GetFulfillment(projectionRepository);
   const getLiveTracking = new GetLiveTracking(projectionRepository, cache);
+  const listCustomerOrders = new ListCustomerOrders(projectionRepository);
   const getRiderQueue = new GetRiderQueue(projectionRepository);
+  const getRiderDeliveryHistory = new GetRiderDeliveryHistory(projectionRepository);
   const getAdminDashboard = new GetAdminDashboard(projectionRepository, cache);
+  const getDashboardAnalytics = new GetDashboardAnalytics(projectionRepository, restaurantDirectory);
 
   const offerRiderAssignment = new OfferRiderAssignment(
     fulfillmentRepository,
@@ -205,11 +213,8 @@ export function createFulfillmentContainer(
     ? new FulfillmentTimeoutScheduler(jobScheduler, readyForPickupSlaSeconds, outForDeliverySlaSeconds)
     : undefined;
 
-  // Phase 6: projector maintains read models from in-process bus events.
-  // Phase 9 (Batch 9.1): also invalidates the read-side cache after each view-mutating event.
   const projector = new FulfillmentProjector(projectionRepository, cache);
 
-  // Phase 7: realtime — only when the realtime deps bundle is supplied (API process).
   let recordRiderLocation: RecordRiderLocation | undefined;
   let trackingStatusBridge: TrackingStatusBridge | undefined;
   if (realtime) {
@@ -224,9 +229,6 @@ export function createFulfillmentContainer(
     trackingStatusBridge = new TrackingStatusBridge(realtime.broadcaster);
   }
 
-  // Phase 8: notification dispatch — only when an INotificationQueue is supplied (the process that
-  // runs the OutboxProcessor). Subscribed before that processor starts so early-drained status
-  // events have a subscriber.
   const notificationDispatcher = notificationQueue
     ? new FulfillmentNotificationDispatcher(notificationQueue)
     : undefined;
@@ -254,8 +256,11 @@ export function createFulfillmentContainer(
     getRestaurantFulfillments,
     getFulfillment,
     getLiveTracking,
+    listCustomerOrders,
     getRiderQueue,
+    getRiderDeliveryHistory,
     getAdminDashboard,
+    getDashboardAnalytics,
     offerRiderAssignment,
     assignRider,
     acceptDelivery,

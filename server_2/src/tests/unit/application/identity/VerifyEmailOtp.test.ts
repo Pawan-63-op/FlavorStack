@@ -22,7 +22,6 @@ describe('VerifyEmailOtp use-case', () => {
 
       expect(result.isSuccess).toBe(true);
 
-      // Not consumed — verify should still succeed afterwards
       const second = await otpStore.verify(emailVerificationOtpKey(USER_ID), VALID_CODE);
       expect(second.isSuccess).toBe(true);
     });

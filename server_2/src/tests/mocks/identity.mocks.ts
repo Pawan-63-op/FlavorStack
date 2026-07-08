@@ -16,9 +16,6 @@ import { TokenPayLoad } from '../../domain/identity/value-objects/TokenPayLoad.v
 import { PhoneNumber } from '../../domain/identity/value-objects/PhoneNumber.vo';
 import { Email } from '../../domain/identity/value-objects/Email.vo';
 
-// ---------------------------------------------------------------------------
-// InMemoryUnitOfWork
-// ---------------------------------------------------------------------------
 export class InMemoryUnitOfWork implements IUnitOfWork {
   committed = false;
   rollbackCount = 0;
@@ -35,9 +32,6 @@ export class InMemoryUnitOfWork implements IUnitOfWork {
       const err = this._forceFailError;
       this._forceFailError = null;
       this.rollbackCount += 1;
-      // Run work() first (simulates DB work completing), then throw to simulate commit failure.
-      // In-memory stores won't roll back, but the real invariant is that post-commit publish
-      // is skipped when the transaction throws.
       try { await work(ctx); } catch (_) { /* ignore work errors in forced-fail mode */ }
       throw err;
     }
@@ -52,9 +46,6 @@ export class InMemoryUnitOfWork implements IUnitOfWork {
   }
 }
 
-// ---------------------------------------------------------------------------
-// InMemoryOutboxStore
-// ---------------------------------------------------------------------------
 export class InMemoryOutboxStore implements IOutboxStore {
   appended: DomainEvent[] = [];
 
@@ -67,9 +58,6 @@ export class InMemoryOutboxStore implements IOutboxStore {
   }
 }
 
-// ---------------------------------------------------------------------------
-// InMemorySessionStore
-// ---------------------------------------------------------------------------
 export class InMemorySessionStore implements ISessionStore {
   readonly sessions = new Map<string, SessionData>();
 
@@ -108,9 +96,6 @@ export class InMemorySessionStore implements ISessionStore {
   }
 }
 
-// ---------------------------------------------------------------------------
-// InMemoryOtpStore
-// ---------------------------------------------------------------------------
 interface OtpEntry {
   code: string;
   expiresAt: number;
@@ -152,9 +137,6 @@ export class InMemoryOtpStore implements IOtpStore {
   }
 }
 
-// ---------------------------------------------------------------------------
-// FakeOtpGenerator
-// ---------------------------------------------------------------------------
 export class FakeOtpGenerator implements IOtpGenerator {
   constructor(private code: string = '111111') {}
 
@@ -163,9 +145,6 @@ export class FakeOtpGenerator implements IOtpGenerator {
   }
 }
 
-// ---------------------------------------------------------------------------
-// FakeSmsProvider
-// ---------------------------------------------------------------------------
 export class FakeSmsProvider implements ISmsProvider {
   sent: Array<{ phone: string; code: string }> = [];
 
@@ -174,9 +153,6 @@ export class FakeSmsProvider implements ISmsProvider {
   }
 }
 
-// ---------------------------------------------------------------------------
-// FakeEmailProvider
-// ---------------------------------------------------------------------------
 export class FakeEmailProvider implements IEmailProvider {
   sent: Array<{ type: string; to: string; payload: unknown }> = [];
 
@@ -193,9 +169,6 @@ export class FakeEmailProvider implements IEmailProvider {
   }
 }
 
-// ---------------------------------------------------------------------------
-// FakeEmailQueue
-// ---------------------------------------------------------------------------
 export class FakeEmailQueue implements IEmailQueue {
   enqueued: Array<{ job: EmailJob; opts?: EnqueueOptions }> = [];
   closed = false;
@@ -209,10 +182,6 @@ export class FakeEmailQueue implements IEmailQueue {
   }
 }
 
-// ---------------------------------------------------------------------------
-// FakePasswordHasher
-// ---------------------------------------------------------------------------
-// hash = "hashed:<plain>", compare checks the prefix
 export class FakePasswordHasher implements IPasswordHasher {
   async hash(plain: string): Promise<string> {
     return `hashed:${plain}`;
@@ -223,10 +192,6 @@ export class FakePasswordHasher implements IPasswordHasher {
   }
 }
 
-// ---------------------------------------------------------------------------
-// FakeRefreshTokenHasher
-// ---------------------------------------------------------------------------
-// hash = "rthash:<token>", compare checks the prefix
 export class FakeRefreshTokenHasher implements IRefreshTokenHasher {
   hash(token: string): string {
     return `rthash:${token}`;
@@ -237,10 +202,6 @@ export class FakeRefreshTokenHasher implements IRefreshTokenHasher {
   }
 }
 
-// ---------------------------------------------------------------------------
-// FakeTokenService
-// Encodes payload as base64 JSON; verify parses it back.
-// ---------------------------------------------------------------------------
 export class FakeTokenService implements ITokenService {
   private _verifyResult: Result<TokenPayLoad> | null = null;
 
@@ -283,11 +244,12 @@ export class FakeTokenService implements ITokenService {
   }
 }
 
-// ---------------------------------------------------------------------------
-// InMemoryUserRepository
-// ---------------------------------------------------------------------------
 import { BaseUser } from '../../domain/identity/entities/BaseUser';
-import { IUserRepository } from '../../domain/identity/repositories/IUserRepository';
+import {
+  IUserRepository,
+  ListUsersFilter,
+  ListUsersResult,
+} from '../../domain/identity/repositories/IUserRepository';
 
 export class InMemoryUserRepository implements IUserRepository {
   readonly users = new Map<string, BaseUser>();
@@ -324,11 +286,22 @@ export class InMemoryUserRepository implements IUserRepository {
     }
     return false;
   }
+
+  async list(filter: ListUsersFilter): Promise<ListUsersResult> {
+    let all = Array.from(this.users.values()).filter((u) => !u.isDeleted);
+    if (filter.role) all = all.filter((u) => u.role === filter.role);
+    if (filter.search && filter.search.trim()) {
+      const q = filter.search.trim().toLowerCase();
+      all = all.filter(
+        (u) => u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q),
+      );
+    }
+    all.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    const items = all.slice(filter.offset, filter.offset + filter.limit);
+    return { items, total: all.length };
+  }
 }
 
-// ---------------------------------------------------------------------------
-// InMemoryCustomerRepository
-// ---------------------------------------------------------------------------
 import { Customer } from '../../domain/identity/entities/Customer';
 import { ICustomerRepository } from '../../domain/identity/repositories/ICustomerRepository';
 

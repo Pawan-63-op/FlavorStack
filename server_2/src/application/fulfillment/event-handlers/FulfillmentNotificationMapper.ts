@@ -1,14 +1,3 @@
-// Pure event→notification copy/template mapper (Fulfillment Phase 8, §5.2 / §5.3).
-//
-// Turns a customer/rider-facing fulfillment status event into the recipients + push copy the
-// dispatcher needs. Kept pure (no I/O, no queue, no BullMQ) so it is trivially unit-testable and the
-// dispatcher stays a thin orchestrator.
-//
-// Recipient resolution is BOUNDARY-SAFE: it reads only the `customerId` / `riderId` already carried
-// on the event payload — no Identity repo/aggregate or projection is consulted (§1.2 / §14.2). The
-// id flows straight through as the push `token` placeholder (LoggerPushProvider just logs); real
-// device-token resolution is a future Engagement/Identity concern. An event that carries neither id
-// yields no recipients (the dispatcher then enqueues nothing).
 import { DomainEvent } from '../../../domain/shared/DomainEvent';
 
 export type RecipientRole = 'customer' | 'rider';

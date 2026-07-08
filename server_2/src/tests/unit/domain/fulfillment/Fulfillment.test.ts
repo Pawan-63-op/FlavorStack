@@ -66,6 +66,17 @@ describe('Fulfillment.createFromOrderRequested', () => {
     expect(event.customerId).toBe('cust-1');
     expect(event.restaurantId).toBe('rest-1');
     expect(event.total).toEqual({ amount: 45000, currency: 'INR' });
+    expect(event.deliveryAddress).toEqual({
+      label: 'Home',
+      street: '12 MG Road',
+      city: 'Bengaluru',
+      state: 'Karnataka',
+      pinCode: '560001',
+      coordinates: { lat: 12.97, lng: 77.59 },
+    });
+    expect(event.lines).toEqual([
+      { menuItemId: 'item-1', name: 'Paneer Tikka', quantity: 2, lineTotal: { amount: 40000, currency: 'INR' } },
+    ]);
   });
 
   it('honours a supplied id', () => {

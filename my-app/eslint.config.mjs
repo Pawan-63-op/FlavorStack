@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Batch 12.1: generated Vitest coverage report (HTML/lcov) — not source.
+    "coverage/**",
   ]),
 ]);
 

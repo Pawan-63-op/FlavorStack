@@ -5,11 +5,6 @@ import { Fee } from '../../value-objects/Fee';
 import { FEE_TYPE } from '../../enums/fee-type.enum';
 import { RestaurantFeeInputs } from '../../types/PricingContext';
 
-// Pricing pipeline stage 2 (Commerce Phase 7, §4.2) — pure.
-// Emits the restaurant-sourced fees: a PLATFORM fee and a PACKAGING fee.
-// Both are always emitted (even when zero) so the breakdown is explicit and
-// downstream totals fold Σfees uniformly. New restaurant fees become new
-// entries here without touching consumers.
 export class FeeStage {
   public static run(inputs: RestaurantFeeInputs): Result<Fee[]> {
     if (!(inputs.platformFee instanceof Money)) {

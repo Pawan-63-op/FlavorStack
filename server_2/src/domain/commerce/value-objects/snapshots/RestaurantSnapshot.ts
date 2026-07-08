@@ -1,7 +1,3 @@
-// VO: { restaurantId, name, status, openAtCheckout, deliveryFeeInputs, schemaVersion } — immutable copy
-// taken at checkout; later Catalog changes never affect an existing OrderRequest (Commerce Phase 9,
-// commerce_module.md §3.3/§6.4). `deliveryFeeInputs` mirrors `DeliveryFeeInput` (minus `distanceMeters`,
-// which is computed from the checkout delivery address) so the pricing pipeline can be re-run later.
 import { ValueObject } from '../../../shared/ValueObject';
 import { Result } from '../../../shared/Result';
 import { ValidationError } from '../../../shared/errors/ValidationError';

@@ -1,15 +1,3 @@
-// CachedCatalogReadRepository — cache-aside decorator over the projection-driven
-// read repository (Phase 13). Transparent: implements ICatalogReadRepository so the
-// query use-cases are unchanged. Hot reads (per-restaurant summary, full menu view,
-// browse lists) are served from Redis via CatalogCache; everything else passes
-// straight through to the inner Mongo repository.
-//
-// Not cached (intentional):
-//   • getItemsSnapshot — the Cart/Order price-snapshot contract must read the live
-//     projection so a placed order always snapshots current truth.
-//   • getMenuItemView / getRestaurantSummaryBySlug — low-volume lookups; left direct
-//     to keep the invalidation surface small (Phase 13 scope = lists + menu view +
-//     serviceability + per-restaurant summary).
 import {
   ICatalogReadRepository,
   ListRestaurantsFilter,

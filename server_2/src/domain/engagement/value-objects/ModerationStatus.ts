@@ -1,5 +1,3 @@
-// Review moderation state-machine VO (engagement_module.md §2). Mirrors NotificationStatus.
-// PENDING/AUTO_FLAGGED -> APPROVED | REJECTED (terminal).
 import { ValueObject } from '../../shared/ValueObject';
 import { Result } from '../../shared/Result';
 import { ValidationError } from '../../shared/errors/ValidationError';

@@ -3,10 +3,6 @@ import { Money } from '../../../shared/Money';
 import { Fee } from '../../value-objects/Fee';
 import { PricingBreakdown } from '../../value-objects/PricingBreakdown';
 
-// Pricing pipeline final stage (Commerce Phase 7, §4.2) — pure.
-// Folds the upstream contributions into total = subtotal + Σfees − discount + tax
-// and hands them to PricingBreakdown.create, which re-checks that same invariant.
-// Money.add/subtract enforce single-currency and reject a negative total.
 export class TotalStage {
   public static run(props: {
     subtotal: Money;

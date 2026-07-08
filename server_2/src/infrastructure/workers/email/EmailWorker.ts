@@ -1,4 +1,3 @@
-// BullMQ Worker consuming `email-queue` — maps EmailJob.type to IEmailProvider calls.
 import { Job, Worker } from 'bullmq';
 
 import { IEmailProvider } from '../../../domain/identity/services/IEmailProvider';

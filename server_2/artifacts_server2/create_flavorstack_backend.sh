@@ -1,39 +1,19 @@
-#!/usr/bin/env bash
-# =============================================================================
-# FlavorStack — Backend Scaffold
-# Architecture : Clean Architecture (Domain → Application → Infrastructure → API)
-# Principles   : SOLID · OOP · LLD bounded contexts · RBAC · Event-driven
-# Async layer  : BullMQ workers + Outbox pattern
-# Infra deps   : Redis (cache · sessions · rate-limit · Socket.io adapter)
-#                Docker (Compose — api, workers, redis, nginx)
-# Usage        : bash create_flavorstack_backend.sh [target-dir]
-#                Defaults to ./server if no argument is given.
-# =============================================================================
 
 set -euo pipefail
 
 ROOT="${1:-server}"
 
-# ─── colour helpers ───────────────────────────────────────────────────────────
 GREEN="\033[0;32m"; CYAN="\033[0;36m"; YELLOW="\033[0;33m"; RESET="\033[0m"
 info()    { echo -e "${CYAN}[scaffold]${RESET} $*"; }
 success() { echo -e "${GREEN}[done]${RESET}    $*"; }
 warn()    { echo -e "${YELLOW}[note]${RESET}    $*"; }
 
-# ─── guard ────────────────────────────────────────────────────────────────────
 if [[ -d "$ROOT" ]]; then
   warn "Directory '$ROOT' already exists. Merging (no files overwritten)."
 fi
 
-# =============================================================================
-# HELPER: mk — silently make a directory
-# =============================================================================
 mk() { mkdir -p "$ROOT/$1"; }
 
-# =============================================================================
-# HELPER: touch_with_header — create an empty .ts stub with a one-line comment
-#         so the file exists but contains NO implementation code.
-# =============================================================================
 stub() {
   local path="$ROOT/$1"
   local dir; dir="$(dirname "$path")"
@@ -45,13 +25,8 @@ stub() {
 
 info "Creating FlavorStack backend in './$ROOT' ..."
 
-# =============================================================================
-# 0. TOP-LEVEL CONFIG & DOCKER FILES
-#    Everything needed before a single line of business logic is written.
-# =============================================================================
 info "0 · Top-level config & Docker ..."
 
-# -- TypeScript / Node --
 stub "tsconfig.json"                          "TypeScript project config (strict, paths)"
 stub "tsconfig.build.json"                    "Production build config — excludes tests"
 stub "package.json"                           "Dependencies: express, mongoose, ioredis, bullmq, socket.io, stripe, cloudinary, nodemailer, helmet, zod, opossum, winston, sentry"
@@ -62,33 +37,21 @@ stub ".prettierrc"                            "Prettier formatting rules"
 stub "nodemon.json"                           "Nodemon watch config for dev"
 stub ".gitignore"                             "node_modules, dist, .env, coverage, *.log"
 
-# -- Docker --
 stub "Dockerfile"                             "Multi-stage: build (tsc) → production (node dist/)"
 stub "Dockerfile.worker"                      "Same codebase, entrypoint = workers/index.ts"
 stub "docker-compose.yml"                     "Services: api, worker-email, worker-image, worker-notify, worker-loyalty, outbox-poller, redis, nginx"
 stub "docker-compose.dev.yml"                 "Dev overrides: volume mounts for hot-reload, debug ports"
 stub ".dockerignore"                          "node_modules, dist, .env, coverage"
 
-# -- Nginx (reverse proxy for Docker) --
 mk "nginx"
 stub "nginx/nginx.conf"                       "Proxy api:8000, WebSocket upgrade for Socket.io, static caching"
 
-# -- GitHub Actions CI/CD --
 mk ".github/workflows"
 stub ".github/workflows/ci.yml"               "lint → tsc → unit tests → build Docker image"
 stub ".github/workflows/deploy.yml"           "Push image → deploy to staging on merge to main"
 
-# =============================================================================
-# 1. DOMAIN LAYER  (innermost — zero dependencies on Express / Mongo / Redis)
-#    Contains: Entities, Value Objects, Domain Events, Repository Interfaces,
-#              Domain Service Interfaces, Enums, Errors.
-#    OOP: each entity is a class with behaviour, not a plain data bag.
-#    SOLID: Dependency Inversion — application depends on interfaces here,
-#           not on concrete Mongoose models.
-# =============================================================================
 info "1 · Domain layer ..."
 
-# ── 1a. Shared kernel ─────────────────────────────────────────────────────────
 mk "src/domain/shared"
 stub "src/domain/shared/Entity.ts"            "Abstract base class: _id, equals(), toJSON() — OOP base for all entities"
 stub "src/domain/shared/ValueObject.ts"       "Abstract VO base: immutable, structural equality"
@@ -105,7 +68,6 @@ stub "src/domain/shared/errors/ConflictError.ts"     "Optimistic lock mismatch, 
 stub "src/domain/shared/errors/ForbiddenError.ts"    "RBAC denial"
 stub "src/domain/shared/errors/ValidationError.ts"   "Invariant violation"
 
-# ── 1b. Identity bounded context ──────────────────────────────────────────────
 mk "src/domain/identity"
 stub "src/domain/identity/entities/User.ts"               "Entity: name, email, passwordHash, role, isVerified, version, deletedAt — methods: verify(), deactivate(), incrementVersion()"
 stub "src/domain/identity/entities/Rider.ts"              "Entity: userId, vehicleType, status, currentLocation — updateLocation(), goOffline()"
@@ -127,7 +89,6 @@ stub "src/domain/identity/repositories/IPermissionRepository.ts"   "Interface: f
 stub "src/domain/identity/services/IAuthService.ts"       "Interface: login(), logout(), refresh(), verifyOtp()"
 stub "src/domain/identity/services/IRbacService.ts"       "Interface: can(role, resource, action): boolean"
 
-# ── 1c. Catalog bounded context ───────────────────────────────────────────────
 mk "src/domain/catalog"
 stub "src/domain/catalog/entities/Restaurant.ts"          "Entity: name, ownerId, cuisineType, isActive, openingHours, deletedAt — isOpen(), toggleActive()"
 stub "src/domain/catalog/entities/MenuItem.ts"            "Entity: restaurantId, name, price(Money), category, isAvailable — toggleAvailability()"
@@ -141,7 +102,6 @@ stub "src/domain/catalog/repositories/IMenuItemRepository.ts"     "Interface: fi
 stub "src/domain/catalog/repositories/IDeliveryZoneRepository.ts" "Interface: findZoneContaining(point)"
 stub "src/domain/catalog/services/IOpeningHoursService.ts"        "Interface: isRestaurantOpen(restaurantId, at?)"
 
-# ── 1d. Commerce bounded context ──────────────────────────────────────────────
 mk "src/domain/commerce"
 stub "src/domain/commerce/entities/Cart.ts"               "AggregateRoot: userId, items[], appliedCoupon — addItem(), removeItem(), applyCoupon(), clear()"
 stub "src/domain/commerce/entities/CartItem.ts"           "Entity: menuItemId, quantity, unitPrice(Money)"
@@ -167,7 +127,6 @@ stub "src/domain/commerce/services/IOrderService.ts"      "Interface: placeOrder
 stub "src/domain/commerce/services/IPaymentService.ts"    "Interface: charge(), refund(), topUpWallet()"
 stub "src/domain/commerce/services/ICouponService.ts"     "Interface: validate(), apply()"
 
-# ── 1e. Fulfillment bounded context ───────────────────────────────────────────
 mk "src/domain/fulfillment"
 stub "src/domain/fulfillment/entities/Delivery.ts"        "AggregateRoot: orderId, riderId, status FSM — assign(), markPickedUp(), markDelivered()"
 stub "src/domain/fulfillment/entities/RiderAssignment.ts" "Entity: deliveryId, riderId, assignedAt, acceptedAt"
@@ -188,7 +147,6 @@ stub "src/domain/fulfillment/repositories/IScheduledOrderRepository.ts" "Interfa
 stub "src/domain/fulfillment/services/IDeliveryAssignmentService.ts"    "Interface: assignNearestRider(orderId)"
 stub "src/domain/fulfillment/services/IRefundService.ts"                "Interface: raise(), approve(), reject()"
 
-# ── 1f. Engagement bounded context ────────────────────────────────────────────
 mk "src/domain/engagement"
 stub "src/domain/engagement/entities/Review.ts"           "Entity: userId, restaurantId, orderId (gate), rating, body, adminReply, windowExpiresAt — addReply(), isWindowOpen()"
 stub "src/domain/engagement/entities/LoyaltyAccount.ts"   "AggregateRoot: userId, points, tier — credit(), redeem(), recalculateTier()"
@@ -211,16 +169,8 @@ stub "src/domain/engagement/repositories/IDeviceTokenRepository.ts"    "Interfac
 stub "src/domain/engagement/services/INotificationService.ts"          "Interface: sendPush(), sendInApp()"
 stub "src/domain/engagement/services/IChatService.ts"                  "Interface: sendMessage(), markRead()"
 
-# =============================================================================
-# 2. APPLICATION LAYER  (use-cases — orchestrates domain objects)
-#    Contains: Use-case classes (one class = one use-case), DTOs (in/out),
-#              Application Service implementations, Event handlers.
-#    SOLID: SRP — one use-case per class.
-#           OCP — new use-cases without touching existing ones.
-# =============================================================================
 info "2 · Application layer ..."
 
-# ── 2a. Identity use-cases ────────────────────────────────────────────────────
 mk "src/application/identity/use-cases"
 stub "src/application/identity/use-cases/RegisterUser.ts"        "UC: validate → create User → enqueue welcome email via event"
 stub "src/application/identity/use-cases/VerifyEmail.ts"         "UC: consume OTP → mark isVerified"
@@ -245,7 +195,6 @@ mk "src/application/identity/event-handlers"
 stub "src/application/identity/event-handlers/OnUserRegistered.ts"  "Handler: enqueue welcome email BullMQ job"
 stub "src/application/identity/event-handlers/OnPasswordReset.ts"   "Handler: enqueue password-reset email"
 
-# ── 2b. Catalog use-cases ─────────────────────────────────────────────────────
 mk "src/application/catalog/use-cases"
 stub "src/application/catalog/use-cases/CreateRestaurant.ts"       "UC: admin only"
 stub "src/application/catalog/use-cases/UpdateRestaurant.ts"       "UC: admin + owner"
@@ -264,7 +213,6 @@ stub "src/application/catalog/dtos/CreateRestaurantDto.ts"   "Input DTO"
 stub "src/application/catalog/dtos/MenuItemDto.ts"           "Input + Output DTO"
 stub "src/application/catalog/dtos/RestaurantResponseDto.ts" "Output DTO — includes isOpen computed field"
 
-# ── 2c. Commerce use-cases ────────────────────────────────────────────────────
 mk "src/application/commerce/use-cases"
 stub "src/application/commerce/use-cases/AddToCart.ts"             "UC: validate item available + restaurant open"
 stub "src/application/commerce/use-cases/RemoveFromCart.ts"        "UC"
@@ -290,7 +238,6 @@ mk "src/application/commerce/event-handlers"
 stub "src/application/commerce/event-handlers/OnOrderPlaced.ts"    "Handler: write OutboxEvent atomically"
 stub "src/application/commerce/event-handlers/OnPaymentSucceeded.ts" "Handler: confirm Order status"
 
-# ── 2d. Fulfillment use-cases ─────────────────────────────────────────────────
 mk "src/application/fulfillment/use-cases"
 stub "src/application/fulfillment/use-cases/AssignRider.ts"         "UC: find nearest available rider → create Delivery"
 stub "src/application/fulfillment/use-cases/AcceptDelivery.ts"      "UC: rider accepts"
@@ -310,7 +257,6 @@ mk "src/application/fulfillment/event-handlers"
 stub "src/application/fulfillment/event-handlers/OnDeliveryCompleted.ts" "Handler: trigger loyalty credit use-case"
 stub "src/application/fulfillment/event-handlers/OnRefundApproved.ts"    "Handler: enqueue Stripe refund BullMQ job"
 
-# ── 2e. Engagement use-cases ──────────────────────────────────────────────────
 mk "src/application/engagement/use-cases"
 stub "src/application/engagement/use-cases/CreateReview.ts"         "UC: verify orderId + 7-day window + not already reviewed"
 stub "src/application/engagement/use-cases/ReplyToReview.ts"        "UC: admin only"
@@ -336,14 +282,8 @@ mk "src/application/engagement/event-handlers"
 stub "src/application/engagement/event-handlers/OnDeliveryCompleted.ts" "Handler: trigger CreditLoyaltyPoints"
 stub "src/application/engagement/event-handlers/OnUserRegistered.ts"    "Handler: create LoyaltyAccount"
 
-# =============================================================================
-# 3. INFRASTRUCTURE LAYER  (concrete implementations — Mongo, Redis, BullMQ …)
-#    SOLID: Dependency Inversion — these classes implement domain interfaces.
-#           All instantiated via DI container, never imported directly in app.
-# =============================================================================
 info "3 · Infrastructure layer ..."
 
-# ── 3a. Database — Mongoose models ────────────────────────────────────────────
 mk "src/infrastructure/database/models"
 stub "src/infrastructure/database/models/UserModel.ts"           "Mongoose schema — implements IUser shape, softDelete plugin, version field"
 stub "src/infrastructure/database/models/RiderModel.ts"          "Mongoose schema — 2dsphere index on currentLocation"
@@ -383,7 +323,6 @@ stub "src/infrastructure/database/seeds/index.ts"                "Runs all seeds
 
 stub "src/infrastructure/database/connection.ts"                 "Mongoose connect — reads MONGO_URI from env, emits ready/error events"
 
-# ── 3b. Repositories — concrete implementations ───────────────────────────────
 mk "src/infrastructure/repositories"
 stub "src/infrastructure/repositories/UserRepository.ts"          "Implements IUserRepository using UserModel"
 stub "src/infrastructure/repositories/RiderRepository.ts"         "Implements IRiderRepository — geo near query"
@@ -411,7 +350,6 @@ stub "src/infrastructure/repositories/ChatMessageRepository.ts"   "Implements IC
 stub "src/infrastructure/repositories/NotificationRepository.ts"  "Implements INotificationRepository"
 stub "src/infrastructure/repositories/DeviceTokenRepository.ts"   "Implements IDeviceTokenRepository"
 
-# ── 3c. Redis ─────────────────────────────────────────────────────────────────
 mk "src/infrastructure/redis"
 stub "src/infrastructure/redis/client.ts"               "ioredis client — singleton, reconnect strategy, health-check method"
 stub "src/infrastructure/redis/SessionStore.ts"         "set/get/delete session:{userId}:{sessionId} — 30d TTL"
@@ -419,7 +357,6 @@ stub "src/infrastructure/redis/CacheStore.ts"           "get/set/invalidate with
 stub "src/infrastructure/redis/RateLimiter.ts"          "Sliding window counter — used by rate-limit middleware"
 stub "src/infrastructure/redis/locks/OptimisticLock.ts" "Lua-script helper for compare-and-swap on wallet version"
 
-# ── 3d. BullMQ workers ────────────────────────────────────────────────────────
 mk "src/infrastructure/workers"
 stub "src/infrastructure/workers/index.ts"                        "Worker process entrypoint — starts all workers"
 stub "src/infrastructure/workers/email/EmailQueue.ts"             "BullMQ Queue definition — priority levels"
@@ -441,12 +378,10 @@ stub "src/infrastructure/workers/scheduled/ScheduledOrderWorker.ts" "Processor: 
 stub "src/infrastructure/workers/shared/DLQHandler.ts"            "Dead Letter Queue — log + alert on repeated failures"
 stub "src/infrastructure/workers/shared/JobLogger.ts"             "Winston-based job lifecycle logger"
 
-# ── 3e. Outbox poller ─────────────────────────────────────────────────────────
 mk "src/infrastructure/outbox"
 stub "src/infrastructure/outbox/OutboxPoller.ts"         "Polls OutboxEvent collection every N seconds → publishes to BullMQ queues"
 stub "src/infrastructure/outbox/EventRouter.ts"          "Maps eventName → target Queue + job data transformer"
 
-# ── 3f. External services ─────────────────────────────────────────────────────
 mk "src/infrastructure/external"
 stub "src/infrastructure/external/stripe/StripeService.ts"            "Implements IPaymentService — circuit breaker via opossum"
 stub "src/infrastructure/external/stripe/StripeCircuitBreaker.ts"     "opossum config: fallback, timeout, reset threshold"
@@ -456,29 +391,21 @@ stub "src/infrastructure/external/fcm/FcmService.ts"                  "Firebase 
 stub "src/infrastructure/external/email/ResendService.ts"             "Implements email sending via Resend SDK"
 stub "src/infrastructure/external/maps/GeoService.ts"                 "Point-in-polygon check for delivery zone validation"
 
-# ── 3g. Socket.io ─────────────────────────────────────────────────────────────
 mk "src/infrastructure/realtime"
 stub "src/infrastructure/realtime/SocketServer.ts"        "Socket.io server init — attaches Redis adapter (@socket.io/redis-adapter)"
 stub "src/infrastructure/realtime/namespaces/chat.ts"     "Chat namespace — room per conversation"
 stub "src/infrastructure/realtime/namespaces/tracking.ts" "Tracking namespace — room per order, rider emits GPS every 5s"
 stub "src/infrastructure/realtime/middleware/socketAuth.ts" "Verify JWT on handshake — rejects unauthenticated connections"
 
-# ── 3h. Observability ─────────────────────────────────────────────────────────
 mk "src/infrastructure/observability"
 stub "src/infrastructure/observability/logger.ts"         "Winston — structured JSON logs, levels per env"
 stub "src/infrastructure/observability/sentry.ts"         "Sentry init — Express handler + unhandledRejection capture"
 stub "src/infrastructure/observability/httpLogger.ts"     "Morgan / custom request logger middleware"
 
-# =============================================================================
-# 4. API LAYER  (HTTP interface — Express routes, controllers, middleware)
-#    Controllers are thin: parse request → call use-case → send response.
-#    No business logic lives here — SOLID SRP enforced.
-# =============================================================================
 info "4 · API (HTTP) layer ..."
 
 mk "src/api/v1"
 
-# ── 4a. Middleware ────────────────────────────────────────────────────────────
 mk "src/api/v1/middleware"
 stub "src/api/v1/middleware/authenticate.ts"        "Verify JWT → check Redis session → attach req.user"
 stub "src/api/v1/middleware/authorize.ts"           "RBAC: authorize(resource, action) → checks Permission"
@@ -491,7 +418,6 @@ stub "src/api/v1/middleware/errorHandler.ts"        "Global Express error handle
 stub "src/api/v1/middleware/notFound.ts"            "Catch-all 404 handler"
 stub "src/api/v1/middleware/requestId.ts"           "Attach x-request-id to every request for tracing"
 
-# ── 4b. Controllers ───────────────────────────────────────────────────────────
 mk "src/api/v1/controllers"
 stub "src/api/v1/controllers/AuthController.ts"          "POST register, verify-email, login, logout, refresh, forgot-password, reset-password"
 stub "src/api/v1/controllers/UserController.ts"          "GET/PATCH profile, GET me, DELETE (admin)"
@@ -514,7 +440,6 @@ stub "src/api/v1/controllers/NotificationController.ts"  "GET list, PATCH mark-r
 stub "src/api/v1/controllers/HealthController.ts"        "GET /health (alive), GET /ready (Mongo+Redis)"
 stub "src/api/v1/controllers/AdminController.ts"         "Admin dashboard aggregates — users, orders, analytics"
 
-# ── 4c. Routes ────────────────────────────────────────────────────────────────
 mk "src/api/v1/routes"
 stub "src/api/v1/routes/auth.routes.ts"          "Mounts AuthController"
 stub "src/api/v1/routes/user.routes.ts"          "Mounts UserController — protected"
@@ -538,7 +463,6 @@ stub "src/api/v1/routes/admin.routes.ts"         "Mounts AdminController — adm
 stub "src/api/v1/routes/health.routes.ts"        "Mounts HealthController — public"
 stub "src/api/v1/routes/index.ts"                "Aggregates all routers under /api/v1"
 
-# ── 4d. Validators (Zod schemas) ─────────────────────────────────────────────
 mk "src/api/v1/validators"
 stub "src/api/v1/validators/auth.validator.ts"         "Zod schemas for all auth DTOs"
 stub "src/api/v1/validators/restaurant.validator.ts"   "Zod schemas for restaurant CRUD"
@@ -549,11 +473,6 @@ stub "src/api/v1/validators/review.validator.ts"       "Zod schemas for review"
 stub "src/api/v1/validators/chat.validator.ts"         "Zod schemas for chat message"
 stub "src/api/v1/validators/common.validator.ts"       "Shared: cursor, pagination, ObjectId param"
 
-# =============================================================================
-# 5. DEPENDENCY INJECTION CONTAINER
-#    Wires interfaces → implementations. Never import concrete classes
-#    directly in application or domain layers.
-# =============================================================================
 info "5 · DI container ..."
 
 mk "src/container"
@@ -565,20 +484,12 @@ stub "src/container/fulfillment.container.ts" "Binds Fulfillment interfaces → 
 stub "src/container/engagement.container.ts"  "Binds Engagement interfaces → implementations"
 stub "src/container/infrastructure.container.ts" "Binds Redis, BullMQ, Stripe, Cloudinary, FCM"
 
-# =============================================================================
-# 6. DOMAIN EVENT BUS
-#    In-process pub/sub — domain events dispatched after aggregate mutations.
-#    Decouples domain from side-effects (email, push, loyalty credit).
-# =============================================================================
 info "6 · Event bus ..."
 
 mk "src/events"
 stub "src/events/EventBus.ts"              "In-process EventEmitter wrapper — publish(event), subscribe(eventName, handler)"
 stub "src/events/EventRegistry.ts"         "Registers all event handlers on startup — single place to trace all subscriptions"
 
-# =============================================================================
-# 7. APP + SERVER BOOTSTRAP
-# =============================================================================
 info "7 · App bootstrap ..."
 
 mk "src"
@@ -590,10 +501,6 @@ stub "src/config/cors.ts"  "Allowed origins list per environment"
 stub "src/config/helmet.ts" "Helmet directive config"
 stub "src/config/bullmq.ts" "Queue names, default job options, retry/backoff strategy"
 
-# =============================================================================
-# 8. TESTS  (unit-first — Clean Architecture makes this trivial because
-#            use-cases depend only on interfaces, which are easy to mock)
-# =============================================================================
 info "8 · Test scaffolding ..."
 
 mk "tests/unit/domain/identity"
@@ -645,9 +552,6 @@ stub "tests/setup.ts"                 "Global test setup — connect test Mongo,
 stub "jest.config.ts"                 "Jest config — ts-jest, coverage thresholds, module aliases"
 stub "jest.integration.config.ts"     "Separate Jest config for integration tests — longer timeout"
 
-# =============================================================================
-# 9. SCRIPTS & TOOLING
-# =============================================================================
 info "9 · Scripts ..."
 
 mk "scripts"
@@ -656,9 +560,6 @@ stub "scripts/migrate.ts"            "Placeholder for future MongoDB migrations"
 stub "scripts/healthcheck.ts"        "Used by Docker HEALTHCHECK — exits 0 if /ready returns 200"
 stub "scripts/generateApiKey.ts"     "One-off: generate hashed admin API key"
 
-# =============================================================================
-# DONE
-# =============================================================================
 success "FlavorStack backend scaffold complete!"
 echo ""
 echo "  Folder: ./$ROOT"

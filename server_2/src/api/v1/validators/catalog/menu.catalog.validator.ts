@@ -1,5 +1,3 @@
-// Zod validators for the menu-item owner-write surface (items, availability,
-// variants). Ownership is enforced in the use-case, not here.
 import { z } from 'zod';
 import { uuid, moneyInput, dietaryEnum, selectionTypeEnum } from './shared.catalog.validator';
 

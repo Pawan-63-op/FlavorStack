@@ -1,4 +1,3 @@
-// Augments Express Request with the verified JWT claims and per-request context
 import { UserRole } from '../../../domain/identity/enums/user-role.enum';
 
 declare global {
@@ -17,8 +16,6 @@ declare global {
         userAgent?: string;
         device?: string;
       };
-      // Canonical (trimmed, lower-cased) Idempotency-Key for the checkout command,
-      // set by the requireIdempotencyKey middleware (commerce_module.md §4.4 step 0).
       idempotencyKey?: string;
     }
   }

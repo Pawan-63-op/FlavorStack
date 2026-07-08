@@ -1,20 +1,3 @@
-// EventRouter — maps an event name → the target BullMQ queue(s) that should
-// receive it, and turns a drained outbox row into one ready-to-enqueue job per
-// target (Catalog Phase 12).
-//
-// This is the routing half of the outbox spine: the (fulfillment-owned)
-// OutboxPoller drains PENDING rows and asks the router where each event goes,
-// then enqueues the returned jobs. Catalog only *writes* outbox rows and
-// *declares* its routes here — it never enqueues to BullMQ directly (the outbox
-// is the only async publishing mechanism).
-//
-// Routes are registered, not hard-coded, so every bounded context contributes its
-// own event→queue map (see `registerCatalogEventRoutes`). Registering the same
-// event again unions the queue set (idempotent, order-independent).
-//
-// Idempotency: each routed job carries `jobId = eventId`. BullMQ dedups jobs by
-// id, so at-least-once outbox delivery collapses to effectively-once enqueueing,
-// and downstream workers dedup on the same `eventId`.
 
 /** The minimal projection of an outbox row the router needs to build jobs. */
 export interface RoutableEvent {

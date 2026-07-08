@@ -1,1 +1,40 @@
-// Dev overrides: volume mounts for hot-reload, debug ports
+# Dev override — layer ON TOP of docker-compose.yml:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+#
+# Purpose: run the SAME prod images but with NODE_ENV=development so server_2's
+# auth cookies are NOT flagged `Secure` (the cookie code sets `secure` only when
+# NODE_ENV === 'production'). This lets a browser keep first-party session
+# cookies over plain http://localhost — required for the frontend app and the
+# Playwright E2E suite (Batch 1.5). It runs the compiled `dist/` (no hot-reload);
+# Mongo / Redis / mongo-init are inherited unchanged from the base file.
+#
+# (An earlier ts-node/nodemon hot-reload variant was dropped: the alpine image +
+# bind-mount + anonymous node_modules combo did not reliably expose ts-node on
+# PATH. The NODE_ENV flip is the robust way to get non-Secure cookies for dev.)
+
+services:
+  api:
+    environment:
+      NODE_ENV: development
+      # Dev-only: widen the rider-offer window + prep/delivery SLAs so a human can
+      # drive the multi-role flow through the UI without auto-timeout-cancel
+      # (prod defaults: offer 60s, ready 900s, delivery 2700s). Logic unchanged.
+      FULFILLMENT_OFFER_TTL_SECONDS: "3600"
+      FULFILLMENT_READY_SLA_SECONDS: "7200"
+      FULFILLMENT_DELIVERY_SLA_SECONDS: "7200"
+
+  worker-outbox:
+    environment:
+      NODE_ENV: development
+
+  worker-email:
+    environment:
+      NODE_ENV: development
+
+  worker-notification:
+    environment:
+      NODE_ENV: development
+
+  worker-fulfillment:
+    environment:
+      NODE_ENV: development

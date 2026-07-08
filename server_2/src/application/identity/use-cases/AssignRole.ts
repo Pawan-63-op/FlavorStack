@@ -18,7 +18,6 @@ export class AssignRole {
   ) {}
 
   async execute(dto: AssignRoleDto): Promise<Result<void>> {
-    // 1. Load actor and target
     const actor = await this.userRepo.findById(dto.actorId);
     if (!actor) return Result.fail(new NotFoundError('actor_not_found'));
     if (!(actor instanceof Admin)) return Result.fail(new ForbiddenError('actor_not_admin'));
@@ -26,8 +25,6 @@ export class AssignRole {
     const target = await this.userRepo.findById(dto.targetUserId);
     if (!target) return Result.fail(new NotFoundError('user_not_found'));
 
-    // 2. Authorize + raise RoleAssigned (on the actor's domain-event queue,
-    //    aggregateId = target user) and enforce super-admin-for-admin-role rule
     try {
       actor.assignRole(target._id, dto.role);
     } catch (e) {
@@ -35,19 +32,15 @@ export class AssignRole {
       throw e;
     }
 
-    // 3. Apply the role change to the target
     target.role = dto.role;
 
-    // 4. Pull events (raised on the actor aggregate)
     const events = actor.pullDomainEvents();
 
-    // 5. Atomic transaction: persist target + outbox
     await this.unitOfWork.runInTransaction(async (ctx) => {
       await this.userRepo.update(target);
       await this.outboxStore.append(events, ctx);
     });
 
-    // 6. Post-commit: publish events
     await this.eventBus.publishAll(events);
 
     return Result.ok();

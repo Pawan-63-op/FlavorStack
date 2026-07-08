@@ -1,4 +1,3 @@
-// Domain event raised when a customer submits a Review (engagement_module.md §3). aggregateId = reviewId.
 import { DomainEvent } from '../../shared/DomainEvent';
 import { randomUUID } from 'crypto';
 import { ModerationStatusValue } from '../enums/moderation-status.enum';

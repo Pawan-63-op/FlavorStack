@@ -1,6 +1,3 @@
-// Notification dispatch lifecycle state-machine VO (engagement_module.md §2). Mirrors
-// fulfillment/value-objects/FulfillmentStatus.ts: private ctor + static create(), canTransitionTo(),
-// transitionTo(): Result<VO>. PENDING -> SENT | FAILED; SENT -> READ.
 import { ValueObject } from '../../shared/ValueObject';
 import { Result } from '../../shared/Result';
 import { ValidationError } from '../../shared/errors/ValidationError';
@@ -13,7 +10,7 @@ interface NotificationStatusProps {
 const ALLOWED_TRANSITIONS: Record<NotificationStatusValue, NotificationStatusValue[]> = {
   [NOTIFICATION_STATUS.PENDING]: [NOTIFICATION_STATUS.SENT, NOTIFICATION_STATUS.FAILED],
   [NOTIFICATION_STATUS.SENT]: [NOTIFICATION_STATUS.READ],
-  [NOTIFICATION_STATUS.FAILED]: [],
+  [NOTIFICATION_STATUS.FAILED]: [NOTIFICATION_STATUS.READ],
   [NOTIFICATION_STATUS.READ]: [],
 };
 

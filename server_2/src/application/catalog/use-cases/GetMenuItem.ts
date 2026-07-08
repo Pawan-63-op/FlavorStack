@@ -1,5 +1,3 @@
-// Query: a single item from the `menu_item_search` projection, with effective
-// availability derived against its restaurant's live open-state.
 import { Result } from '../../../domain/shared/Result';
 import { NotFoundError } from '../../../domain/shared/errors/NotFoundError';
 import { ICatalogReadRepository } from '../../../domain/catalog/repositories/ICatalogReadRepository';

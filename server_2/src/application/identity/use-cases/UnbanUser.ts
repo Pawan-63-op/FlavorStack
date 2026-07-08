@@ -18,7 +18,6 @@ export class UnbanUser {
   ) {}
 
   async execute(dto: UnbanUserDto): Promise<Result<void>> {
-    // 1. Load actor and target
     const actor = await this.userRepo.findById(dto.actorId);
     if (!actor) return Result.fail(new NotFoundError('actor_not_found'));
     if (!(actor instanceof Admin)) return Result.fail(new ForbiddenError('actor_not_admin'));
@@ -26,7 +25,6 @@ export class UnbanUser {
     const target = await this.userRepo.findById(dto.targetUserId);
     if (!target) return Result.fail(new NotFoundError('user_not_found'));
 
-    // 2. Authorize: same admin-target rule as banning applies symmetrically
     try {
       actor.assertCanBan(target.role);
     } catch (e) {
@@ -34,19 +32,15 @@ export class UnbanUser {
       throw e;
     }
 
-    // 3. Lift the ban (raises UserUnbanned)
     target.unban();
 
-    // 4. Pull events
     const events = target.pullDomainEvents();
 
-    // 5. Atomic transaction: persist target + outbox
     await this.unitOfWork.runInTransaction(async (ctx) => {
       await this.userRepo.update(target);
       await this.outboxStore.append(events, ctx);
     });
 
-    // 6. Post-commit: publish events
     await this.eventBus.publishAll(events);
 
     return Result.ok();

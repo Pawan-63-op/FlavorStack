@@ -1,5 +1,3 @@
-// Immutable line snapshot copied from OrderRequested.lines (fulfillment_module.md §2.3):
-// { menuItemId, name, quantity, selectedOptions[], lineTotal: Money }. Money is the shared kernel VO.
 import { ValueObject } from '../../shared/ValueObject';
 import { Result } from '../../shared/Result';
 import { Guard } from '../../shared/Guard';

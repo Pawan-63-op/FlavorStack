@@ -1,4 +1,3 @@
-// Unit tests for the Socket.IO handshake JWT guard (Phase 7).
 import type { Socket } from 'socket.io';
 import { socketAuth } from '../../../../infrastructure/realtime/middleware/socketAuth';
 import { ITokenService } from '../../../../domain/identity/services/ITokenService';

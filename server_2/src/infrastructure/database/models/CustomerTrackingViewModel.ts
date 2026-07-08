@@ -1,6 +1,3 @@
-// Mongoose model — `customer_tracking_views` collection (fulfillment_module.md §11, Phase 6).
-// One document per fulfillment. Maintained by FulfillmentProjector via bus events.
-// Timeline entries are idempotency-guarded by `processedEventIds` (eventId set).
 import { Schema, model } from 'mongoose';
 
 export interface TrackingTimelineEntryDocument {
@@ -95,7 +92,6 @@ const CustomerTrackingViewSchema = new Schema<CustomerTrackingViewDocument>(
   }
 );
 
-// Primary access by fulfillmentId (_id). Secondary by customerId for order history.
 CustomerTrackingViewSchema.index({ customerId: 1, updatedAt: -1 });
 
 export const CustomerTrackingViewModel = model<CustomerTrackingViewDocument>(

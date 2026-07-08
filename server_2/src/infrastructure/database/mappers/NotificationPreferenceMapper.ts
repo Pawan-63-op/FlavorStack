@@ -1,7 +1,3 @@
-// Maps between the NotificationPreference aggregate and NotificationPreferenceModel documents
-// (engagement_module.md §6). Mirrors FulfillmentMapper: toPersistence flattens VOs, toDomain
-// rebuilds every ChannelToggle via its create() factory (trusted data — corruption surfaces as
-// DomainError via rebuildOrThrow).
 import {
   NotificationPreference,
   NotificationPreferenceProps,

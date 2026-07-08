@@ -1,5 +1,3 @@
-// UC: ConfirmPickup — the assigned rider collects the food (fulfillment_module.md §6.1, Phase 4).
-// The aggregate enforces READY_FOR_PICKUP + an ACCEPTED assignment owned by the rider; emits PickupConfirmed.
 import { Result } from '../../../domain/shared/Result';
 import { NotFoundError } from '../../../domain/shared/errors/NotFoundError';
 import { IFulfillmentRepository } from '../../../domain/fulfillment/repositories/IFulfillmentRepository';

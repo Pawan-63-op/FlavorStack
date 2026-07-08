@@ -1,13 +1,16 @@
-// MongoFulfillmentProjectionRepository — implements IFulfillmentProjectionRepository (Phase 6).
-// Plain (session-less) Mongo writes — projections are updated post-commit by the FulfillmentProjector.
-// All write methods are idempotent via upsert; customer tracking uses processedEventIds to deduplicate.
 import {
   IFulfillmentProjectionRepository,
   CustomerTrackingView,
+  CustomerOrderSummaryView,
+  CustomerOrderQuery,
   RestaurantFulfillmentView,
   RiderQueueView,
+  RiderDeliveryHistoryView,
+  RiderHistoryQuery,
   AdminDashboardView,
   AdminDashboardQuery,
+  AnalyticsQuery,
+  AnalyticsAggregate,
   TrackingTimelineEntry,
 } from '../../domain/fulfillment/repositories/IFulfillmentProjectionRepository';
 import {
@@ -26,6 +29,7 @@ import {
   AdminDashboardViewModel,
   AdminDashboardViewDocument,
 } from '../database/models/AdminDashboardViewModel';
+import { FULFILLMENT_STATUS } from '../../domain/fulfillment/enums/fulfillment-status.enum';
 
 function riderQueueId(riderId: string, fulfillmentId: string): string {
   return `${riderId}:${fulfillmentId}`;
@@ -45,6 +49,23 @@ function docToCustomerTracking(doc: CustomerTrackingViewDocument): CustomerTrack
     total: doc.total,
     cancellation: doc.cancellation ?? null,
     failureReason: doc.failureReason,
+    updatedAt: doc.updatedAt,
+  };
+}
+
+function docToCustomerOrderSummary(doc: CustomerTrackingViewDocument): CustomerOrderSummaryView {
+  const placedAt = doc.timeline.reduce<Date>(
+    (earliest, t) => (t.at < earliest ? t.at : earliest),
+    doc.timeline[0]?.at ?? doc.updatedAt
+  );
+  return {
+    fulfillmentId: doc._id,
+    orderRequestId: doc.orderRequestId,
+    restaurantId: doc.restaurantId,
+    fulfillmentStatus: doc.currentStatus,
+    deliveryStatus: doc.deliveryStatus,
+    total: doc.total,
+    placedAt,
     updatedAt: doc.updatedAt,
   };
 }
@@ -106,7 +127,6 @@ function docToAdminView(doc: AdminDashboardViewDocument): AdminDashboardView {
 }
 
 export class MongoFulfillmentProjectionRepository implements IFulfillmentProjectionRepository {
-  // ── CustomerTrackingView ─────────────────────────────────────────
 
   async upsertCustomerTracking(params: {
     fulfillmentId: string;
@@ -116,9 +136,6 @@ export class MongoFulfillmentProjectionRepository implements IFulfillmentProject
   }): Promise<void> {
     const { fulfillmentId, eventId, set, timelineEntry } = params;
 
-    // $set the current state fields + $addToSet the eventId (dedup guard).
-    // On first insert (upsert creates the doc), only $set fields are written;
-    // processedEventIds and timeline are initialized by $addToSet/$push below.
     await CustomerTrackingViewModel.updateOne(
       { _id: fulfillmentId },
       {
@@ -128,8 +145,6 @@ export class MongoFulfillmentProjectionRepository implements IFulfillmentProject
       { upsert: true }
     );
 
-    // Push timeline entry only when the eventId was not already in the timeline
-    // (checks 'timeline.eventId' to guard against at-least-once redelivery).
     await CustomerTrackingViewModel.updateOne(
       { _id: fulfillmentId, 'timeline.eventId': { $ne: eventId } },
       { $push: { timeline: timelineEntry } }
@@ -141,7 +156,15 @@ export class MongoFulfillmentProjectionRepository implements IFulfillmentProject
     return doc ? docToCustomerTracking(doc) : null;
   }
 
-  // ── RestaurantFulfillmentView ────────────────────────────────────
+  async findByCustomer(customerId: string, query?: CustomerOrderQuery): Promise<CustomerOrderSummaryView[]> {
+    const docs = await CustomerTrackingViewModel.find({ customerId })
+      .sort({ updatedAt: -1 })
+      .skip(query?.offset ?? 0)
+      .limit(query?.limit ?? 50)
+      .lean<CustomerTrackingViewDocument[]>();
+    return docs.map(docToCustomerOrderSummary);
+  }
+
 
   async upsertRestaurantView(view: RestaurantFulfillmentView): Promise<void> {
     await RestaurantFulfillmentViewModel.updateOne(
@@ -177,7 +200,6 @@ export class MongoFulfillmentProjectionRepository implements IFulfillmentProject
     return docs.map(docToRestaurantView);
   }
 
-  // ── RiderQueueView ───────────────────────────────────────────────
 
   async upsertRiderQueueItem(view: RiderQueueView): Promise<void> {
     await RiderQueueViewModel.updateOne(
@@ -216,7 +238,27 @@ export class MongoFulfillmentProjectionRepository implements IFulfillmentProject
     return docs.map(docToRiderQueue);
   }
 
-  // ── AdminDashboardView ───────────────────────────────────────────
+  async findRiderCompletedDeliveries(
+    riderId: string,
+    query?: RiderHistoryQuery
+  ): Promise<RiderDeliveryHistoryView[]> {
+    const docs = await AdminDashboardViewModel.find({
+      riderId,
+      status: FULFILLMENT_STATUS.DELIVERED,
+    })
+      .sort({ updatedAt: -1 })
+      .skip(query?.offset ?? 0)
+      .limit(query?.limit ?? 50)
+      .lean<AdminDashboardViewDocument[]>();
+    return docs.map((doc) => ({
+      fulfillmentId: doc._id,
+      restaurantId: doc.restaurantId,
+      status: doc.status,
+      total: doc.total,
+      deliveredAt: doc.updatedAt,
+    }));
+  }
+
 
   async upsertAdminView(view: AdminDashboardView): Promise<void> {
     await AdminDashboardViewModel.updateOne(
@@ -263,4 +305,82 @@ export class MongoFulfillmentProjectionRepository implements IFulfillmentProject
       .lean<AdminDashboardViewDocument[]>();
     return docs.map(docToAdminView);
   }
+
+  async aggregateAnalytics(query: AnalyticsQuery): Promise<AnalyticsAggregate> {
+    const { restaurantIds, from, to, prevFrom } = query;
+
+    const baseMatch: Record<string, unknown> = { createdAt: { $gte: prevFrom, $lte: to } };
+    if (restaurantIds !== undefined) baseMatch.restaurantId = { $in: restaurantIds };
+
+    const inWindow = { createdAt: { $gte: from, $lte: to } };
+    const inPrev = { createdAt: { $gte: prevFrom, $lt: from } };
+    const deliveredInWindow = { status: FULFILLMENT_STATUS.DELIVERED, ...inWindow };
+
+    const facet = (
+      await AdminDashboardViewModel.aggregate([
+        { $match: baseMatch },
+        {
+          $facet: {
+            totals: [{ $match: inWindow }, { $count: 'n' }],
+            delivered: [
+              { $match: deliveredInWindow },
+              { $group: { _id: null, count: { $sum: 1 }, revenue: { $sum: '$total.amount' } } },
+            ],
+            statusBuckets: [{ $match: inWindow }, { $group: { _id: '$status', count: { $sum: 1 } } }],
+            revenueByDay: [
+              { $match: deliveredInWindow },
+              {
+                $group: {
+                  _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+                  amount: { $sum: '$total.amount' },
+                },
+              },
+              { $sort: { _id: 1 } },
+            ],
+            topRestaurants: [
+              { $match: deliveredInWindow },
+              { $group: { _id: '$restaurantId', revenue: { $sum: '$total.amount' }, orders: { $sum: 1 } } },
+              { $sort: { revenue: -1 } },
+              { $limit: 5 },
+            ],
+            prevTotals: [{ $match: inPrev }, { $count: 'n' }],
+            prevDelivered: [
+              { $match: { status: FULFILLMENT_STATUS.DELIVERED, ...inPrev } },
+              { $group: { _id: null, revenue: { $sum: '$total.amount' } } },
+            ],
+          },
+        },
+      ])
+    )[0] as AnalyticsFacet | undefined;
+
+    const count = (rows?: Array<{ n: number }>): number => rows?.[0]?.n ?? 0;
+    const delivered = facet?.delivered[0];
+    const prevDelivered = facet?.prevDelivered[0];
+
+    return {
+      totalOrders: count(facet?.totals),
+      deliveredCount: delivered?.count ?? 0,
+      deliveredRevenue: delivered?.revenue ?? 0,
+      statusBreakdown: (facet?.statusBuckets ?? []).map((b) => ({ status: b._id, count: b.count })),
+      revenueByDay: (facet?.revenueByDay ?? []).map((d) => ({ date: d._id, amount: d.amount })),
+      topRestaurants: (facet?.topRestaurants ?? []).map((r) => ({
+        restaurantId: r._id,
+        revenue: r.revenue,
+        orders: r.orders,
+      })),
+      prevTotalOrders: count(facet?.prevTotals),
+      prevDeliveredRevenue: prevDelivered?.revenue ?? 0,
+    };
+  }
+}
+
+/** Raw `$facet` output shape for aggregateAnalytics. */
+interface AnalyticsFacet {
+  totals: Array<{ n: number }>;
+  delivered: Array<{ count: number; revenue: number }>;
+  statusBuckets: Array<{ _id: string; count: number }>;
+  revenueByDay: Array<{ _id: string; amount: number }>;
+  topRestaurants: Array<{ _id: string; revenue: number; orders: number }>;
+  prevTotals: Array<{ n: number }>;
+  prevDelivered: Array<{ revenue: number }>;
 }

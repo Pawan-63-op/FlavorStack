@@ -1,9 +1,3 @@
-// Verify JWT on the Socket.IO handshake — rejects unauthenticated connections
-// (fulfillment_module.md §9, Phase 7). Mirrors the HTTP `authenticate` middleware: it does NOT load
-// the DB user (kept light); it only verifies the token and attaches the claims to `socket.data.user`.
-//
-// Token is read (in order) from the handshake `auth.token`, an `Authorization: Bearer` header, or
-// the `access_token` cookie — so browser and native clients both work.
 import type { Socket } from 'socket.io';
 import { ITokenService } from '../../../domain/identity/services/ITokenService';
 import { ACCESS_TOKEN_COOKIE } from '../../../api/v1/http/cookies';

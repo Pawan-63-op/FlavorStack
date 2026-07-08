@@ -83,8 +83,6 @@ describe('MongoFulfillmentRepository — rider assignment persistence', () => {
     const f = buildFulfillment();
     await repo.save(f);
 
-    // Each transition follows the real use-case flow: load → mutate once → update
-    // (the optimistic-concurrency guard keys on the version captured at load).
     f.offerToRider('rider-1', future());
     await repo.update(f);
 

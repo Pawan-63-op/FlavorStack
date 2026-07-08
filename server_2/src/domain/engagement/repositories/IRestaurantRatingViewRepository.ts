@@ -1,5 +1,3 @@
-// Port for the RestaurantRatingView read model (engagement_module.md §7). Updated incrementally
-// by RecomputeRestaurantRating (Phase 2) when a review is approved.
 export interface RestaurantRatingDistribution {
   1: number;
   2: number;

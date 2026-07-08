@@ -14,12 +14,6 @@ import { AppliedPromotion } from '../value-objects/AppliedPromotion';
 import { CartItemAdded } from '../events/CartItemAdded';
 import { CartCleared } from '../events/CartCleared';
 
-// AggregateRoot: customerId, restaurantId (null until first item), items: CartItem[],
-// currency (locked to first item's currency), appliedPromotion (Phase 8), version —
-// addItem(restaurantId, selection, unitPrice), removeItem(cartItemId),
-// updateQuantity(cartItemId, qty), applyPromotion(promo), removePromotion(), clear().
-// Enforces single-restaurant + currency invariants + one-promotion-per-cart;
-// raises CartItemAdded / CartCleared.
 export interface CartProps {
   customerId: string;
   restaurantId: string | null;
@@ -32,10 +26,6 @@ export interface CartProps {
 }
 
 export class Cart extends AggregateRoot<CartProps> {
-  // The `version` present when this aggregate was loaded from persistence (0 for a
-  // freshly created one). `touch()` advances `props.version` past this on each
-  // mutation; the repository uses it as the optimistic-lock guard while writing the
-  // new `version`.
   private readonly _persistedVersion: number;
 
   private constructor(props: CartProps, id?: UniqueEntityId) {
@@ -134,14 +124,12 @@ export class Cart extends AggregateRoot<CartProps> {
       return Result.fail<void>(new ValidationError('UnitPrice must be a valid Money value object'));
     }
 
-    // Single-restaurant invariant
     if (this.props.restaurantId !== null && this.props.restaurantId !== restaurantId) {
       return Result.fail<void>(
         new ConflictError('Cart already contains items from a different restaurant')
       );
     }
 
-    // Currency invariant
     if (this.props.currency !== null && this.props.currency !== unitPrice.currency) {
       return Result.fail<void>(
         new ValidationError(`Currency mismatch: cart is in ${this.props.currency}, item is in ${unitPrice.currency}`)
@@ -169,9 +157,6 @@ export class Cart extends AggregateRoot<CartProps> {
 
     this.props.restaurantId = restaurantId;
     this.props.currency = unitPrice.currency;
-    // Line set changed → any applied promotion's discount is stale; drop it so a
-    // discount computed against a different subtotal is never persisted. The customer
-    // re-applies; checkout re-validates/recomputes regardless.
     this.props.appliedPromotion = null;
     this.touch();
     this.addDomainEvent(new CartItemAdded(this.id.toString(), selection.menuItemId, selection.quantity.value));

@@ -4,7 +4,12 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { useAuthStore } from "@/store/authStore";
+import { landingPathForRole } from "@/lib/auth/roleLanding";
+import { replayGuestCart } from "@/lib/api/cart/replayGuestCart";
+import { queryKeys } from "@/lib/api/queryKeys";
 import { loginSchema, type LoginFormData } from "@/validations/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,20 +24,19 @@ export function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const router                      = useRouter();
   const searchParams                = useSearchParams();
+  const queryClient                 = useQueryClient();
   const login                       = useAuthStore((s) => s.login);
   const isAuthenticated             = useAuthStore((s) => s.isAuthenticated);
   const isLoading                   = useAuthStore((s) => s.isLoading);
   const user                        = useAuthStore((s) => s.user);
 
-  // FIX: redirect guard — already logged in → go home
+  // FIX: redirect guard — already logged in → honour intended destination,
+  // else land by role (Phase 14.1).
   useEffect(() => {
     if (!isLoading && isAuthenticated && user) {
-      const from = searchParams.get("from") || "/";
-      router.replace(from);
+      router.replace(searchParams.get("from") || landingPathForRole(user.role));
     }
   }, [isAuthenticated, isLoading, user]);
-
-  const from = searchParams.get("from") || "/";
 
   const form = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
@@ -43,8 +47,27 @@ export function Login() {
     setError("");
     try {
       await login(data.email, data.password);
-      // FIX: correct route — was "/Home"
-      router.push(from);
+      // Batch 5.4: merge any items staged while logged out into the server cart,
+      // then refresh the cart queries so the merged cart is shown post-redirect.
+      try {
+        const report = await replayGuestCart();
+        if (report.added > 0 || report.skipped > 0 || report.failed > 0) {
+          await queryClient.invalidateQueries({ queryKey: queryKeys.cart.current() });
+          await queryClient.invalidateQueries({ queryKey: queryKeys.cart.summary() });
+          if (report.added > 0) toast.success(`Merged ${report.added} item(s) into your cart`);
+          if (report.skipped > 0) {
+            toast.error(`${report.skipped} item(s) skipped — they were from another restaurant`);
+          }
+        }
+      } catch {
+        // Never block login on a merge failure; staged items remain for next time.
+      }
+      // Phase 14.1: honour intended destination, else land by role.
+      const loggedInUser = useAuthStore.getState().user;
+      const dest =
+        searchParams.get("from") ||
+        (loggedInUser ? landingPathForRole(loggedInUser.role) : "/");
+      router.push(dest);
     } catch (err: any) {
       // FIX: show real error message instead of "err"
       setError(err.message || "Login failed. Please check your credentials.");

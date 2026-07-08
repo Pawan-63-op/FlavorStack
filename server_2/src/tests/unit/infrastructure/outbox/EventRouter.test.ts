@@ -1,4 +1,3 @@
-// Catalog Phase 12 — EventRouter + catalog routing table tests.
 import { EventRouter } from '../../../../infrastructure/outbox/EventRouter';
 import {
   registerCatalogEventRoutes,

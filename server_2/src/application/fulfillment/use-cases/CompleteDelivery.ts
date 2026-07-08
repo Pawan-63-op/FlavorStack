@@ -1,6 +1,3 @@
-// UC: CompleteDelivery — the assigned rider hands the order to the customer (fulfillment_module.md §6.1,
-// Phase 4). The aggregate enforces OUT_FOR_DELIVERY + an ACCEPTED assignment owned by the rider and that
-// DELIVERED is terminal; emits DeliveryCompleted.
 import { Result } from '../../../domain/shared/Result';
 import { NotFoundError } from '../../../domain/shared/errors/NotFoundError';
 import { IFulfillmentRepository } from '../../../domain/fulfillment/repositories/IFulfillmentRepository';

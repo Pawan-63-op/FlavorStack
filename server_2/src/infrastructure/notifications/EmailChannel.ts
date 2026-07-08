@@ -1,5 +1,3 @@
-// Batch 4A — EMAIL adapter. Resolves the recipient email through INotificationRecipientResolver and
-// delegates the send to the existing IEmailProvider (Resend). Pure: it never touches Identity repos.
 import { Result } from '../../domain/shared/Result';
 import { Notification } from '../../domain/engagement/entities/Notification';
 import { NOTIFICATION_CHANNEL, NotificationChannelValue } from '../../domain/engagement/enums/notification-channel.enum';
@@ -25,7 +23,6 @@ export class EmailChannel implements INotificationChannel {
     const email = Email.create(address);
     if (email.isFailure) return Result.fail<ChannelSendResult>(NO_RECIPIENT);
 
-    // Provider/transport errors propagate so the worker can retry the still-PENDING notification.
     await this.emailProvider.sendNotification(email.getValue(), notification.renderedTitle, notification.renderedBody);
 
     return Result.ok<ChannelSendResult>({ provider: PROVIDER });

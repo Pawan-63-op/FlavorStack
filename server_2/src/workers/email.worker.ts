@@ -1,4 +1,3 @@
-// EmailWorker process — consumes `email-queue` and sends via IEmailProvider (Resend).
 import { buildEmailWorkerDeps } from '../container/worker.container';
 import { EmailWorker } from '../infrastructure/workers/email/EmailWorker';
 import { runWorker } from './shared/runWorker';

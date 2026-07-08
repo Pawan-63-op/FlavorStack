@@ -21,7 +21,6 @@ export class RefreshToken {
   ) {}
 
   async execute(dto: RefreshTokenDto): Promise<Result<AuthResponse>> {
-    // 1. Verify token signature
     const verifyResult = this.tokenService.verify(dto.refreshToken);
     if (verifyResult.isFailure) {
       return Result.fail(new ForbiddenError('invalid_token'));
@@ -29,35 +28,28 @@ export class RefreshToken {
     const payload = verifyResult.getValue();
     const { userId, sessionId, role } = payload;
 
-    // 2. Find session
     const session = await this.sessionStore.find(userId, sessionId);
     if (!session) {
       return Result.fail(new ForbiddenError('session_not_found'));
     }
 
-    // 3. Verify refresh token hash (detect reuse)
     const hashMatch = this.refreshTokenHasher.compare(dto.refreshToken, session.refreshTokenHash);
     if (!hashMatch) {
-      // Token reuse detected — invalidate all sessions for this user
       await this.sessionStore.invalidateAll(userId);
       return Result.fail(new ForbiddenError('token_reuse_detected'));
     }
 
-    // 4. Load user
     const user = await this.userRepo.findById(userId);
     if (!user || !user.isActive) {
       return Result.fail(new ForbiddenError('user_not_found_or_inactive'));
     }
 
-    // 4b. Reject stale tokenVersion (e.g. password changed / sessions revoked since issuance)
     if (payload.tokenVersion !== user.tokenVersion) {
       return Result.fail(new ForbiddenError('token_version_mismatch'));
     }
 
-    // 5. Invalidate old session
     await this.sessionStore.invalidate(userId, sessionId);
 
-    // 6. Build new session
     const newSessionId = randomUUID();
     const newJti = randomUUID();
     const now = Math.floor(Date.now() / 1000);
@@ -72,14 +64,11 @@ export class RefreshToken {
       exp: now + ACCESS_TOKEN_TTL_SECONDS,
     };
 
-    // 7. Issue new tokens
     const newAccessToken = this.tokenService.generateAccessToken(newPayload);
     const newRefreshToken = this.tokenService.generateRefreshToken(newPayload);
 
-    // 8. Hash new refresh token before storing (SHA-256, full-length — bcrypt is passwords-only)
     const newRefreshTokenHash = this.refreshTokenHasher.hash(newRefreshToken);
 
-    // 9. Persist new session
     const now2 = new Date();
     await this.sessionStore.persist({
       userId,

@@ -1,4 +1,3 @@
-// Dead Letter Queue — routes exhausted jobs from any source queue to `dead-letter-queue`
 import type { Job, Queue } from 'bullmq';
 import { QUEUE } from '../../../config/bullmq';
 

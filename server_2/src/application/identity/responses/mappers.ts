@@ -31,7 +31,6 @@ export function toAuthResponse(
 }
 
 export function toSessionResponse(session: SessionData): SessionResponse {
-  // NEVER expose refreshTokenHash
   return {
     sessionId: session.sessionId,
     device: session.deviceInfo,

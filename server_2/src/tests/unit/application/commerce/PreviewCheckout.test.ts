@@ -37,7 +37,6 @@ function buildCart(): Cart {
 
 const DELIVERY_POINT = { lat: 12.97, lng: 77.59 };
 
-// --- configurable fakes -------------------------------------------------------------------------
 
 interface GatewayConfig {
   restaurant?: CheckoutRestaurant;
@@ -139,7 +138,6 @@ function buildUseCase(opts: {
   );
 }
 
-// --- tests --------------------------------------------------------------------------------------
 
 describe('PreviewCheckout', () => {
   describe('happy path', () => {
@@ -156,7 +154,6 @@ describe('PreviewCheckout', () => {
       expect(view.minOrder).toEqual({ amount: 2000, currency: 'INR' });
       expect(view.promotion).toBeNull();
 
-      // line view: unit = 1000 + 200 = 1200, lineTotal = 2400
       expect(view.lines).toHaveLength(1);
       expect(view.lines[0].unitPrice).toEqual({ amount: 1200, currency: 'INR' });
       expect(view.lines[0].lineTotal).toEqual({ amount: 2400, currency: 'INR' });
@@ -166,8 +163,6 @@ describe('PreviewCheckout', () => {
         priceDelta: { amount: 200, currency: 'INR' },
       });
 
-      // pricing: subtotal 2400; fees platform 500, packaging 300, delivery 4000;
-      // taxable 7200; tax round(7200*0.05)=360; total 7560
       expect(view.pricing.subtotal.amount).toBe(2400);
       expect(view.pricing.fees.map((f) => [f.type, f.amount.amount])).toEqual([
         ['PLATFORM', 500],
@@ -183,7 +178,6 @@ describe('PreviewCheckout', () => {
   describe('promotion re-validation', () => {
     it('reflects a re-validated promotion discount in the breakdown', async () => {
       const cart = buildCart();
-      // structurally apply SAVE10; the use case re-validates it authoritatively at preview time
       cart.applyPromotion(
         AppliedPromotion.create({
           code: 'SAVE10',
@@ -196,7 +190,6 @@ describe('PreviewCheckout', () => {
 
       const view = (await buildUseCase({ cart }).execute({ customerId: 'cust-1', deliveryPoint: DELIVERY_POINT })).getValue();
 
-      // SAVE10 = 10% of 2400 = 240; taxable 2400+4800-240=6960; tax round(6960*0.05)=348; total 7308
       expect(view.promotion).toEqual({ code: 'SAVE10', discount: { amount: 240, currency: 'INR' } });
       expect(view.pricing.discount.amount).toBe(240);
       expect(view.pricing.tax.amount).toBe(348);
@@ -205,7 +198,6 @@ describe('PreviewCheckout', () => {
 
     it('fails when an applied promotion no longer qualifies at the fresh subtotal', async () => {
       const cart = buildCart();
-      // FLAT50 requires a ₹300 (30000 paise) minimum; the fresh subtotal is only 2400
       cart.applyPromotion(
         AppliedPromotion.create({
           code: 'FLAT50',

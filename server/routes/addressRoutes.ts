@@ -10,7 +10,6 @@ import { protect } from "../middleware/authMiddleware"; // your existing JWT mid
 
 const router = express.Router();
 
-// All routes are protected
 router.use(protect);
 
 router.get("/",           getAddresses);
@@ -21,6 +20,3 @@ router.patch("/:id/set-default", setDefaultAddress);
 
 export default router;
 
-// In your main server file (app.ts / index.ts), add:
-// import addressRoutes from "./routes/addressRoutes";
-// app.use("/api/addresses", addressRoutes);

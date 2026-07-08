@@ -1,4 +1,3 @@
-// Read shape returned by GetRestaurantRating (engagement_module.md §5/§7).
 import {
   RestaurantRatingDistribution,
   RestaurantRatingView,

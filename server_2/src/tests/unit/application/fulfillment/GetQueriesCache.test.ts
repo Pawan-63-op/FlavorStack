@@ -1,6 +1,3 @@
-// Unit tests for read-side cache wiring on the hot fulfillment queries (Phase 9 / Batch 9.1).
-// The projection repo and cache are mocked; we assert the use cases route reads through the cache
-// when one is supplied and fall back to direct reads when it is absent.
 import { GetLiveTracking } from '../../../../application/fulfillment/use-cases/GetLiveTracking';
 import { GetAdminDashboard } from '../../../../application/fulfillment/use-cases/GetAdminDashboard';
 import { IFulfillmentProjectionRepository } from '../../../../domain/fulfillment/repositories/IFulfillmentProjectionRepository';
@@ -10,6 +7,7 @@ function makeRepo(): jest.Mocked<IFulfillmentProjectionRepository> {
   return {
     upsertCustomerTracking: jest.fn().mockResolvedValue(undefined),
     findCustomerTracking: jest.fn().mockResolvedValue(null),
+    findByCustomer: jest.fn().mockResolvedValue([]),
     upsertRestaurantView: jest.fn().mockResolvedValue(undefined),
     removeRestaurantView: jest.fn().mockResolvedValue(undefined),
     findRestaurantQueue: jest.fn().mockResolvedValue([]),
@@ -17,13 +15,14 @@ function makeRepo(): jest.Mocked<IFulfillmentProjectionRepository> {
     removeRiderQueueItem: jest.fn().mockResolvedValue(undefined),
     removeAllRiderQueueItemsForFulfillment: jest.fn().mockResolvedValue(undefined),
     findRiderQueue: jest.fn().mockResolvedValue([]),
+    findRiderCompletedDeliveries: jest.fn().mockResolvedValue([]),
     upsertAdminView: jest.fn().mockResolvedValue(undefined),
     patchAdminView: jest.fn().mockResolvedValue(undefined),
     findAdminDashboard: jest.fn().mockResolvedValue([]),
+    aggregateAnalytics: jest.fn(),
   };
 }
 
-// Pass-through cache double: invokes the loader and records the key it was asked to remember.
 function makePassThroughCache(): jest.Mocked<IFulfillmentReadCache> {
   return {
     rememberTracking: jest.fn((_id: string, loader: () => Promise<unknown>) => loader()),
@@ -63,7 +62,6 @@ describe('GetLiveTracking caching', () => {
   it('serves a served-from-cache value without hitting the projection repo', async () => {
     const repo = makeRepo();
     const cache = makePassThroughCache();
-    // Simulate a cache hit: cache returns the value, loader (repo) never runs.
     cache.rememberTracking.mockResolvedValue(TRACKING_VIEW);
     const uc = new GetLiveTracking(repo, cache);
 

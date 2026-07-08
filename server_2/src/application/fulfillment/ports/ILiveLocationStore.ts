@@ -1,6 +1,3 @@
-// Port for the rider's latest-location store + throttle gate (fulfillment_module.md §9, Phase 7).
-// Implemented by infrastructure/realtime/RedisLiveLocationStore (Redis: O(1) latest read + a
-// distributed, multi-instance-safe throttle gate so Mongo persistence stays write-light).
 import { RiderLocationSnapshot } from './RiderLocationSnapshot';
 
 export interface ILiveLocationStore {

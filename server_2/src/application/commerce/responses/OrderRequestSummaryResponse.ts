@@ -1,6 +1,3 @@
-// Output DTO: OrderRequestSummary — projection of an immutable OrderRequest for history/confirmation screens
-// (Commerce Phase 11 Batch 4, commerce_module.md §7). Returned by the Checkout use case after a successful
-// commit (and on idempotent replay), mapped from the persisted aggregate. Plain JSON-safe data only.
 import { OrderRequest } from '../../../domain/commerce/entities/OrderRequest';
 
 export interface MoneyResponse {

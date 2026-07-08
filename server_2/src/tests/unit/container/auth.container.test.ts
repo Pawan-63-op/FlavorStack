@@ -78,7 +78,6 @@ describe('createAuthContainer', () => {
     const verified = container.tokenService.verify(token);
 
     expect(verified.isSuccess).toBe(true);
-    // accessTtlSeconds (AuthConfig) -> accessTtl (JwtTokenServiceConfig)
     expect(decoded!.exp - decoded!.iat).toBe(1234);
   });
 

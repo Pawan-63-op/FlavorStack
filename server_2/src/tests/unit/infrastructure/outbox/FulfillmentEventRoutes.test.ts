@@ -1,10 +1,3 @@
-// Fulfillment Phase 8 (§5.3) — FulfillmentEventRoutes routing table tests.
-//
-// Fulfillment fans its customer/rider-facing status events out to QUEUE.notification, and
-// additionally routes OrderRequested to QUEUE.fulfillment (the future split transport). Internal-only
-// events (RiderOffered, RiderAssignmentExpired) must NOT reach notification. Registration is additive
-// and idempotent — it unions onto a shared router without clobbering other contexts' routes.
-// Mirrors CommerceEventRoutes.test.ts / the CatalogEventRoutes table.
 import { EventRouter } from '../../../../infrastructure/outbox/EventRouter';
 import {
   registerFulfillmentEventRoutes,
@@ -79,11 +72,8 @@ describe('Fulfillment event routes', () => {
     registerCommerceEventRoutes(shared);
     registerFulfillmentEventRoutes(shared);
 
-    // Commerce's CheckoutReadyForPayment route is untouched.
     expect(shared.routesFor('CheckoutReadyForPayment')).toEqual([QUEUE.payments]);
-    // Fulfillment's notification routes are present.
     expect(shared.routesFor('FulfillmentCreated')).toEqual([QUEUE.notification]);
-    // OrderRequested is unioned: Commerce's Ordering target + Fulfillment's queue.
     expect(shared.routesFor('OrderRequested').sort()).toEqual(
       [QUEUE.ordering, QUEUE.fulfillment].sort(),
     );

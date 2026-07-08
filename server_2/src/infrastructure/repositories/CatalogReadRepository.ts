@@ -1,13 +1,3 @@
-// MongoCatalogReadRepository — projection-driven reads for customer-facing queries
-// (Catalog Phase 9). Reads ONLY the denormalized read-model collections (never the
-// write aggregates) and derives the time-dependent `isOpen` / effective item
-// availability at query time.
-//
-// Visibility policy: the public-facing finders surface only PUBLIC + ACTIVE +
-// live (deletedAt: null) restaurants, so hidden/draft/paused/closed restaurants
-// disappear from browse/detail/search. `getItemsSnapshot` is the exception — it
-// is the Cart/Order snapshot read and returns raw item price/availability by id
-// regardless of restaurant open-state.
 import {
   ICatalogReadRepository,
   ListRestaurantsFilter,
@@ -94,9 +84,6 @@ export class MongoCatalogReadRepository implements ICatalogReadRepository {
     }
 
     const now = new Date();
-    // `isOpen` is a derived filter, so it cannot be pushed into the query; we
-    // over-fetch and filter in memory, walking pages until the requested page is
-    // filled or the collection is exhausted.
     const wantsOpenFilter = filter.isOpen !== undefined;
     const items: RestaurantSummaryView[] = [];
     let cursor = params.cursor;
@@ -171,7 +158,6 @@ export class MongoCatalogReadRepository implements ICatalogReadRepository {
     };
   }
 
-  // Effective availability ANDs the item's raw toggle with the restaurant open-state.
   private toMenuItemView(item: MenuViewItemDocument, restaurantOpen: boolean): MenuItemView {
     return {
       id: item.id,
@@ -197,7 +183,6 @@ export class MongoCatalogReadRepository implements ICatalogReadRepository {
     }).lean<MenuItemSearchDocument>();
     if (!doc) return null;
 
-    // Derive effective availability against the restaurant's live open-state.
     const summary = await RestaurantSummaryModel.findOne({ _id: doc.restaurantId }).lean<RestaurantSummaryDocument>();
     const restaurantOpen = summary
       ? deriveIsOpen(
@@ -215,8 +200,6 @@ export class MongoCatalogReadRepository implements ICatalogReadRepository {
       _id: { $in: itemIds },
       deletedAt: null,
     }).lean<MenuItemSearchDocument[]>();
-    // Snapshot is the Cart/Order contract: raw item price + availability, no
-    // restaurant open-state override.
     return docs.map((doc) => this.searchDocToView(doc, doc.isAvailable));
   }
 

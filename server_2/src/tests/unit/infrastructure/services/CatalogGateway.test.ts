@@ -18,7 +18,6 @@ import {
 import { CursorPage, CursorPaginationParams } from '../../../../domain/catalog/types/CursorPagination';
 import { CheckServiceabilityDto } from '../../../../application/catalog/dtos/QueryDtos';
 
-// --- Fakes over Catalog's three published read ports (the ACL's only inputs) ---
 
 class FakeCatalogReadRepository implements ICatalogReadRepository {
   constructor(

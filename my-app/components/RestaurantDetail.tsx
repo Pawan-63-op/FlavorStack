@@ -3,217 +3,205 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { motion } from "framer-motion";
-import { MapPin, Clock, Star, ArrowLeft, Plus, Minus, ShoppingCart, MessageSquare } from "lucide-react";
-import { useState, useEffect, Children } from "react";
+import { Star, ArrowLeft, Plus, Minus, ShoppingCart, MessageSquare, Navigation, Loader2 } from "lucide-react";
+import { useMemo, useState } from "react";
+import { isEnabled } from "@/lib/config/featureFlags";
+import { useGeolocation } from "@/lib/geo/useGeolocation";
+import { useServiceability } from "@/lib/api/hooks/useCatalog";
 import { ImageWithFallback } from "@/figma/ImageWithFallback";
-import { useCartStore } from "@/admin_new/src/store/cartStore";
-import { useReviewStore } from "@/store/reviewStore";
-import { StarRating } from "@/components/StarRating";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-
-interface MenuItem {
-  id: string;
-  name: string;
-  description: string;
-  price: number;
-  image: string;
-  category: string;
-  isVegetarian: boolean;
-  isSpicy: boolean;
-  calories: number;
-}
-
-interface Restaurant {
-  id: string;
-  name: string;
-  cuisine: string;
-restaurantName:string;
-  rating: number;
-  reviews: number;
-  deliveryTime: string;
-  deliveryFee: number;
-  minOrder: number;
-  image: string;
-  imageUrl?:string;
-  city: string;
-  address: string;
-}
+import { useAddToCart, useClearCart } from "@/lib/api/hooks/useCart";
+import { type AddCartItemInput } from "@/lib/api/services/cart";
+import { useAuthStore } from "@/store/authStore";
+import { useGuestCartStore, type GuestCartLine } from "@/store/guestCartStore";
+import { ReviewCard } from "@/components/reviews/ReviewCard";
+import { RatingSummary } from "@/components/reviews/RatingSummary";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  useRestaurant,
+  useRestaurantMenu,
+  useRestaurantRating,
+} from "@/lib/api/hooks/useCatalog";
+import {
+  useRestaurantReviews,
+  useRestaurantRating as useReviewsRating,
+} from "@/lib/api/hooks/useReviews";
+import { type MenuItemViewModel } from "@/lib/api/adapters/menu";
+import { ApiError } from "@/lib/api/errors/ApiError";
 
 interface RestaurantDetailProps {
   restaurantId: string | undefined;
   onNavigate: (page: string, data?: any) => void;
 }
 
+/**
+ * Flag-gated ("nearby"), opt-in delivery check. Resolves the user's location on
+ * demand, then asks `/catalog/serviceability` whether THIS restaurant delivers
+ * there (matched by `restaurantId`) and shows the resolved fee / min order.
+ * Renders nothing unless the flag is on; never fetches until the user clicks.
+ */
+function ServiceabilityResult({
+  restaurantId,
+  lat,
+  lng,
+}: {
+  restaurantId: string;
+  lat: number;
+  lng: number;
+}) {
+  const { data, isLoading } = useServiceability(lat, lng);
+
+  if (isLoading) {
+    return (
+      <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" /> Checking delivery...
+      </span>
+    );
+  }
+
+  const match = data?.find((s) => s.restaurantId === restaurantId);
+  if (!match) {
+    return <Badge variant="destructive">Not deliverable to your location</Badge>;
+  }
+
+  return (
+    <Badge className="bg-green-600 hover:bg-green-600 text-white">
+      Delivers to you · {match.formattedDeliveryFee} fee · min {match.formattedMinOrder}
+    </Badge>
+  );
+}
+
+function ServiceabilityCheck({ restaurantId }: { restaurantId: string }) {
+  const { coords, status, error, request } = useGeolocation();
+
+  if (coords) {
+    return <ServiceabilityResult restaurantId={restaurantId} lat={coords.lat} lng={coords.lng} />;
+  }
+
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <Button
+        size="sm"
+        variant="secondary"
+        onClick={request}
+        disabled={status === "prompting"}
+        className="gap-2"
+      >
+        {status === "prompting" ? (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin" /> Locating...
+          </>
+        ) : (
+          <>
+            <Navigation className="h-4 w-4" /> Check delivery to my location
+          </>
+        )}
+      </Button>
+      {error && <span className="text-xs text-destructive">{error}</span>}
+    </div>
+  );
+}
+
 export default function RestaurantDetail({ restaurantId, onNavigate }: RestaurantDetailProps) {
-  const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
-  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState("All");
+  const id = restaurantId ?? "";
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>("All");
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [activeTab, setActiveTab] = useState("menu");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  const addToCart = useCartStore((state) => state.addToCart);
-  const getRestaurantReviews   = useReviewStore((s) => s.getRestaurantReviews);
-  const fetchRestaurantReviews = useReviewStore((s) => s.fetchRestaurantReviews);
-  const getAverageRating       = useReviewStore((s) => s.getAverageRating);
-  const restaurantReviews      = restaurantId ? getRestaurantReviews(restaurantId as string) : [];
+  const addToCart = useAddToCart();
+  const clearCart = useClearCart();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const addGuestLine = useGuestCartStore((s) => s.addLine);
+  const replaceGuestCart = useGuestCartStore((s) => s.replaceWith);
+  const {
+    data: restaurant,
+    isLoading: isRestaurantLoading,
+    isError: isRestaurantError,
+    error: restaurantError,
+  } = useRestaurant(id);
+  const { data: menu, isLoading: isMenuLoading } = useRestaurantMenu(id);
+  const { data: rating } = useRestaurantRating(id);
 
-  // Fetch restaurant details from MongoDB
-  useEffect(() => {
-    const fetchRestaurantDetails = async () => {
-      try {
-        setLoading(true);
-        setError(null);
+  // Reviews tab (Batch 9.3): aggregate rating + distribution and the
+  // offset-paginated approved-reviews list, both `reviews`-flag-gated.
+  const { data: reviewsRating } = useReviewsRating(id);
+  const reviewsQuery = useRestaurantReviews(id);
+  const reviewItems = reviewsQuery.data?.pages.flatMap((page) => page.items) ?? [];
 
-        // const res = await fetch(`http://localhost:8000/api/restaurants/${restaurantId}`){}
-         const res = await fetch(`http://localhost:8000/api/restaurants/${restaurantId}`, {
-     
-      headers: {
-        "Content-Type": "application/json",
-      },
-        credentials: "include", // 🔥 VERY IMPORTANT
-   
-    });
-        if (!res.ok) {
-          throw new Error(`HTTP error! status: ${res.status}`);
-        }
-        
-        const data2 = await res.json();
-        const data= data2.restaurant;
-        // Format restaurant data
-        const formattedRestaurant: Restaurant = {
-          id: data._id?.toString() || data.id,
-          name: data.name,
-          restaurantName: data.restaurantName,
-          cuisine: data.cuisine,
-          rating: data.rating,
-          reviews: data.reviews || 0,
-          deliveryTime: data.deliveryTime,
-          deliveryFee: data.deliveryFee || 2.99,
-          minOrder: data.minOrder || 15,
-          imageUrl: data.imageUrl,
-          city: data.city,
-          image:data.image,
-          address: data.address || `${data.city}, ${data.country}`
-        };
-        
-        setRestaurant(formattedRestaurant);
-      } catch (error) {
-        console.error("Error fetching restaurant:", error);
-        setError(error instanceof Error ? error.message : "Failed to fetch restaurant");
-      } finally {
-        setLoading(false);
-      }
-    };
+  const categories = useMemo(() => menu?.categories ?? [], [menu]);
 
-    fetchRestaurantDetails();
-  }, [restaurantId]);
-
-  // Fetch menu items from MongoDB
-  useEffect(() => {
-    const fetchMenuItems = async () => {
-      try {
-        const res = await fetch(`http://localhost:8000/api/restaurants/${restaurantId}/menu`, {
-     
-      headers: {
-        "Content-Type": "application/json",
-      },
-        credentials: "include", // 🔥 VERY IMPORTANT
-   
-    });
-        
-        if (!res.ok) {
-          throw new Error(`HTTP error! status: ${res.status}`);
-        }
-        
-        const data = await res.json();
-        
-        // Handle different response formats
-        let formattedItems = data.menus;
-        // console.lo
- 
-        // if (!Array.isArray(data)) {
-        //   if (data.menu && Array.isArray(data.menu)) {
-        //     menuData = data.menu;
-        //   } else if (data.items && Array.isArray(data.items)) {
-        //     menuData = data.items;
-        //   } else {
-        //     menuData = [];
-        //   }
-        // }
-        
-        // Format menu items
-        // const formattedItems: MenuItem[] = menuData.map((currrent: any) => ({
-        //   item= menuItme.findbyid(current as objectid);
-        //   id: item._id?.toString() || item.id,
-        //   name: item.name,
-        //   description: item.description,
-        //   price: item.price,
-        //   image: item.image,
-        //   category: item.category,
-        //   isVegetarian: item.isVegetarian || false,
-        //   isSpicy: item.isSpicy || false,
-        //   calories: item.calories || 0
-        // }));
-//         const formattedItems: MenuItem[] = await Promise.all(
-//   menuData.map(async (current: any) => {
-//     const item = await menuItem.findById(current as ObjectId);
-//     return {
-//       id: item._id?.toString() || item.id,
-//       name: item.name,
-//       description: item.description,
-//       price: item.price,
-//       image: item.image,
-//       category: item.category,
-//       isVegetarian: item.isVegetarian || false,
-//       isSpicy: item.isSpicy || false,
-//       calories: item.calories || 0
-//     };
-//   })
-// );
-        setMenuItems(formattedItems);
-        console.log(menuItems,"menuitems");
-        console.log(formattedItems,"menudata");
-      } catch (error) {
-        console.error("Error fetching menu items:", error);
-      }
-    };
-
-    if (restaurantId) {
-      fetchMenuItems();
+  const filteredItems = useMemo<MenuItemViewModel[]>(() => {
+    if (selectedCategoryId === "All") {
+      return categories.flatMap((category) => category.items);
     }
-  }, [restaurantId]);
+    return categories.find((category) => category.id === selectedCategoryId)?.items ?? [];
+  }, [categories, selectedCategoryId]);
 
-  // Fetch real reviews for this restaurant from MongoDB
-  useEffect(() => {
-    if (restaurantId) {
-      fetchRestaurantReviews(restaurantId as string);
-    }
-  }, [restaurantId]);
-
-  const categories = ["All", ...Array.from(new Set(menuItems.map(item => item.category)))];
-
-  const filteredItems = selectedCategory === "All"
-    ? menuItems
-    : menuItems.filter(item => item.category === selectedCategory);
-
-  const handleAddToCart = (item: MenuItem) => {
+  const handleAddToCart = async (item: MenuItemViewModel) => {
+    if (!item.isAvailable || !restaurant) return;
     const quantity = quantities[item.id] || 1;
-    if (restaurant) {
-      addToCart({
-        id: item.id,
-        restaurantId: String(restaurant.id),
-        restaurantName: restaurant.restaurantName,
+    // `unitPriceMinor` is the server wire shape ({amount: integer minor units,
+    // currency}); the server trusts this client-supplied price (no catalog ACL
+    // yet) and re-prices on read via its own projection.
+    const input: AddCartItemInput = {
+      restaurantId: restaurant.id,
+      menuItemId: item.id,
+      quantity,
+      unitPrice: item.unitPriceMinor,
+    };
+
+    const succeed = () => {
+      toast.success(`${item.name} × ${quantity} added to cart!`);
+      setQuantities({ ...quantities, [item.id]: 1 });
+    };
+
+    // Logged out: stage into the local guest buffer (merged into the server
+    // cart on login). Mirrors the authed single-restaurant conflict prompt.
+    if (!isAuthenticated) {
+      const guestLine: GuestCartLine = {
+        restaurantId: restaurant.id,
+        restaurantName: restaurant.name,
+        menuItemId: item.id,
+        quantity,
+        unitPrice: item.unitPriceMinor,
         name: item.name,
-        price: item.price,
-        image: item.image,
-        quantity: quantity
-      });
+        image: item.imageUrl,
+      };
+      const result = addGuestLine(guestLine);
+      if (!result.ok) {
+        const startNew = window.confirm(
+          "Your cart has items from another restaurant. Start a new cart with this item?",
+        );
+        if (!startNew) return;
+        replaceGuestCart(guestLine);
+      }
+      succeed();
+      return;
     }
-    setQuantities({ ...quantities, [item.id]: 1 });
+
+    try {
+      await addToCart.mutateAsync(input);
+      succeed();
+    } catch (err) {
+      // The server cart holds items from a single restaurant. A 409 means this
+      // item is from a different restaurant than the active cart — offer to
+      // clear and start fresh, then retry the same line.
+      if (err instanceof ApiError && err.category === "conflict") {
+        const startNew = window.confirm(
+          "Your cart has items from another restaurant. Start a new cart with this item?",
+        );
+        if (!startNew) return;
+        try {
+          await clearCart.mutateAsync();
+          await addToCart.mutateAsync(input);
+          succeed();
+        } catch (retryErr) {
+          toast.error(retryErr instanceof ApiError ? retryErr.message : "Could not add to cart");
+        }
+        return;
+      }
+      toast.error(err instanceof ApiError ? err.message : "Could not add to cart");
+    }
   };
 
   const updateQuantity = (itemId: string, delta: number) => {
@@ -223,8 +211,10 @@ export default function RestaurantDetail({ restaurantId, onNavigate }: Restauran
     }));
   };
 
+  const isLoading = isRestaurantLoading || isMenuLoading;
+
   // Loading state
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="w-full max-w-7xl mx-auto p-8">
         <div className="text-center">
@@ -236,7 +226,9 @@ export default function RestaurantDetail({ restaurantId, onNavigate }: Restauran
   }
 
   // Error state
-  if (error || !restaurant) {
+  if (isRestaurantError || !restaurant) {
+    const message =
+      restaurantError instanceof ApiError ? restaurantError.message : "Restaurant not found";
     return (
       <div className="w-full max-w-7xl mx-auto p-8">
         <Button variant="ghost" onClick={() => onNavigate("restaurants", {})} className="gap-2 mb-4">
@@ -247,7 +239,7 @@ export default function RestaurantDetail({ restaurantId, onNavigate }: Restauran
           <CardContent className="pt-6">
             <div className="text-center">
               <p className="text-lg text-destructive mb-4">Error loading restaurant</p>
-              <p className="text-sm text-muted-foreground mb-4">{error || "Restaurant not found"}</p>
+              <p className="text-sm text-muted-foreground mb-4">{message}</p>
               <Button onClick={() => onNavigate("restaurants", {})}>Back to Restaurants</Button>
             </div>
           </CardContent>
@@ -256,7 +248,6 @@ export default function RestaurantDetail({ restaurantId, onNavigate }: Restauran
     );
   }
 
-// const menuLink = await op(restaurant);
   return (
     <div className="w-full max-w-7xl mx-auto space-y-6 p-6">
       {/* Back Button */}
@@ -279,43 +270,24 @@ export default function RestaurantDetail({ restaurantId, onNavigate }: Restauran
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
             <div className="absolute bottom-6 left-6 text-white">
-              <h1 className="text-4xl font-bold mb-2 text-white">{restaurant.restaurantName}</h1>
+              <h1 className="text-4xl font-bold mb-2 text-white">{restaurant.name}</h1>
               <div className="flex items-center gap-4 text-sm">
                 <Badge className="bg-white/90 text-foreground hover:bg-white">
                   <Star className="h-3 w-3 mr-1 fill-yellow-400 text-yellow-400" />
-                  {restaurant.rating} ({restaurant.reviews} reviews)
+                  {(rating?.avgRating ?? 0).toFixed(1)} ({rating?.reviewCount ?? 0} reviews)
                 </Badge>
                 <span className="text-white/90">{restaurant.cuisine}</span>
+                {!restaurant.isOpen && (
+                  <Badge variant="destructive">Closed</Badge>
+                )}
               </div>
+              {isEnabled("nearby") && (
+                <div className="mt-3">
+                  <ServiceabilityCheck restaurantId={restaurant.id} />
+                </div>
+              )}
             </div>
           </div>
-
-          <CardContent className="pt-6">
-         
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="flex items-center gap-3">
-                <Clock className="h-5 w-5 text-muted-foreground" />
-                <div>
-                  <p className="text-sm text-muted-foreground">Delivery Time</p>
-                  <p className="font-medium">{restaurant.deliveryTime}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <ShoppingCart className="h-5 w-5 text-muted-foreground" />
-                <div>
-                  <p className="text-sm text-muted-foreground">Min. Order</p>
-                  <p className="font-medium">${restaurant.minOrder}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <MapPin className="h-5 w-5 text-muted-foreground" />
-                <div>
-                  <p className="text-sm text-muted-foreground">Location</p>
-                  <p className="font-medium">{restaurant.city}</p>
-                </div>
-              </div>
-            </div>
-          </CardContent>
         </Card>
       </motion.div>
 
@@ -324,13 +296,13 @@ export default function RestaurantDetail({ restaurantId, onNavigate }: Restauran
         <TabsList className="grid w-full max-w-md grid-cols-2">
           <TabsTrigger value="menu">Menu</TabsTrigger>
           <TabsTrigger value="reviews">
-            Reviews ({restaurantReviews.length})
+            Reviews ({rating?.reviewCount ?? 0})
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="menu" className="space-y-6 mt-6">
           {/* Category Filter */}
-          {menuItems.length > 0 && (
+          {categories.length > 0 && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -339,13 +311,19 @@ export default function RestaurantDetail({ restaurantId, onNavigate }: Restauran
               <Card className="border-2 shadow-md">
                 <CardContent className="pt-6">
                   <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant={selectedCategoryId === "All" ? "default" : "outline"}
+                      onClick={() => setSelectedCategoryId("All")}
+                    >
+                      All
+                    </Button>
                     {categories.map((category) => (
                       <Button
-                        key={category}
-                        variant={selectedCategory === category ? "default" : "outline"}
-                        onClick={() => setSelectedCategory(category)}
+                        key={category.id}
+                        variant={selectedCategoryId === category.id ? "default" : "outline"}
+                        onClick={() => setSelectedCategoryId(category.id)}
                       >
-                        {category}
+                        {category.label}
                       </Button>
                     ))}
                   </div>
@@ -370,7 +348,7 @@ export default function RestaurantDetail({ restaurantId, onNavigate }: Restauran
                       <div className="flex gap-4">
                         <div className="relative w-24 h-24 flex-shrink-0 rounded-lg overflow-hidden">
                           <ImageWithFallback
-                            src={item.image}
+                            src={item.imageUrl}
                             alt={item.name}
                             className="w-full h-full object-cover"
                           />
@@ -386,23 +364,20 @@ export default function RestaurantDetail({ restaurantId, onNavigate }: Restauran
                                     🌱 Veg
                                   </Badge>
                                 )}
-                                {item.isSpicy && (
+                                {!item.isAvailable && (
                                   <Badge variant="destructive" className="text-xs">
-                                    🌶️ Spicy
+                                    Unavailable
                                   </Badge>
                                 )}
                               </div>
-                              <p className="text-sm text-muted-foreground mb-2">
-                                {item.description}
-                              </p>
-                              {item.calories > 0 && (
-                                <p className="text-xs text-muted-foreground">
-                                  {item.calories} calories
+                              {item.description && (
+                                <p className="text-sm text-muted-foreground mb-2">
+                                  {item.description}
                                 </p>
                               )}
                             </div>
                             <div className="text-right">
-                              <p className="text-xl font-bold mb-3">${item.price.toFixed(2)}</p>
+                              <p className="text-xl font-bold mb-3">{item.formattedPrice}</p>
                             </div>
                           </div>
 
@@ -412,6 +387,7 @@ export default function RestaurantDetail({ restaurantId, onNavigate }: Restauran
                                 variant="ghost"
                                 size="icon"
                                 className="h-8 w-8"
+                                disabled={!item.isAvailable}
                                 onClick={() => updateQuantity(item.id, -1)}
                               >
                                 <Minus className="h-4 w-4" />
@@ -423,6 +399,7 @@ export default function RestaurantDetail({ restaurantId, onNavigate }: Restauran
                                 variant="ghost"
                                 size="icon"
                                 className="h-8 w-8"
+                                disabled={!item.isAvailable}
                                 onClick={() => updateQuantity(item.id, 1)}
                               >
                                 <Plus className="h-4 w-4" />
@@ -430,6 +407,7 @@ export default function RestaurantDetail({ restaurantId, onNavigate }: Restauran
                             </div>
                             <Button
                               onClick={() => handleAddToCart(item)}
+                              disabled={!item.isAvailable || addToCart.isPending}
                               className="gap-2"
                             >
                               <ShoppingCart className="h-4 w-4" />
@@ -453,90 +431,39 @@ export default function RestaurantDetail({ restaurantId, onNavigate }: Restauran
         </TabsContent>
 
         <TabsContent value="reviews" className="space-y-6 mt-6">
-          {/* Header with average rating */}
-          <div className="flex items-center justify-between flex-wrap gap-3">
-            <div>
-              <h2 className="text-2xl font-bold">Customer Reviews</h2>
-              <p className="text-sm text-muted-foreground">
-                {restaurantReviews.length} review{restaurantReviews.length !== 1 ? "s" : ""}
-              </p>
-            </div>
-            {restaurantReviews.length > 0 && (
-              <div className="flex items-center gap-2 p-3 bg-accent rounded-xl">
-                <StarRating rating={getAverageRating(restaurantId as string)} readonly size="sm" />
-                <span className="font-bold text-lg">
-                  {getAverageRating(restaurantId as string).toFixed(1)}
-                </span>
-                <span className="text-sm text-muted-foreground">/ 5</span>
+          {isEnabled("reviews") && reviewItems.length > 0 ? (
+            <>
+              <RatingSummary rating={reviewsRating} />
+              <div className="space-y-4">
+                {reviewItems.map((review) => (
+                  <ReviewCard key={review.id} review={review} />
+                ))}
               </div>
-            )}
-          </div>
-
-          {restaurantReviews.length > 0 ? (
-            <div className="space-y-4">
-              {restaurantReviews.map((review, index) => (
-                <motion.div
-                  key={review.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.05 }}
-                >
-                  <Card className="border-2 shadow-md hover:shadow-lg transition-shadow">
-                    <CardContent className="pt-6">
-                      <div className="flex gap-4">
-                        <Avatar className="h-12 w-12 shrink-0">
-                          <AvatarImage
-                            src={`https://api.multiavatar.com/${encodeURIComponent(review.userName || "user")}.svg`}
-                          />
-                          <AvatarFallback>{review.userName?.charAt(0) || "?"}</AvatarFallback>
-                        </Avatar>
-
-                        <div className="flex-1 space-y-2">
-                          <div className="flex items-start justify-between gap-4 flex-wrap">
-                            <div>
-                              <h4 className="font-semibold">{review.userName}</h4>
-                              <span className="text-xs text-muted-foreground">{review.date}</span>
-                            </div>
-                            <StarRating rating={review.rating} readonly size="sm" />
-                          </div>
-
-                          <p className="text-muted-foreground leading-relaxed text-sm">
-                            {review.comment}
-                          </p>
-
-                          {review.photos && review.photos.length > 0 && (
-                            <div className="flex gap-2 flex-wrap mt-2">
-                              {review.photos.map((photo, photoIndex) => (
-                                <div
-                                  key={photoIndex}
-                                  className="relative w-20 h-20 rounded-lg overflow-hidden border-2 border-border"
-                                >
-                                  <img
-                                    src={photo || undefined}
-                                    alt={`Review photo ${photoIndex + 1}`}
-                                    className="w-full h-full object-cover"
-                                  />
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              ))}
-            </div>
+              {reviewsQuery.hasNextPage && (
+                <div className="flex justify-center">
+                  <Button
+                    variant="outline"
+                    onClick={() => reviewsQuery.fetchNextPage()}
+                    disabled={reviewsQuery.isFetchingNextPage}
+                  >
+                    {reviewsQuery.isFetchingNextPage ? "Loading…" : "Load more reviews"}
+                  </Button>
+                </div>
+              )}
+            </>
           ) : (
-            <Card className="border-2 border-dashed">
-              <CardContent className="pt-12 pb-12 text-center">
-                <MessageSquare className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
-                <h3 className="text-xl font-semibold mb-2">No reviews yet</h3>
-                <p className="text-muted-foreground">
-                  Be the first to review this restaurant!
-                </p>
-              </CardContent>
-            </Card>
+            <>
+              {isEnabled("reviews") && <RatingSummary rating={reviewsRating} />}
+              <Card className="border-2 border-dashed">
+                <CardContent className="pt-12 pb-12 text-center">
+                  <MessageSquare className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
+                  <h3 className="text-xl font-semibold mb-2">No reviews yet</h3>
+                  <p className="text-muted-foreground">
+                    Be the first to review this restaurant!
+                  </p>
+                </CardContent>
+              </Card>
+            </>
           )}
         </TabsContent>
       </Tabs>

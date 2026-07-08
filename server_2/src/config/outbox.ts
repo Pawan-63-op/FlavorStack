@@ -1,4 +1,3 @@
-// OutboxProcessor poll interval, batch size, retry/backoff config
 export interface OutboxConfig {
   pollIntervalMs: number;
   batchSize: number;

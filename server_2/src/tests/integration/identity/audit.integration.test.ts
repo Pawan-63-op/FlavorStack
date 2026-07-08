@@ -1,8 +1,3 @@
-// Batch 7 integration tests — audit log persistence (write/read smoke tests).
-//
-// MongoAuditRepository is infra-only and unwired (no domain interface, no
-// use-case calls it yet) — these tests exercise it directly against the
-// `audit_logs` collection (plan §5.5 / §17 Batch 7).
 import { TransactionContext } from '../../../infrastructure/database/TransactionContext';
 import { MongoAuditRepository } from '../../../infrastructure/repositories/AuditRepository';
 import { AuditLogModel, AuditLogDocument } from '../../../infrastructure/database/models/AuditLogModel';

@@ -1,8 +1,3 @@
-// UC: AssignRider — admin manual (re)assignment (fulfillment_module.md §6.1 / §7.4, Phase 3B).
-// Backs POST /admin/fulfillments/:id/reassign. When the admin names a riderId we offer to exactly
-// that rider; otherwise we fall back to IDeliveryAssignmentService for the next candidate. Emits
-// RiderOffered. The aggregate's "one active assignment" invariant rejects an offer while one is live,
-// so reassignment of an already-offered/accepted delivery requires the prior attempt to be freed first.
 import { Result } from '../../../domain/shared/Result';
 import { NotFoundError } from '../../../domain/shared/errors/NotFoundError';
 import { ConflictError } from '../../../domain/shared/errors/ConflictError';

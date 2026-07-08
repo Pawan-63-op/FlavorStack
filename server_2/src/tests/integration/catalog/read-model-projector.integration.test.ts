@@ -113,7 +113,6 @@ describe('CatalogProjector (read-model projections)', () => {
     const item = buildMenuItem({ restaurantId: id, categoryId });
     await persistAndProjectItem(item);
 
-    // Toggle unavailable (persist + project the availability event).
     item.toggleAvailability(
       ItemAvailability.create({ isAvailable: false, outOfStockReason: 'sold out' }).getValue()
     );
@@ -136,7 +135,6 @@ describe('CatalogProjector (read-model projections)', () => {
     await persistAndProjectItem(item);
     expect(await MenuItemSearchModel.countDocuments({ restaurantId: id })).toBe(1);
 
-    // Soft-delete the item, then trigger a rebuild (any restaurant event).
     item.softDelete();
     await menuItemRepo.update(item);
     await projector.rebuild(id);
@@ -151,7 +149,6 @@ describe('CatalogProjector (read-model projections)', () => {
     const id = restaurant.id.toString();
     await persistAndProject(restaurant);
 
-    // Reload so the optimistic-lock guard sees the persisted version.
     const loaded = (await restaurantRepo.findById(id)) as Restaurant;
     loaded.softDelete();
     await restaurantRepo.update(loaded);

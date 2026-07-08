@@ -28,7 +28,7 @@
 #### Utilities & Documentation
 - ✅ `/hooks/useInitializeStores.ts` - Hook to fetch all initial data
 - ✅ `/ADMIN_DASHBOARD_README.md` - Complete documentation
-- ✅ `/API_INTEGRATION_GUIDE.md` - Backend integration guide
+- ✅ `my-app/docs/API_CONTRACT_MAP.md` - Current `server_2` contract map (retired the legacy backend integration guide in Phase 12)
 - ✅ `/REFACTORING_SUMMARY.md` - This file
 
 ### 🔧 Modified
@@ -112,7 +112,7 @@ The stores work with mock data out of the box. You can:
 ### 2. Connect to Backend
 When your backend is ready:
 
-1. Set up the API endpoints (see `/API_INTEGRATION_GUIDE.md`)
+1. Set up the API endpoints (see `my-app/docs/API_CONTRACT_MAP.md`)
 2. Uncomment the initialization hook in `App.tsx`
 3. Test each feature
 
@@ -237,8 +237,8 @@ const {
 │   └── useInitializeStores.ts      # Initialize all stores
 ├── App.tsx                         # Main entry point
 ├── ADMIN_DASHBOARD_README.md       # Full documentation
-├── API_INTEGRATION_GUIDE.md        # Backend integration
 └── REFACTORING_SUMMARY.md          # This file
+# (legacy backend integration guide retired in Phase 12 → my-app/docs/API_CONTRACT_MAP.md)
 ```
 
 ---
@@ -269,7 +269,7 @@ const {
 ## Next Steps
 
 1. **Review the code** - Check each component and store
-2. **Read the guides** - API_INTEGRATION_GUIDE.md has everything you need
+2. **Read the guides** - my-app/docs/API_CONTRACT_MAP.md has the current contract
 3. **Set up backend** - Use the provided MongoDB schemas
 4. **Connect APIs** - Update axios calls with your endpoints
 5. **Test thoroughly** - Each CRUD operation should work
@@ -281,7 +281,7 @@ const {
 
 Check these files for help:
 - `/ADMIN_DASHBOARD_README.md` - Component usage and examples
-- `/API_INTEGRATION_GUIDE.md` - Backend setup and MongoDB schemas
+- `my-app/docs/API_CONTRACT_MAP.md` - Current `server_2` contract map
 - Individual store files - Well documented with comments
 
 ---

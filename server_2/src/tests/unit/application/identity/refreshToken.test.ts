@@ -77,7 +77,6 @@ describe('RefreshToken use-case', () => {
 
       await refreshUseCase.execute({ refreshToken });
 
-      // Decode old session ID from old token
       const oldPayload = tokenService.decode(refreshToken);
       const oldSession = await sessionStore.find(customer._id, oldPayload!.sessionId);
       expect(oldSession).toBeNull();
@@ -113,7 +112,6 @@ describe('RefreshToken use-case', () => {
       const loginResult = await loginUseCase.execute(loginDto);
       const refreshToken = loginResult.getValue().refreshToken;
 
-      // Invalidate session manually
       const payload = tokenService.decode(refreshToken);
       await sessionStore.invalidate(customer._id, payload!.sessionId);
 
@@ -130,10 +128,8 @@ describe('RefreshToken use-case', () => {
       const loginResult = await loginUseCase.execute(loginDto);
       const refreshToken = loginResult.getValue().refreshToken;
 
-      // Decode to get sessionId, then tamper with the hash in the session
       const payload = tokenService.decode(refreshToken);
       const session = await sessionStore.find(customer._id, payload!.sessionId);
-      // Overwrite with wrong hash to simulate reuse of a superseded token
       sessionStore.sessions.set(`${customer._id}:${session!.sessionId}`, {
         ...session!,
         refreshTokenHash: refreshTokenHasher.hash('some_old_superseded_token'),
@@ -145,7 +141,6 @@ describe('RefreshToken use-case', () => {
       expect(err).toBeInstanceOf(ForbiddenError);
       expect(err.message).toBe('token_reuse_detected');
 
-      // All sessions for this user should be gone
       const sessions = await sessionStore.list(customer._id);
       expect(sessions.length).toBe(0);
     });
@@ -156,7 +151,6 @@ describe('RefreshToken use-case', () => {
       const loginResult = await loginUseCase.execute(loginDto);
       const refreshToken = loginResult.getValue().refreshToken;
 
-      // Deactivate the user
       customer.softDelete();
 
       const result = await refreshUseCase.execute({ refreshToken });
@@ -171,7 +165,6 @@ describe('RefreshToken use-case', () => {
       const loginResult = await loginUseCase.execute(loginDto);
       const refreshToken = loginResult.getValue().refreshToken;
 
-      // Bump the user's tokenVersion (e.g. password changed elsewhere)
       customer.tokenVersion += 1;
 
       const result = await refreshUseCase.execute({ refreshToken });

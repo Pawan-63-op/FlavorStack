@@ -1,10 +1,3 @@
-// Catalog Phase 10 — Search & Discovery integration tests.
-//
-// Exercises MongoSearchService (Mongo-native `$text` + `2dsphere`) through the
-// SearchRestaurants / SearchMenuItems / GetNearbyRestaurants use-cases against
-// mongodb-memory-server. Verifies text relevance ordering, geo radius
-// correctness, filter composition, cursor pagination, and the
-// visibility/availability policy (only PUBLIC + ACTIVE surfaced).
 import { randomUUID } from 'crypto';
 import { Restaurant } from '../../../domain/catalog/entities/Restaurant';
 import { MenuItem } from '../../../domain/catalog/entities/MenuItem';
@@ -57,7 +50,6 @@ describe('Catalog search & discovery (MongoSearchService)', () => {
   let bus: InMemoryEventBus;
 
   beforeAll(async () => {
-    // Build the text + 2dsphere indexes the search service relies on.
     await RestaurantSummaryModel.createIndexes();
     await MenuItemSearchModel.createIndexes();
   });
@@ -123,7 +115,6 @@ describe('Catalog search & discovery (MongoSearchService)', () => {
         dietary: spec.dietary,
       });
       if (spec.available === false) {
-        // Toggle through the aggregate so the projection reflects the raw item state.
         item.toggleAvailability(
           ItemAvailability.create({ isAvailable: false, outOfStockReason: 'sold out' }).getValue()
         );
@@ -209,6 +200,73 @@ describe('Catalog search & discovery (MongoSearchService)', () => {
       const secondIds = second.getValue().items.map((r) => r.id);
       expect(firstIds.some((id) => secondIds.includes(id))).toBe(false);
     });
+
+    it('matches a restaurant by cuisine via free text (name does not contain the term)', async () => {
+      await seed({ name: 'Bella Trattoria', cuisineTypes: ['ITALIAN'] });
+      await seed({ name: 'Spice Route', cuisineTypes: ['NORTH_INDIAN'] });
+
+      const result = await new SearchRestaurants(searchService).execute({ query: 'italian', limit: 50 });
+      const names = result.getValue().items.map((r) => r.name);
+      expect(names).toEqual(['Bella Trattoria']);
+    });
+
+    it('ranks a name hit above a cuisine-only hit (name weighted higher)', async () => {
+      await seed({ name: 'Italian Express', cuisineTypes: ['FAST_FOOD'] });
+      await seed({ name: 'Corner Cafe', cuisineTypes: ['ITALIAN'] });
+
+      const result = await new SearchRestaurants(searchService).execute({ query: 'italian', limit: 50 });
+      const names = result.getValue().items.map((r) => r.name);
+      expect(names).toEqual(['Italian Express', 'Corner Cafe']);
+    });
+
+    it('falls back to a case-insensitive regex for partial input the text index misses', async () => {
+      await seed({ name: 'Bella Trattoria', cuisineTypes: ['ITALIAN'] });
+      await seed({ name: 'Spice Route', cuisineTypes: ['NORTH_INDIAN'] });
+
+      const result = await new SearchRestaurants(searchService).execute({ query: 'ital', limit: 50 });
+      const names = result.getValue().items.map((r) => r.name);
+      expect(names).toEqual(['Bella Trattoria']);
+    });
+
+    it('does not fall back to regex when the text index already has hits', async () => {
+      await seed({ name: 'Pizza Palace', cuisineTypes: ['ITALIAN'] });
+
+      const exact = await new SearchRestaurants(searchService).execute({ query: 'pizza', limit: 50 });
+      expect(exact.getValue().items.map((r) => r.name)).toEqual(['Pizza Palace']);
+
+      const partial = await new SearchRestaurants(searchService).execute({ query: 'pala', limit: 50 });
+      expect(partial.getValue().items.map((r) => r.name)).toEqual(['Pizza Palace']);
+    });
+
+    it('paginates regex-fallback results with a mode-tagged cursor', async () => {
+      await seed({ name: 'Trattoria Uno', cuisineTypes: ['ITALIAN'] });
+      await seed({ name: 'Trattoria Due', cuisineTypes: ['ITALIAN'] });
+      await seed({ name: 'Trattoria Tre', cuisineTypes: ['ITALIAN'] });
+
+      const first = await new SearchRestaurants(searchService).execute({ query: 'tratt', limit: 2 });
+      expect(first.getValue().items).toHaveLength(2);
+      expect(first.getValue().nextCursor).toBeDefined();
+
+      const second = await new SearchRestaurants(searchService).execute({
+        query: 'tratt',
+        limit: 2,
+        cursor: first.getValue().nextCursor,
+      });
+      expect(second.getValue().items).toHaveLength(1);
+
+      const firstIds = first.getValue().items.map((r) => r.id);
+      const secondIds = second.getValue().items.map((r) => r.id);
+      expect(firstIds.some((id) => secondIds.includes(id))).toBe(false);
+    });
+
+    it('enforces visibility on the regex-fallback path too', async () => {
+      await seed({ name: 'Trattoria Public', cuisineTypes: ['ITALIAN'] });
+      await seed({ name: 'Trattoria Hidden', cuisineTypes: ['ITALIAN'], visibility: CATALOG_VISIBILITY.HIDDEN });
+
+      const result = await new SearchRestaurants(searchService).execute({ query: 'tratt', limit: 50 });
+      const names = result.getValue().items.map((r) => r.name);
+      expect(names).toEqual(['Trattoria Public']);
+    });
   });
 
   describe('SearchMenuItems', () => {
@@ -273,7 +331,6 @@ describe('Catalog search & discovery (MongoSearchService)', () => {
 
   describe('GetNearbyRestaurants', () => {
     it('returns restaurants within the radius, nearest first, and excludes far ones', async () => {
-      // ~0 km, ~1.1 km, and ~110 km from the query point (lat steps of ~0.01 ≈ 1.1km).
       await seed({ name: 'Near A', centerLat: 19.0, centerLng: 73.0 });
       await seed({ name: 'Near B', centerLat: 19.01, centerLng: 73.0 });
       await seed({ name: 'Far Away', centerLat: 20.0, centerLng: 73.0 });

@@ -64,7 +64,6 @@ function dto(overrides: Partial<CheckoutRequestDto> = {}): CheckoutRequestDto {
   };
 }
 
-// --- configurable fakes -------------------------------------------------------------------------
 
 function defaultRestaurant(): CheckoutRestaurant {
   return { restaurantId: 'rest-1', name: 'Pizza Place', status: COMMERCE_RESTAURANT_STATUS.ACTIVE, isOpen: true };
@@ -238,7 +237,6 @@ function buildHarness(opts: {
   return { useCase, orderRepo, cartRepo, outbox, eventBus };
 }
 
-// --- tests --------------------------------------------------------------------------------------
 
 describe('Checkout', () => {
   describe('happy path', () => {
@@ -255,7 +253,6 @@ describe('Checkout', () => {
       expect(summary.paymentMethod).toBe(PAYMENT_METHOD.UPI);
       expect(summary.idempotencyKey).toBe('11111111-1111-1111-1111-111111111111');
 
-      // single line: unit = 1000 + 200 = 1200, lineTotal = 2400
       expect(summary.lines).toHaveLength(1);
       expect(summary.lines[0].lineTotal).toEqual({ amount: 2400, currency: 'INR' });
       expect(summary.lines[0].selectedOptions[0]).toEqual({
@@ -264,7 +261,6 @@ describe('Checkout', () => {
         priceDelta: { amount: 200, currency: 'INR' },
       });
 
-      // pricing: subtotal 2400; platform 500, packaging 300, delivery 4000; tax 360; total 7560
       expect(summary.pricing.subtotal).toEqual({ amount: 2400, currency: 'INR' });
       expect(summary.pricing.fees.map((f) => [f.type, f.amount.amount])).toEqual([
         ['PLATFORM', 500],
@@ -274,19 +270,15 @@ describe('Checkout', () => {
       expect(summary.pricing.tax).toEqual({ amount: 360, currency: 'INR' });
       expect(summary.pricing.total).toEqual({ amount: 7560, currency: 'INR' });
 
-      // delivery address snapshot
       expect(summary.deliveryAddress.pinCode).toBe('560001');
 
-      // persisted exactly one order
       expect(h.orderRepo.saved).toHaveLength(1);
       const saved = h.orderRepo.saved[0];
       expect(saved.id.toString()).toBe(summary.orderRequestId);
 
-      // outbox carries OrderRequested + CheckoutReadyForPayment
       const names = h.outbox.appended.map((e) => e.eventName).sort();
       expect(names).toEqual(['CheckoutReadyForPayment', 'OrderRequested']);
 
-      // post-commit publish includes the order events
       const publishedNames = h.eventBus.published.map((e) => e.eventName);
       expect(publishedNames).toContain('OrderRequested');
       expect(publishedNames).toContain('CheckoutReadyForPayment');
@@ -341,7 +333,6 @@ describe('Checkout', () => {
       const h = buildHarness({ cart });
       const summary = (await h.useCase.execute(dto())).getValue();
 
-      // SAVE10 = 10% of 2400 = 240; total 7308
       expect(summary.pricing.discount).toEqual({ amount: 240, currency: 'INR' });
       expect(summary.pricing.total).toEqual({ amount: 7308, currency: 'INR' });
     });
@@ -384,7 +375,6 @@ describe('Checkout', () => {
 });
 
 function buildExistingOrder(): OrderRequest {
-  // Re-use the integration fixture's checkout-factory construction path for a persisted-looking aggregate.
   const { buildOrderRequest } = require('../../../integration/commerce/commerce-fixtures');
   return buildOrderRequest('cust-1', {
     idempotencyKey: IdempotencyKey.create('22222222-2222-2222-2222-222222222222').getValue(),

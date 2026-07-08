@@ -5,8 +5,6 @@ import { IUnitOfWork } from '../../shared/ports/IUnitOfWork';
 import { RemoveFromCartDto } from '../dtos/RemoveFromCartDto';
 import { CartResponseDto, toCartResponse } from '../dtos/CartResponseDto';
 
-// UC: RemoveFromCart — removes a line item from the customer's Cart. Resets
-// restaurantId/currency when the cart becomes empty (enforced by Cart.removeItem).
 export class RemoveFromCart {
   constructor(
     private readonly cartRepo: ICartRepository,

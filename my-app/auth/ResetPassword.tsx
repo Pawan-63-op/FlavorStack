@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useAuthStore } from "@/store/authStore";
-import { resetPasswordSchema, type ResetPasswordFormData } from "@/validations/auth";
+import { resetPasswordWithCodeSchema, type ResetPasswordWithCodeFormData } from "@/validations/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -42,15 +42,15 @@ export function ResetPassword() {
     }
   }, [email]);
 
-  const form = useForm<ResetPasswordFormData>({
-    resolver: zodResolver(resetPasswordSchema),
-    defaultValues: { otp: "", newPassword: "", confirmPassword: "" },
+  const form = useForm<ResetPasswordWithCodeFormData>({
+    resolver: zodResolver(resetPasswordWithCodeSchema),
+    defaultValues: { code: "", newPassword: "", confirmPassword: "" },
   });
 
-  const onSubmit = async (data: ResetPasswordFormData) => {
+  const onSubmit = async (data: ResetPasswordWithCodeFormData) => {
     setError("");
     try {
-      await resetPassword(email, data.otp, data.newPassword);
+      await resetPassword(email, data.code, data.newPassword);
       // FIX: show success state with feedback before redirecting
       setIsSuccess(true);
       setTimeout(() => router.replace("/login"), 2000);
@@ -105,7 +105,7 @@ export function ResetPassword() {
                 </Alert>
               )}
 
-              <FormField control={form.control} name="otp"
+              <FormField control={form.control} name="code"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel className="block text-center">Verification Code</FormLabel>

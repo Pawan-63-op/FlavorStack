@@ -1,9 +1,3 @@
-// Output DTO: CartView — the customer's active Cart, with each line's unit price
-// and computed line total. `validation` (Phase 6) is the ICartValidator report
-// against the commerce_catalog_view local projection. Each line is additionally
-// enriched (Phase 13) with the current name/price/availability read from the same
-// commerce_catalog_view projection, so the customer sees live catalog data without
-// the cart-cached snapshot going stale.
 import { Cart } from '../../../domain/commerce/entities/Cart';
 import { CartItem } from '../../../domain/commerce/entities/CartItem';
 import { Money } from '../../../domain/shared/Money';
@@ -22,11 +16,6 @@ export interface AppliedPromotionResponse {
   sourceRef: string;
 }
 
-// Per-line enrichment derived on read from the commerce_catalog_view projection.
-// `name`/`currentUnitPrice` are null when the item is no longer in the projection
-// (removed/unprojected); `isAvailable` is then false. `currentUnitPrice` is the
-// live base price plus the deltas of the selected variant options — what the line
-// would cost now, independent of the cart-cached `unitPriceSnapshot`.
 export interface CartItemEnrichment {
   name: string | null;
   currentUnitPrice: MoneyResponse | null;
@@ -71,10 +60,6 @@ export function toAppliedPromotionResponse(cart: Cart): AppliedPromotionResponse
   };
 }
 
-// Pure: derive a line's live name/price/availability from the projected restaurant
-// view. Returns an "absent" enrichment (null name/price, unavailable) when the item
-// is no longer projected. currentUnitPrice = basePrice + Σ priceDelta of the selected
-// options; availability requires the item and every selected option to be available.
 export function enrichCartItem(
   item: CartItem,
   view: CommerceCatalogRestaurantView | null

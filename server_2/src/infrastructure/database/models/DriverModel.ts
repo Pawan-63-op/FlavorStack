@@ -1,11 +1,8 @@
-// Mongoose discriminator — `users` collection, role: DRIVER.
-// Implements the persisted shape of Driver (src/domain/identity/entities/Driver.ts).
 import { Schema } from 'mongoose';
 import { UserModel, UserDocument } from './UserModel';
 import { USER_ROLE } from '../../../domain/identity/enums/user-role.enum';
 import { DRIVER_STATUS, DriverStatus } from '../../../domain/identity/enums/driver-status.enum';
 
-// Mirrors VehicleInfo.vo.ts (all fields required by VehicleInfo.create()).
 export interface VehicleInfoDocument {
   type: string;
   brand: string;
@@ -15,7 +12,6 @@ export interface VehicleInfoDocument {
   insuranceUrl: string;
 }
 
-// GeoJSON Point — matches GeoPoint.vo.ts#toGeoJson() ([lng, lat] order).
 export interface GeoJsonPointDocument {
   type: 'Point';
   coordinates: [number, number];
@@ -77,7 +73,6 @@ const DriverSchema = new Schema<DriverDocument>({
   fcmTokens: { type: [String], default: [] },
 });
 
-// Geospatial finder support (IDriverRepository.findNearby) + availability finder (findAvailable).
 DriverSchema.index({ currentLocation: '2dsphere' });
 DriverSchema.index({ isAvailable: 1 });
 

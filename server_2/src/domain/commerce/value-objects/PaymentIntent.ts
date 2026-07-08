@@ -1,6 +1,3 @@
-// VO: { method: PaymentMethod } where method ∈ CARD | UPI | WALLET | COD — intent only, no charge execution
-// (Commerce Phase 11, commerce_module.md §3.3). Carries the customer's chosen payment method onto the
-// immutable OrderRequest; the future Payments context performs the actual charge.
 import { ValueObject } from '../../shared/ValueObject';
 import { Result } from '../../shared/Result';
 import { Guard } from '../../shared/Guard';

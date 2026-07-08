@@ -1,7 +1,3 @@
-// UC: CancelFulfillment — customer / restaurant / admin cancels a fulfillment (fulfillment_module.md
-// §6.1, Phase 5A). The aggregate enforces the cancellation window (CREATED / PREPARING /
-// READY_FOR_PICKUP only), ownership per actor, and that CANCELLED is terminal; emits
-// FulfillmentCancelled. Refund execution is deferred (the event carries only a refundHint).
 import { Result } from '../../../domain/shared/Result';
 import { NotFoundError } from '../../../domain/shared/errors/NotFoundError';
 import { IFulfillmentRepository } from '../../../domain/fulfillment/repositories/IFulfillmentRepository';

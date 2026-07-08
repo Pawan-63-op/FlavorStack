@@ -26,7 +26,6 @@ export class GeoPolygon extends ValueObject<GeoPolygonProps> {
       ring.push(ring[0]);
     }
 
-    // A closed ring needs at least 3 distinct vertices (4 points including the repeated closing point)
     if (ring.length < 4) {
       return Result.fail<GeoPolygon>(new ValidationError('Polygon must have at least 3 distinct points'));
     }

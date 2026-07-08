@@ -1,5 +1,3 @@
-// Mongoose schema — `notification_templates` collection (engagement_module.md §6).
-// Key: unique key+channel+locale.
 import { Schema, model } from 'mongoose';
 
 export interface NotificationTemplateDocument {

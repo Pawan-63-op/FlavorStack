@@ -1,5 +1,3 @@
-// Domain event raised when a restaurant's recomputed rating changes (engagement_module.md §3).
-// aggregateId = restaurantId. Publish-only for now — routed to no queue (no Catalog consumer yet).
 import { DomainEvent } from '../../shared/DomainEvent';
 import { randomUUID } from 'crypto';
 

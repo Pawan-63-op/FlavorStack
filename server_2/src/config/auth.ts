@@ -1,4 +1,3 @@
-// JWT key/TTL/issuer/audience config + bcrypt rounds + OTP length
 import { readFileSync } from 'fs';
 
 export interface AuthConfig {
