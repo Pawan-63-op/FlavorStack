@@ -7,7 +7,6 @@ import { Driver } from '../../../domain/identity/entities/Driver';
 import { IUserRepository } from '../../../domain/identity/repositories/IUserRepository';
 import { IPasswordHasher } from '../../../domain/identity/services/IPasswordHasher';
 import { IUnitOfWork } from '../../shared/ports/IUnitOfWork';
-import { IOutboxStore } from '../../shared/outbox/IOutboxStore';
 import { IEventBus } from '../../shared/events/IEventBus';
 import { RegisterDriverDto } from '../dtos/RegisterDriverDto';
 import { AuthResponse } from '../responses/AuthResponse';
@@ -18,7 +17,6 @@ export class RegisterDriver {
     private userRepo: IUserRepository,
     private passwordHasher: IPasswordHasher,
     private unitOfWork: IUnitOfWork,
-    private outboxStore: IOutboxStore,
     private eventBus: IEventBus,
   ) {}
 
@@ -49,11 +47,8 @@ export class RegisterDriver {
 
     const events = driver.pullDomainEvents();
 
-    await this.unitOfWork.runInTransaction(async (ctx) => {
+    await this.unitOfWork.runInTransaction(async () => {
       await this.userRepo.save(driver);
-      if (events.length > 0) {
-        await this.outboxStore.append(events, ctx);
-      }
     });
 
     await this.eventBus.publishAll(events);

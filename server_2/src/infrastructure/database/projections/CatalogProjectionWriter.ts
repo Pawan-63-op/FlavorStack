@@ -1,14 +1,7 @@
 import { ICatalogProjectionWriter } from '../../../domain/catalog/repositories/ICatalogProjectionWriter';
 import { Restaurant } from '../../../domain/catalog/entities/Restaurant';
 import { MenuItem } from '../../../domain/catalog/entities/MenuItem';
-import { Category } from '../../../domain/catalog/entities/Category';
 import { RestaurantSummaryModel, RestaurantSummaryDocument } from '../models/RestaurantSummaryModel';
-import {
-  RestaurantMenuViewModel,
-  RestaurantMenuViewDocument,
-  MenuViewItemDocument,
-  MenuViewCategoryDocument,
-} from '../models/RestaurantMenuViewModel';
 import { MenuItemSearchModel, MenuItemSearchDocument } from '../models/MenuItemSearchModel';
 import { OpeningHoursDocument } from '../models/RestaurantModel';
 
@@ -18,7 +11,22 @@ function openingHoursToDoc(restaurant: Restaurant): OpeningHoursDocument | null 
   return { schedule: hours.schedule, holidays: [...hours.holidays] };
 }
 
-function menuItemToViewDoc(item: MenuItem): MenuViewItemDocument {
+/** The flat item fields shared by every projection this writer maintains. */
+interface ProjectedMenuItem {
+  id: string;
+  restaurantId: string;
+  categoryId: string;
+  name: string;
+  description: string | null;
+  imageUrl: string | null;
+  basePriceAmount: number;
+  currency: string;
+  tags: string[];
+  dietary: string[];
+  isAvailable: boolean;
+}
+
+function menuItemToViewDoc(item: MenuItem): ProjectedMenuItem {
   return {
     id: item.id.toString(),
     restaurantId: item.restaurantId,
@@ -57,39 +65,6 @@ export class CatalogProjectionWriter implements ICatalogProjectionWriter {
     };
     await RestaurantSummaryModel.replaceOne({ _id: restaurantId }, summary, { upsert: true });
 
-    const activeCategories = restaurant.categories.filter((c: Category) => c.isActive);
-    const itemsByCategory = new Map<string, MenuViewItemDocument[]>();
-    for (const item of items) {
-      const list = itemsByCategory.get(item.categoryId) ?? [];
-      list.push(menuItemToViewDoc(item));
-      itemsByCategory.set(item.categoryId, list);
-    }
-    const categories: MenuViewCategoryDocument[] = activeCategories
-      .slice()
-      .sort((a, b) => a.sortOrder - b.sortOrder)
-      .map((c) => ({
-        id: c.id.toString(),
-        label: c.label,
-        sortOrder: c.sortOrder,
-        items: itemsByCategory.get(c.id.toString()) ?? [],
-      }));
-
-    const menuView: RestaurantMenuViewDocument = {
-      _id: restaurantId,
-      name: restaurant.name,
-      slug: restaurant.slug,
-      cuisineTypes: restaurant.cuisineTypes.map((c) => c.value),
-      status,
-      visibility,
-      location,
-      imageUrl: restaurant.imageUrl ?? null,
-      openingHours,
-      tzOffsetMinutes: 0,
-      categories,
-      deletedAt: null,
-    };
-    await RestaurantMenuViewModel.replaceOne({ _id: restaurantId }, menuView, { upsert: true });
-
     const searchDocs: MenuItemSearchDocument[] = items.map((item) => {
       const view = menuItemToViewDoc(item);
       return {
@@ -126,7 +101,6 @@ export class CatalogProjectionWriter implements ICatalogProjectionWriter {
   async removeRestaurant(restaurantId: string): Promise<void> {
     const deletedAt = new Date();
     await RestaurantSummaryModel.updateOne({ _id: restaurantId }, { $set: { deletedAt } });
-    await RestaurantMenuViewModel.updateOne({ _id: restaurantId }, { $set: { deletedAt } });
     await MenuItemSearchModel.deleteMany({ restaurantId });
   }
 }

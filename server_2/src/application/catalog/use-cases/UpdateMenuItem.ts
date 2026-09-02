@@ -4,7 +4,6 @@ import { Money } from '../../../domain/shared/Money';
 import { IRestaurantRepository } from '../../../domain/catalog/repositories/IRestaurantRepository';
 import { IMenuItemRepository } from '../../../domain/catalog/repositories/IMenuItemRepository';
 import { IUnitOfWork } from '../../shared/ports/IUnitOfWork';
-import { IOutboxStore } from '../../shared/outbox/IOutboxStore';
 import { IEventBus } from '../../shared/events/IEventBus';
 import { UpdateMenuItemDto } from '../dtos/UpdateMenuItemDto';
 import { MenuItemResponse } from '../responses/MenuItemResponse';
@@ -17,7 +16,6 @@ export class UpdateMenuItem {
     private restaurantRepo: IRestaurantRepository,
     private menuItemRepo: IMenuItemRepository,
     private unitOfWork: IUnitOfWork,
-    private outboxStore: IOutboxStore,
     private eventBus: IEventBus
   ) {}
 
@@ -60,11 +58,8 @@ export class UpdateMenuItem {
 
     const events = menuItem.pullDomainEvents();
 
-    await this.unitOfWork.runInTransaction(async (ctx) => {
+    await this.unitOfWork.runInTransaction(async () => {
       await this.menuItemRepo.update(menuItem);
-      if (events.length > 0) {
-        await this.outboxStore.append(events, ctx);
-      }
     });
 
     await this.eventBus.publishAll(events);

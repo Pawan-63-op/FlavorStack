@@ -1,5 +1,5 @@
 export const NOTIFICATION_CHANNEL = {
-  PUSH: 'PUSH',
+  INBOX: 'INBOX',
   EMAIL: 'EMAIL',
 } as const;
 

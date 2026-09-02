@@ -57,7 +57,6 @@ function customerFields(overrides: Partial<CustomerDocument> = {}): CustomerDocu
     savedRestaurants: [],
     dietaryPreferences: [],
     defaultPaymentMethod: null,
-    fcmTokens: [],
     notificationsEnabled: true,
     ...overrides,
   };
@@ -85,7 +84,6 @@ function driverFields(overrides: Partial<DriverDocument> = {}): DriverDocument {
     averageRating: 0,
     totalDeliveries: 0,
     totalRatings: 0,
-    fcmTokens: [],
     ...overrides,
   };
 }

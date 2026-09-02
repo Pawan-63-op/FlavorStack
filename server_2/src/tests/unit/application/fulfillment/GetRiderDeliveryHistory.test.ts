@@ -1,28 +1,6 @@
 import { GetRiderDeliveryHistory } from '../../../../application/fulfillment/use-cases/GetRiderDeliveryHistory';
-import {
-  IFulfillmentProjectionRepository,
-  RiderDeliveryHistoryView,
-} from '../../../../domain/fulfillment/repositories/IFulfillmentProjectionRepository';
-
-function makeRepo(): jest.Mocked<IFulfillmentProjectionRepository> {
-  return {
-    upsertCustomerTracking: jest.fn().mockResolvedValue(undefined),
-    findCustomerTracking: jest.fn().mockResolvedValue(null),
-    findByCustomer: jest.fn().mockResolvedValue([]),
-    upsertRestaurantView: jest.fn().mockResolvedValue(undefined),
-    removeRestaurantView: jest.fn().mockResolvedValue(undefined),
-    findRestaurantQueue: jest.fn().mockResolvedValue([]),
-    upsertRiderQueueItem: jest.fn().mockResolvedValue(undefined),
-    removeRiderQueueItem: jest.fn().mockResolvedValue(undefined),
-    removeAllRiderQueueItemsForFulfillment: jest.fn().mockResolvedValue(undefined),
-    findRiderQueue: jest.fn().mockResolvedValue([]),
-    findRiderCompletedDeliveries: jest.fn().mockResolvedValue([]),
-    upsertAdminView: jest.fn().mockResolvedValue(undefined),
-    patchAdminView: jest.fn().mockResolvedValue(undefined),
-    findAdminDashboard: jest.fn().mockResolvedValue([]),
-    aggregateAnalytics: jest.fn(),
-  };
-}
+import { RiderDeliveryHistoryView } from '../../../../domain/fulfillment/repositories/IFulfillmentQueryRepository';
+import { makeQueryRepo as makeRepo } from '../../../mocks/fulfillment.mocks';
 
 const DELIVERED_AT = new Date('2026-06-27T18:47:34.090Z');
 
@@ -35,7 +13,7 @@ const VIEW: RiderDeliveryHistoryView = {
 };
 
 describe('GetRiderDeliveryHistory', () => {
-  it('queries the projection scoped to the dto riderId and forwards paging', async () => {
+  it('queries the aggregate scoped to the dto riderId and forwards paging', async () => {
     const repo = makeRepo();
     const uc = new GetRiderDeliveryHistory(repo);
 

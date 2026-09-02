@@ -1,6 +1,6 @@
 import { AddMenuItem } from '../../../../application/catalog/use-cases/AddMenuItem';
 import { InMemoryRestaurantRepository, InMemoryMenuItemRepository } from '../../../mocks/catalog.mocks';
-import { InMemoryUnitOfWork, InMemoryOutboxStore } from '../../../mocks/identity.mocks';
+import { InMemoryUnitOfWork } from '../../../mocks/identity.mocks';
 import { createEventBusSpy, EventBusSpy } from '../../../mocks/shared.mocks';
 import { buildRestaurant } from './helpers';
 import { NotFoundError } from '../../../../domain/shared/errors/NotFoundError';
@@ -11,7 +11,6 @@ describe('AddMenuItem use-case', () => {
   let restaurantRepo: InMemoryRestaurantRepository;
   let menuItemRepo: InMemoryMenuItemRepository;
   let unitOfWork: InMemoryUnitOfWork;
-  let outboxStore: InMemoryOutboxStore;
   let eventBus: EventBusSpy;
   let useCase: AddMenuItem;
 
@@ -19,9 +18,8 @@ describe('AddMenuItem use-case', () => {
     restaurantRepo = new InMemoryRestaurantRepository();
     menuItemRepo = new InMemoryMenuItemRepository();
     unitOfWork = new InMemoryUnitOfWork();
-    outboxStore = new InMemoryOutboxStore();
     eventBus = createEventBusSpy();
-    useCase = new AddMenuItem(restaurantRepo, menuItemRepo, unitOfWork, outboxStore, eventBus);
+    useCase = new AddMenuItem(restaurantRepo, menuItemRepo, unitOfWork, eventBus);
   });
 
   it('creates a menu item under an existing category', async () => {
@@ -44,8 +42,8 @@ describe('AddMenuItem use-case', () => {
     const saved = await menuItemRepo.findById(result.getValue().id);
     expect(saved).not.toBeNull();
 
-    expect(outboxStore.appended).toHaveLength(1);
-    expect(outboxStore.appended[0].eventName).toBe('MenuItemCreated');
+    expect(eventBus.publishedEvents).toHaveLength(1);
+    expect(eventBus.publishedEvents[0].eventName).toBe('MenuItemCreated');
     expect(eventBus.publishedEvents).toHaveLength(1);
   });
 
@@ -110,7 +108,7 @@ describe('AddMenuItem use-case', () => {
 
     expect(result.isFailure).toBe(true);
     expect(result.getError()).toBeInstanceOf(ValidationError);
-    expect(outboxStore.appended).toHaveLength(0);
+    expect(eventBus.publishedEvents).toHaveLength(0);
     expect(eventBus.publishedEvents).toHaveLength(0);
   });
 });

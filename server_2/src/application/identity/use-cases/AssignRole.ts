@@ -5,7 +5,6 @@ import { DomainError } from '../../../domain/shared/errors/DomainError';
 import { IUserRepository } from '../../../domain/identity/repositories/IUserRepository';
 import { Admin } from '../../../domain/identity/entities/Admin';
 import { IUnitOfWork } from '../../shared/ports/IUnitOfWork';
-import { IOutboxStore } from '../../shared/outbox/IOutboxStore';
 import { IEventBus } from '../../shared/events/IEventBus';
 import { AssignRoleDto } from '../dtos/AssignRoleDto';
 
@@ -13,7 +12,6 @@ export class AssignRole {
   constructor(
     private userRepo: IUserRepository,
     private unitOfWork: IUnitOfWork,
-    private outboxStore: IOutboxStore,
     private eventBus: IEventBus,
   ) {}
 
@@ -26,7 +24,7 @@ export class AssignRole {
     if (!target) return Result.fail(new NotFoundError('user_not_found'));
 
     try {
-      actor.assignRole(target._id, dto.role);
+      actor.assignRole(dto.role);
     } catch (e) {
       if (e instanceof DomainError) return Result.fail(e);
       throw e;
@@ -36,9 +34,8 @@ export class AssignRole {
 
     const events = actor.pullDomainEvents();
 
-    await this.unitOfWork.runInTransaction(async (ctx) => {
+    await this.unitOfWork.runInTransaction(async () => {
       await this.userRepo.update(target);
-      await this.outboxStore.append(events, ctx);
     });
 
     await this.eventBus.publishAll(events);

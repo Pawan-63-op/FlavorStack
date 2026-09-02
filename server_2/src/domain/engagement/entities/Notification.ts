@@ -79,15 +79,22 @@ export class Notification extends AggregateRoot<NotificationProps> {
     return this.props.readAt;
   }
 
-  public static queue(input: QueueNotificationInput): Result<Notification> {
+  private static guardInput(input: QueueNotificationInput): Result<void> {
     const recipientCheck = Guard.againstEmptyString(input.recipientUserId, 'RecipientUserId');
-    if (recipientCheck.isFailure) return Result.fail<Notification>(recipientCheck.getError());
+    if (recipientCheck.isFailure) return Result.fail<void>(recipientCheck.getError());
 
     const templateKeyCheck = Guard.againstEmptyString(input.templateKey, 'TemplateKey');
-    if (templateKeyCheck.isFailure) return Result.fail<Notification>(templateKeyCheck.getError());
+    if (templateKeyCheck.isFailure) return Result.fail<void>(templateKeyCheck.getError());
 
     const dedupeKeyCheck = Guard.againstEmptyString(input.dedupeKey, 'DedupeKey');
-    if (dedupeKeyCheck.isFailure) return Result.fail<Notification>(dedupeKeyCheck.getError());
+    if (dedupeKeyCheck.isFailure) return Result.fail<void>(dedupeKeyCheck.getError());
+
+    return Result.ok<void>(undefined);
+  }
+
+  public static queue(input: QueueNotificationInput): Result<Notification> {
+    const guarded = Notification.guardInput(input);
+    if (guarded.isFailure) return Result.fail<Notification>(guarded.getError());
 
     return Result.ok<Notification>(
       new Notification(
@@ -101,6 +108,36 @@ export class Notification extends AggregateRoot<NotificationProps> {
           status: NotificationStatus.pending(),
           dedupeKey: input.dedupeKey,
           createdAt: new Date(),
+        },
+        input.id
+      )
+    );
+  }
+
+  /**
+   * Synchronous delivery (Phase 5 Batch 2). An INBOX notification *is* its Mongo row: there is no
+   * transport, so there is no PENDING window and no failure mode. Born `SENT` with no `provider`;
+   * `queue()` remains for channels that still hand off to a worker.
+   */
+  public static deliver(input: QueueNotificationInput): Result<Notification> {
+    const guarded = Notification.guardInput(input);
+    if (guarded.isFailure) return Result.fail<Notification>(guarded.getError());
+
+    const now = new Date();
+
+    return Result.ok<Notification>(
+      new Notification(
+        {
+          recipientUserId: input.recipientUserId,
+          category: input.category,
+          channel: input.channel,
+          templateKey: input.templateKey,
+          renderedTitle: input.renderedTitle,
+          renderedBody: input.renderedBody,
+          status: NotificationStatus.sent(),
+          dedupeKey: input.dedupeKey,
+          createdAt: now,
+          sentAt: now,
         },
         input.id
       )

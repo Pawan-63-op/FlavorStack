@@ -1,14 +1,10 @@
 import { CheckServiceability } from '../../../../application/catalog/use-cases/CheckServiceability';
 import { IDeliveryZoneRepository } from '../../../../domain/catalog/repositories/IDeliveryZoneRepository';
-import { ICatalogReadRepository } from '../../../../domain/catalog/repositories/ICatalogReadRepository';
-import {
-  IServiceabilityCache,
-  ServiceabilityCachePoint,
-  ServiceabilityCacheSubtotal,
-} from '../../../../domain/catalog/services/ICatalogCache';
+import { ICatalogQueryRepository } from '../../../../domain/catalog/repositories/ICatalogQueryRepository';
 import { DeliveryZone } from '../../../../domain/catalog/entities/DeliveryZone';
-import { RestaurantSummaryView } from '../../../../domain/catalog/types/ReadModels';
+import { CatalogQueryRestaurant } from '../../../../domain/catalog/types/QueryModels';
 import { RESTAURANT_STATUS } from '../../../../domain/catalog/enums/restaurant-status.enum';
+import { CATALOG_VISIBILITY } from '../../../../domain/catalog/enums/catalog-visibility.enum';
 import { CUISINE_TYPE } from '../../../../domain/catalog/enums/cuisine-type.enum';
 import { buildPolygon, buildFeeMatrix, money } from './helpers';
 import { ValidationError } from '../../../../domain/shared/errors/ValidationError';
@@ -22,28 +18,38 @@ function zone(restaurantId: string): DeliveryZone {
   }).getValue();
 }
 
-function summary(id: string): RestaurantSummaryView {
+function restaurant(id: string): CatalogQueryRestaurant {
   return {
     id,
     name: `R-${id}`,
     slug: `r-${id}`,
+    description: null,
     cuisineTypes: [CUISINE_TYPE.NORTH_INDIAN],
     status: RESTAURANT_STATUS.ACTIVE,
-    isOpen: true,
+    visibility: CATALOG_VISIBILITY.PUBLIC,
+    imageUrl: null,
     location: { lat: 0.5, lng: 0.5 },
+    openingHours: null,
+    categories: [],
+    deliveryZones: [],
   };
 }
 
-/** Minimal read-repo mock; only getRestaurantSummary is exercised here. */
-function readRepo(summaries: Record<string, RestaurantSummaryView | null>): ICatalogReadRepository {
+/**
+ * Minimal query-repo mock; only `findPublicRestaurantsByIds` is exercised here. It
+ * mirrors the real repository's publish gate: an id absent from `published` is simply
+ * omitted from the result, which is how a non-public restaurant becomes unserviceable.
+ */
+function queryRepo(published: Record<string, CatalogQueryRestaurant>): ICatalogQueryRepository {
   return {
-    getRestaurantSummary: jest.fn(async (id: string) => summaries[id] ?? null),
-    getRestaurantSummaryBySlug: jest.fn(),
-    listRestaurantSummaries: jest.fn(),
-    getRestaurantMenu: jest.fn(),
-    getMenuItemView: jest.fn(),
-    getItemsSnapshot: jest.fn(),
-  } as unknown as ICatalogReadRepository;
+    findRestaurantById: jest.fn(),
+    findPublicRestaurantById: jest.fn(),
+    findPublicRestaurantsByIds: jest.fn(async (ids: string[]) =>
+      ids.map((id) => published[id]).filter((r): r is CatalogQueryRestaurant => Boolean(r))
+    ),
+    findMenuItemsByIds: jest.fn(),
+    findMenuItemsByRestaurant: jest.fn(),
+  } as unknown as ICatalogQueryRepository;
 }
 
 function zoneRepo(zones: DeliveryZone[]): IDeliveryZoneRepository {
@@ -54,7 +60,7 @@ describe('CheckServiceability use-case', () => {
   it('returns the restaurant with its resolved fee + minimum order', async () => {
     const useCase = new CheckServiceability(
       zoneRepo([zone('rest-1')]),
-      readRepo({ 'rest-1': summary('rest-1') })
+      queryRepo({ 'rest-1': restaurant('rest-1') })
     );
 
     const result = await useCase.execute({ lat: 0.5, lng: 0.5, subtotalAmount: 0 });
@@ -67,11 +73,8 @@ describe('CheckServiceability use-case', () => {
     expect(serviceable[0].minOrder.amount).toBe(10000);
   });
 
-  it('skips a zone whose restaurant is not public/active (summary missing)', async () => {
-    const useCase = new CheckServiceability(
-      zoneRepo([zone('hidden-1')]),
-      readRepo({ 'hidden-1': null })
-    );
+  it('skips a zone whose restaurant is not public/active (filtered out by the query)', async () => {
+    const useCase = new CheckServiceability(zoneRepo([zone('hidden-1')]), queryRepo({}));
 
     const result = await useCase.execute({ lat: 0.5, lng: 0.5 });
     expect(result.getValue()).toHaveLength(0);
@@ -86,7 +89,7 @@ describe('CheckServiceability use-case', () => {
     }).getValue();
     const useCase = new CheckServiceability(
       zoneRepo([cheap, zone('rest-1')]),
-      readRepo({ 'rest-1': summary('rest-1') })
+      queryRepo({ 'rest-1': restaurant('rest-1') })
     );
 
     const result = await useCase.execute({ lat: 0.5, lng: 0.5 });
@@ -95,53 +98,33 @@ describe('CheckServiceability use-case', () => {
   });
 
   it('fails with ValidationError on invalid coordinates', async () => {
-    const useCase = new CheckServiceability(zoneRepo([]), readRepo({}));
+    const useCase = new CheckServiceability(zoneRepo([]), queryRepo({}));
     const result = await useCase.execute({ lat: 999, lng: 0 });
     expect(result.isFailure).toBe(true);
     expect(result.getError()).toBeInstanceOf(ValidationError);
   });
 
-  describe('with a serviceability cache', () => {
-    it('returns the cached result without recomputing on a hit', async () => {
-      const zones = zoneRepo([zone('rest-1')]);
-      const cached = [
-        { restaurantId: 'rest-1', name: 'R', slug: 'r', distanceMeters: 0, deliveryFee: { amount: 999, currency: 'INR' }, minOrder: { amount: 10000, currency: 'INR' } },
-      ];
-      const cache: IServiceabilityCache = {
-        remember: jest.fn(async () => cached as never),
-      };
+  it('resolves overlapping zones with one batched, de-duplicated restaurant lookup', async () => {
+    const repo = queryRepo({ 'rest-1': restaurant('rest-1'), 'rest-2': restaurant('rest-2') });
+    const useCase = new CheckServiceability(
+      zoneRepo([zone('rest-1'), zone('rest-2'), zone('rest-1')]),
+      repo
+    );
 
-      const useCase = new CheckServiceability(zones, readRepo({}), cache);
-      const result = await useCase.execute({ lat: 0.5, lng: 0.5 });
+    const result = await useCase.execute({ lat: 0.5, lng: 0.5 });
 
-      expect(result.getValue()).toEqual(cached);
-      expect(zones.findZoneContaining).not.toHaveBeenCalled();
-    });
+    expect(result.getValue()).toHaveLength(2);
+    expect(repo.findPublicRestaurantsByIds).toHaveBeenCalledTimes(1);
+    expect(repo.findPublicRestaurantsByIds).toHaveBeenCalledWith(['rest-1', 'rest-2']);
+  });
 
-    it('computes via the loader and passes point + subtotal to the cache key', async () => {
-      const cache: IServiceabilityCache = {
-        remember: jest.fn(
-          async (
-            _p: ServiceabilityCachePoint,
-            _s: ServiceabilityCacheSubtotal,
-            loader: () => Promise<unknown>
-          ) => loader() as never
-        ),
-      };
-      const useCase = new CheckServiceability(
-        zoneRepo([zone('rest-1')]),
-        readRepo({ 'rest-1': summary('rest-1') }),
-        cache
-      );
+  it('does not query the catalog when no zone covers the point', async () => {
+    const repo = queryRepo({});
+    const useCase = new CheckServiceability(zoneRepo([]), repo);
 
-      const result = await useCase.execute({ lat: 0.5, lng: 0.5, subtotalAmount: 25000, currency: 'INR' });
+    const result = await useCase.execute({ lat: 0.5, lng: 0.5 });
 
-      expect(result.getValue()).toHaveLength(1);
-      expect(cache.remember).toHaveBeenCalledWith(
-        { lat: 0.5, lng: 0.5 },
-        { amount: 25000, currency: 'INR' },
-        expect.any(Function)
-      );
-    });
+    expect(result.getValue()).toHaveLength(0);
+    expect(repo.findPublicRestaurantsByIds).not.toHaveBeenCalled();
   });
 });

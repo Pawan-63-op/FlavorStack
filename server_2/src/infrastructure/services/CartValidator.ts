@@ -4,10 +4,10 @@ import { Cart } from '../../domain/commerce/entities/Cart';
 import { CartItem } from '../../domain/commerce/entities/CartItem';
 import { ICartValidator } from '../../domain/commerce/services/ICartValidator';
 import {
-  CommerceCatalogMenuItemView,
-  CommerceCatalogOpeningHoursView,
-  CommerceCatalogRestaurantView,
-} from '../../domain/commerce/types/CommerceCatalogView';
+  CartCatalogView,
+  CartMenuItemView,
+  CartOpeningHoursView,
+} from '../../domain/commerce/types/CatalogGatewayRead';
 import {
   ValidationIssue,
   ValidationReport,
@@ -25,7 +25,7 @@ function toMinutes(time: string): number {
 }
 
 /** A restaurant with no opening hours configured is treated as always-open while active. */
-function isOpenNow(openingHours: CommerceCatalogOpeningHoursView | null, tzOffsetMinutes: number, at: Date): boolean {
+function isOpenNow(openingHours: CartOpeningHoursView | null, tzOffsetMinutes: number, at: Date): boolean {
   if (!openingHours) return true;
 
   const local = new Date(at.getTime() + tzOffsetMinutes * 60_000);
@@ -39,7 +39,7 @@ function isOpenNow(openingHours: CommerceCatalogOpeningHoursView | null, tzOffse
   return intervals.some((interval) => minutesOfDay >= toMinutes(interval.open) && minutesOfDay < toMinutes(interval.close));
 }
 
-function validateVariants(item: CartItem, menuItemView: CommerceCatalogMenuItemView, cartItemId: string): ValidationIssue[] {
+function validateVariants(item: CartItem, menuItemView: CartMenuItemView, cartItemId: string): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   const selectedOptionIds = item.selectedOptionIds;
 
@@ -83,7 +83,7 @@ function validateVariants(item: CartItem, menuItemView: CommerceCatalogMenuItemV
   return issues;
 }
 
-function validateItem(item: CartItem, view: CommerceCatalogRestaurantView): ValidationIssue[] {
+function validateItem(item: CartItem, view: CartCatalogView): ValidationIssue[] {
   const cartItemId = item.id.toString();
   const menuItemView = view.items.find((i) => i.menuItemId === item.menuItemId);
 
@@ -116,7 +116,7 @@ function validateItem(item: CartItem, view: CommerceCatalogRestaurantView): Vali
   return issues;
 }
 
-function validateRestaurant(view: CommerceCatalogRestaurantView, at: Date): ValidationIssue[] {
+function validateRestaurant(view: CartCatalogView, at: Date): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
 
   if (view.status !== COMMERCE_RESTAURANT_STATUS.ACTIVE) {
@@ -149,7 +149,7 @@ function validateRestaurant(view: CommerceCatalogRestaurantView, at: Date): Vali
 /** Best-effort: compares cart subtotal against the lowest minOrderAmount across the restaurant's
  *  delivery zones in the cart's currency. The authoritative, address-specific check runs at
  *  checkout via the ICatalogGateway ACL. */
-function validateMinOrder(cart: Cart, view: CommerceCatalogRestaurantView): ValidationIssue[] {
+function validateMinOrder(cart: Cart, view: CartCatalogView): ValidationIssue[] {
   if (view.deliveryZones.length === 0 || cart.currency === null) return [];
 
   const matchingZones = view.deliveryZones.filter((zone) => zone.currency === cart.currency);
@@ -173,7 +173,7 @@ function validateMinOrder(cart: Cart, view: CommerceCatalogRestaurantView): Vali
 }
 
 export class CartValidator implements ICartValidator {
-  validate(cart: Cart, catalogView: CommerceCatalogRestaurantView | null, at: Date = new Date()): Result<ValidationReport> {
+  validate(cart: Cart, catalogView: CartCatalogView | null, at: Date = new Date()): Result<ValidationReport> {
     if (cart.isEmpty) {
       return Result.ok<ValidationReport>({ isValid: true, issues: [] });
     }

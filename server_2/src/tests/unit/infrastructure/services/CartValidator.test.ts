@@ -3,10 +3,10 @@ import { LineItemSelection } from '../../../../domain/commerce/value-objects/Lin
 import { Money } from '../../../../domain/shared/Money';
 import { CartValidator } from '../../../../infrastructure/services/CartValidator';
 import {
-  CommerceCatalogRestaurantView,
-  CommerceCatalogMenuItemView,
-  CommerceCatalogVariantGroupView,
-} from '../../../../domain/commerce/types/CommerceCatalogView';
+  CartCatalogView,
+  CartMenuItemView,
+  CartVariantGroupView,
+} from '../../../../domain/commerce/types/CatalogGatewayRead';
 import { VALIDATION_ISSUE_CODE, VALIDATION_SEVERITY } from '../../../../domain/commerce/types/ValidationReport';
 import { COMMERCE_RESTAURANT_STATUS } from '../../../../domain/commerce/enums/restaurant-status.enum';
 import { COMMERCE_CATALOG_VISIBILITY } from '../../../../domain/commerce/enums/catalog-visibility.enum';
@@ -45,7 +45,7 @@ function buildCart(
   return cart;
 }
 
-function buildVariantGroup(overrides: Partial<CommerceCatalogVariantGroupView> = {}): CommerceCatalogVariantGroupView {
+function buildVariantGroup(overrides: Partial<CartVariantGroupView> = {}): CartVariantGroupView {
   return {
     groupId: 'group-1',
     label: 'Size',
@@ -61,9 +61,10 @@ function buildVariantGroup(overrides: Partial<CommerceCatalogVariantGroupView> =
   };
 }
 
-function buildMenuItem(overrides: Partial<CommerceCatalogMenuItemView> = {}): CommerceCatalogMenuItemView {
+function buildMenuItem(overrides: Partial<CartMenuItemView> = {}): CartMenuItemView {
   return {
     menuItemId: 'menu-1',
+    restaurantId: 'restaurant-1',
     categoryId: 'cat-1',
     name: 'Burger',
     basePriceAmount: 10000,
@@ -75,7 +76,7 @@ function buildMenuItem(overrides: Partial<CommerceCatalogMenuItemView> = {}): Co
   };
 }
 
-function buildRestaurantView(overrides: Partial<CommerceCatalogRestaurantView> = {}): CommerceCatalogRestaurantView {
+function buildRestaurantView(overrides: Partial<CartCatalogView> = {}): CartCatalogView {
   return {
     restaurantId: 'restaurant-1',
     name: 'Test Restaurant',
@@ -86,7 +87,6 @@ function buildRestaurantView(overrides: Partial<CommerceCatalogRestaurantView> =
     tzOffsetMinutes: 0,
     deliveryZones: [],
     items: [buildMenuItem()],
-    updatedAt: new Date(),
     ...overrides,
   };
 }

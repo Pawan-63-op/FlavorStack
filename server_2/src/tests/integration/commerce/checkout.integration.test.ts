@@ -19,14 +19,13 @@ import { COMMERCE_RESTAURANT_STATUS } from '../../../domain/commerce/enums/resta
 import { ORDER_REQUEST_STATUS } from '../../../domain/commerce/enums/order-request-status.enum';
 
 import { ICatalogGateway } from '../../../domain/commerce/services/ICatalogGateway';
-import { ICommerceCatalogReadRepository } from '../../../domain/commerce/repositories/ICommerceCatalogReadRepository';
 import { IEventBus } from '../../../application/shared/events/IEventBus';
 import {
+  CartMenuItemView,
   CheckoutRestaurant,
   CheckoutMenuItem,
   CheckoutServiceability,
 } from '../../../domain/commerce/types/CatalogGatewayRead';
-import { CommerceCatalogMenuItemView } from '../../../domain/commerce/types/CommerceCatalogView';
 
 import { TransactionContext } from '../../../infrastructure/database/TransactionContext';
 import { MongoUnitOfWork } from '../../../infrastructure/database/MongoUnitOfWork';
@@ -82,12 +81,16 @@ function fakeGateway(): ICatalogGateway {
     getItemsSnapshot: async () => Result.ok(items),
     checkServiceability: async () => Result.ok(serviceability),
     isRestaurantOpen: async () => Result.ok(true),
+    // Variant option groups for checkout option resolution.
+    getRestaurantForCart: async () => Result.ok(null),
+    getItemsForCart: async () => Result.ok([variantView()]),
   };
 }
 
-function fakeProjection(): ICommerceCatalogReadRepository {
-  const view: CommerceCatalogMenuItemView = {
+function variantView(): CartMenuItemView {
+  return {
     menuItemId: 'menu-1',
+    restaurantId: 'rest-1',
     categoryId: 'cat-1',
     name: 'Margherita',
     basePriceAmount: 1000,
@@ -107,13 +110,6 @@ function fakeProjection(): ICommerceCatalogReadRepository {
         ],
       },
     ],
-  };
-  return {
-    findRestaurantView: async () => null,
-    findMenuItemViews: async () => [view],
-    upsertRestaurantView: async () => undefined,
-    removeRestaurantView: async () => undefined,
-    markEventProcessed: async () => true,
   };
 }
 
@@ -136,7 +132,6 @@ function fakeEventBus(): { bus: IEventBus; published: DomainEvent[] } {
 function buildAssembler(): CheckoutContextAssembler {
   return new CheckoutContextAssembler(
     fakeGateway(),
-    fakeProjection(),
     new PromotionService(buildDefaultCommerceCoupons()),
     buildDefaultCommercePricingPolicy()
   );
@@ -179,7 +174,7 @@ describe('Checkout (integration)', () => {
     await cartRepo.save(buildCart(customerId));
 
     const eventBus = fakeEventBus();
-    const checkout = new Checkout(cartRepo, orderRepo, buildAssembler(), new PricingCalculator(), unitOfWork, outboxStore, eventBus.bus);
+    const checkout = new Checkout(cartRepo, orderRepo, buildAssembler(), new PricingCalculator(), unitOfWork, outboxStore);
 
     const result = await checkout.execute(dto(customerId));
     expect(result.isSuccess).toBe(true);
@@ -191,22 +186,23 @@ describe('Checkout (integration)', () => {
     expect(persisted).toBeInstanceOf(OrderRequest);
     expect((persisted as OrderRequest).idempotencyKey.value).toBe(summary.idempotencyKey);
 
+    // Phase 6: `OrderRequested` is the only event checkout raises — the one message whose loss
+    // would leave a paid order the restaurant never sees.
     const rows = await OutboxEventModel.find({ aggregateId: summary.orderRequestId }).lean();
-    const names = rows.map((r) => r.eventName).sort();
-    expect(names).toEqual(['CheckoutReadyForPayment', 'OrderRequested']);
+    expect(rows.map((r) => r.eventName)).toEqual(['OrderRequested']);
 
     const cart = await cartRepo.findByCustomerId(customerId);
     expect(cart?.isEmpty).toBe(true);
 
-    expect(eventBus.published.map((e) => e.eventName).sort()).toEqual(['CartCleared', 'CheckoutReadyForPayment', 'OrderRequested']);
+    // Phase 7.3: the outbox row is the only delivery path — no inline publish.
+    expect(eventBus.published).toHaveLength(0);
   });
 
   it('returns the original OrderRequest on idempotent replay without creating a duplicate', async () => {
     const customerId = uniqueCustomerId();
     await cartRepo.save(buildCart(customerId));
 
-    const eventBus = fakeEventBus();
-    const checkout = new Checkout(cartRepo, orderRepo, buildAssembler(), new PricingCalculator(), unitOfWork, outboxStore, eventBus.bus);
+    const checkout = new Checkout(cartRepo, orderRepo, buildAssembler(), new PricingCalculator(), unitOfWork, outboxStore);
 
     const key = randomUUID();
     const first = await checkout.execute(dto(customerId, key));
@@ -229,7 +225,7 @@ describe('Checkout (integration)', () => {
     };
 
     const eventBus = fakeEventBus();
-    const checkout = new Checkout(failingCartRepo, orderRepo, buildAssembler(), new PricingCalculator(), unitOfWork, outboxStore, eventBus.bus);
+    const checkout = new Checkout(failingCartRepo, orderRepo, buildAssembler(), new PricingCalculator(), unitOfWork, outboxStore);
 
     await expect(checkout.execute(dto(customerId))).rejects.toThrow('forced commit failure');
 

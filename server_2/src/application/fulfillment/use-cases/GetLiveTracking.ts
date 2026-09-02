@@ -2,22 +2,22 @@ import { Result } from '../../../domain/shared/Result';
 import { NotFoundError } from '../../../domain/shared/errors/NotFoundError';
 import { ForbiddenError } from '../../../domain/shared/errors/ForbiddenError';
 import {
-  IFulfillmentProjectionRepository,
+  ICustomerTrackingRepository,
   CustomerTrackingView,
-} from '../../../domain/fulfillment/repositories/IFulfillmentProjectionRepository';
+} from '../../../domain/fulfillment/repositories/ICustomerTrackingRepository';
 import { IFulfillmentReadCache } from '../../../domain/fulfillment/services/IFulfillmentCache';
 import { GetLiveTrackingDto } from '../dtos/GetLiveTrackingDto';
 import { TrackingResponse, toTrackingResponse } from '../responses/TrackingResponse';
 
 export class GetLiveTracking {
   constructor(
-    private readonly projectionRepo: IFulfillmentProjectionRepository,
+    private readonly trackingRepo: ICustomerTrackingRepository,
     private readonly cache?: IFulfillmentReadCache
   ) {}
 
   async execute(dto: GetLiveTrackingDto): Promise<Result<TrackingResponse>> {
     const loadView = (): Promise<CustomerTrackingView | null> =>
-      this.projectionRepo.findCustomerTracking(dto.fulfillmentId);
+      this.trackingRepo.findCustomerTracking(dto.fulfillmentId);
     const view = this.cache
       ? await this.cache.rememberTracking(dto.fulfillmentId, loadView)
       : await loadView();

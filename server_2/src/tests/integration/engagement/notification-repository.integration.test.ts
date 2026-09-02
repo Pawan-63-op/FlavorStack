@@ -10,7 +10,7 @@ function buildNotification(overrides: { recipientUserId?: string; dedupeKey?: st
   return Notification.queue({
     recipientUserId: overrides.recipientUserId ?? 'user-1',
     category: NOTIFICATION_CATEGORY.ORDER_UPDATES,
-    channel: NOTIFICATION_CHANNEL.PUSH,
+    channel: NOTIFICATION_CHANNEL.INBOX,
     templateKey: 'order_confirmed',
     renderedTitle: 'Order confirmed',
     renderedBody: 'Your order is confirmed',

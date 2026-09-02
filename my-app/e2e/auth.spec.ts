@@ -63,9 +63,25 @@ test.describe("auth lifecycle @smoke @regression", () => {
       await page.waitForLoadState("networkidle");
     });
 
+    // The user-visible contract: the session recovers, silently, via the refresh path.
     await expect(page).not.toHaveURL(/\/login/);
-    expect(refreshCalls).toBe(1);
     expect(await hasCookie(page, ACCESS_TOKEN_COOKIE)).toBe(true);
+
+    // At least one refresh proves recovery went through /auth/refresh rather than some
+    // other path. We deliberately do NOT assert exactly one.
+    //
+    // Single-flight state (`refreshPromise` in lib/api/client/withRefresh.ts) is per-document
+    // JS state, and a reload spans two document lifetimes: the outgoing document's in-flight
+    // fetches can 401 and refresh before teardown, then the fresh document initialises a new
+    // module instance and refreshes again for its own bootstrap. Whether the outgoing document
+    // gets that far is a race, so the total is legitimately 1 or 2 — asserting `toBe(1)` made
+    // this test flaky rather than strict.
+    //
+    // The strict single-flight property — N concurrent 401s collapse into exactly one refresh —
+    // is deterministic *within* a document and is unit-tested there:
+    // lib/api/client/withRefresh.test.ts, "collapses N concurrent 401s into exactly one refresh call".
+    expect(refreshCalls).toBeGreaterThanOrEqual(1);
+    expect(refreshCalls).toBeLessThanOrEqual(2);
   });
 
   test("guarded redirect: protected route while logged out → /login?from=", async ({ page }) => {

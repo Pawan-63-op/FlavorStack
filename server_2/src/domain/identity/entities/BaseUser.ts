@@ -4,12 +4,7 @@ import { AuthProvider } from "../enums/auth-provider.enum";
 import { AggregateRoot } from "../../shared/AggregateRoot";
 import { UniqueEntityId } from "../../shared/UniqueEntityId";
 
-import { UserVerified } from "../events/UserVerified";
 import { PasswordChanged } from "../events/PasswordChanged";
-import { PasswordResetRequested } from "../events/PasswordResetRequested";
-import { PasswordResetCompleted } from "../events/PasswordResetCompleted";
-import { UserBanned } from "../events/UserBanned";
-import { UserUnbanned } from "../events/UserUnbanned";
 
 export abstract class BaseUser extends AggregateRoot<any> {
 
@@ -106,7 +101,6 @@ export abstract class BaseUser extends AggregateRoot<any> {
 
     verifyEmail(): void {
         this.isEmailVerified = true;
-        this.addDomainEvent(new UserVerified(this._id, this.email, new Date()));
     }
 
     changePassword(newPasswordHash: string): void {
@@ -115,29 +109,22 @@ export abstract class BaseUser extends AggregateRoot<any> {
         this.addDomainEvent(new PasswordChanged(this._id, this.passwordChangedAt));
     }
 
-    requestPasswordReset(): void {
-        this.addDomainEvent(new PasswordResetRequested(this._id, this.email, new Date()));
-    }
-
     completePasswordReset(newPasswordHash: string): void {
         this.passwordHash = newPasswordHash;
         this.passwordChangedAt = new Date();
         this.tokenVersion += 1;
-        this.addDomainEvent(new PasswordResetCompleted(this._id, this.passwordChangedAt));
     }
 
     ban(reason: string): void {
         this.isBanned = true
         this.banReason = reason
         this.isActive = false
-        this.addDomainEvent(new UserBanned(this._id, reason, new Date()));
     }
 
     unban(): void {
         this.isBanned = false
         this.banReason = null
         this.isActive = true
-        this.addDomainEvent(new UserUnbanned(this._id, new Date()));
     }
 
     incrementTokenVersion(): void {

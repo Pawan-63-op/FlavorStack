@@ -7,7 +7,7 @@ function validInput(overrides: Record<string, unknown> = {}) {
   return {
     recipientUserId: 'user-1',
     category: NOTIFICATION_CATEGORY.ORDER_UPDATES,
-    channel: NOTIFICATION_CHANNEL.PUSH,
+    channel: NOTIFICATION_CHANNEL.INBOX,
     templateKey: 'order_confirmed',
     renderedTitle: 'Order confirmed',
     renderedBody: 'Your order has been confirmed',
@@ -66,7 +66,7 @@ describe('Notification lifecycle', () => {
 
   it('markRead moves FAILED -> READ (failed-delivery notification still dismissible in-app, G10)', () => {
     const notification = Notification.queue(validInput()).getValue();
-    notification.markFailed('no fcm token');
+    notification.markFailed('no delivery target');
     const result = notification.markRead();
     expect(result.isSuccess).toBe(true);
     expect(notification.status.value).toBe(NOTIFICATION_STATUS.READ);

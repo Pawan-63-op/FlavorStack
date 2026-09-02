@@ -1,30 +1,29 @@
 import type { Connection } from 'mongoose';
 import { IFulfillmentRepository } from '../domain/fulfillment/repositories/IFulfillmentRepository';
 import { IDeliveryAssignmentService } from '../domain/fulfillment/services/IDeliveryAssignmentService';
-import { IFulfillmentProjectionRepository } from '../domain/fulfillment/repositories/IFulfillmentProjectionRepository';
+import { ICustomerTrackingRepository } from '../domain/fulfillment/repositories/ICustomerTrackingRepository';
+import { IFulfillmentQueryRepository } from '../domain/fulfillment/repositories/IFulfillmentQueryRepository';
 import {
   IFulfillmentReadCache,
   IFulfillmentCacheInvalidator,
 } from '../domain/fulfillment/services/IFulfillmentCache';
 import { MongoFulfillmentRepository } from '../infrastructure/repositories/FulfillmentRepository';
-import { MongoFulfillmentProjectionRepository } from '../infrastructure/repositories/FulfillmentProjectionRepository';
+import { MongoCustomerTrackingRepository } from '../infrastructure/repositories/CustomerTrackingRepository';
+import { MongoFulfillmentQueryRepository } from '../infrastructure/repositories/FulfillmentQueryRepository';
 import {
   SimpleDeliveryAssignmentService,
   AvailableRidersProvider,
 } from '../infrastructure/services/SimpleDeliveryAssignmentService';
 import { IRestaurantDirectory } from '../application/fulfillment/ports/IRestaurantDirectory';
 import { MongoUnitOfWork } from '../infrastructure/database/MongoUnitOfWork';
-import { MongoOutboxStore } from '../infrastructure/database/MongoOutboxStore';
 import { TransactionContext } from '../infrastructure/database/TransactionContext';
 import { getFulfillmentConfig } from '../config/fulfillment';
 import { IUnitOfWork } from '../application/shared/ports/IUnitOfWork';
-import { IOutboxStore } from '../application/shared/outbox/IOutboxStore';
 import { IEventBus } from '../application/shared/events/IEventBus';
 import { CreateFulfillment } from '../application/fulfillment/use-cases/CreateFulfillment';
 import { MarkPreparing } from '../application/fulfillment/use-cases/MarkPreparing';
 import { MarkReadyForPickup } from '../application/fulfillment/use-cases/MarkReadyForPickup';
 import { GetRestaurantFulfillments } from '../application/fulfillment/use-cases/GetRestaurantFulfillments';
-import { GetFulfillment } from '../application/fulfillment/use-cases/GetFulfillment';
 import { GetLiveTracking } from '../application/fulfillment/use-cases/GetLiveTracking';
 import { ListCustomerOrders } from '../application/fulfillment/use-cases/ListCustomerOrders';
 import { GetRiderQueue } from '../application/fulfillment/use-cases/GetRiderQueue';
@@ -52,8 +51,6 @@ import { FulfillmentProjector } from '../application/fulfillment/projector/Fulfi
 import { registerFulfillmentEventHandlers } from '../application/fulfillment/event-handlers/FulfillmentEventRegistry';
 import { RecordRiderLocation } from '../application/fulfillment/use-cases/RecordRiderLocation';
 import { TrackingStatusBridge } from '../application/fulfillment/event-handlers/TrackingStatusBridge';
-import { FulfillmentNotificationDispatcher } from '../application/fulfillment/event-handlers/FulfillmentNotificationDispatcher';
-import { INotificationQueue } from '../application/shared/queues/INotificationQueue';
 import { ILiveLocationStore } from '../application/fulfillment/ports/ILiveLocationStore';
 import { IDeliveryTrackingStore } from '../application/fulfillment/ports/IDeliveryTrackingStore';
 import { ITrackingBroadcaster } from '../application/fulfillment/ports/ITrackingBroadcaster';
@@ -71,16 +68,15 @@ export interface FulfillmentRealtimeDeps {
 
 export interface FulfillmentContainer {
   fulfillmentRepository: IFulfillmentRepository;
-  projectionRepository: IFulfillmentProjectionRepository;
+  trackingRepository: ICustomerTrackingRepository;
+  queryRepository: IFulfillmentQueryRepository;
   assignmentService: IDeliveryAssignmentService;
   unitOfWork: IUnitOfWork;
-  outboxStore: IOutboxStore;
   txContext: TransactionContext;
   createFulfillment: CreateFulfillment;
   markPreparing: MarkPreparing;
   markReadyForPickup: MarkReadyForPickup;
   getRestaurantFulfillments: GetRestaurantFulfillments;
-  getFulfillment: GetFulfillment;
   getLiveTracking: GetLiveTracking;
   listCustomerOrders: ListCustomerOrders;
   getRiderQueue: GetRiderQueue;
@@ -105,7 +101,6 @@ export interface FulfillmentContainer {
   projector: FulfillmentProjector;
   recordRiderLocation?: RecordRiderLocation;
   trackingStatusBridge?: TrackingStatusBridge;
-  notificationDispatcher?: FulfillmentNotificationDispatcher;
 }
 
 /**
@@ -120,7 +115,6 @@ export function createFulfillmentContainer(
   eventBus: IEventBus,
   jobScheduler?: IFulfillmentJobScheduler,
   realtime?: FulfillmentRealtimeDeps,
-  notificationQueue?: INotificationQueue,
   cache?: FulfillmentReadCacheDeps,
   restaurantDirectory: IRestaurantDirectory = {
     getOwnerId: async () => null,
@@ -132,9 +126,9 @@ export function createFulfillmentContainer(
 ): FulfillmentContainer {
   const txContext = new TransactionContext();
   const fulfillmentRepository = new MongoFulfillmentRepository(txContext);
-  const projectionRepository = new MongoFulfillmentProjectionRepository();
+  const trackingRepository = new MongoCustomerTrackingRepository();
+  const queryRepository = new MongoFulfillmentQueryRepository();
   const unitOfWork = new MongoUnitOfWork(connection, txContext);
-  const outboxStore = new MongoOutboxStore(txContext);
   const { offerTtlSeconds, maxAssignmentAttempts, readyForPickupSlaSeconds, outForDeliverySlaSeconds } =
     getFulfillmentConfig();
 
@@ -142,24 +136,22 @@ export function createFulfillmentContainer(
     availableRidersProvider
   );
 
-  const createFulfillment = new CreateFulfillment(fulfillmentRepository, unitOfWork, outboxStore, eventBus);
-  const markPreparing = new MarkPreparing(fulfillmentRepository, restaurantDirectory, unitOfWork, outboxStore, eventBus);
-  const markReadyForPickup = new MarkReadyForPickup(fulfillmentRepository, restaurantDirectory, unitOfWork, outboxStore, eventBus);
+  const createFulfillment = new CreateFulfillment(fulfillmentRepository, unitOfWork, eventBus);
+  const markPreparing = new MarkPreparing(fulfillmentRepository, restaurantDirectory, unitOfWork, eventBus);
+  const markReadyForPickup = new MarkReadyForPickup(fulfillmentRepository, restaurantDirectory, unitOfWork, eventBus);
   const getRestaurantFulfillments = new GetRestaurantFulfillments(fulfillmentRepository);
 
-  const getFulfillment = new GetFulfillment(projectionRepository);
-  const getLiveTracking = new GetLiveTracking(projectionRepository, cache);
-  const listCustomerOrders = new ListCustomerOrders(projectionRepository);
-  const getRiderQueue = new GetRiderQueue(projectionRepository);
-  const getRiderDeliveryHistory = new GetRiderDeliveryHistory(projectionRepository);
-  const getAdminDashboard = new GetAdminDashboard(projectionRepository, cache);
-  const getDashboardAnalytics = new GetDashboardAnalytics(projectionRepository, restaurantDirectory);
+  const getLiveTracking = new GetLiveTracking(trackingRepository, cache);
+  const listCustomerOrders = new ListCustomerOrders(trackingRepository);
+  const getRiderQueue = new GetRiderQueue(queryRepository);
+  const getRiderDeliveryHistory = new GetRiderDeliveryHistory(queryRepository);
+  const getAdminDashboard = new GetAdminDashboard(queryRepository, cache);
+  const getDashboardAnalytics = new GetDashboardAnalytics(queryRepository, restaurantDirectory);
 
   const offerRiderAssignment = new OfferRiderAssignment(
     fulfillmentRepository,
     assignmentService,
     unitOfWork,
-    outboxStore,
     eventBus,
     offerTtlSeconds
   );
@@ -167,28 +159,25 @@ export function createFulfillmentContainer(
     fulfillmentRepository,
     assignmentService,
     unitOfWork,
-    outboxStore,
     eventBus,
     offerTtlSeconds
   );
-  const acceptDelivery = new AcceptDelivery(fulfillmentRepository, unitOfWork, outboxStore, eventBus);
+  const acceptDelivery = new AcceptDelivery(fulfillmentRepository, unitOfWork, eventBus);
   const rejectDelivery = new RejectDelivery(
     fulfillmentRepository,
     unitOfWork,
-    outboxStore,
     eventBus,
     offerRiderAssignment
   );
-  const confirmPickup = new ConfirmPickup(fulfillmentRepository, unitOfWork, outboxStore, eventBus);
-  const startDelivery = new StartDelivery(fulfillmentRepository, unitOfWork, outboxStore, eventBus);
-  const completeDelivery = new CompleteDelivery(fulfillmentRepository, unitOfWork, outboxStore, eventBus);
-  const cancelFulfillment = new CancelFulfillment(fulfillmentRepository, unitOfWork, outboxStore, eventBus);
-  const failDelivery = new FailDelivery(fulfillmentRepository, unitOfWork, outboxStore, eventBus);
+  const confirmPickup = new ConfirmPickup(fulfillmentRepository, unitOfWork, eventBus);
+  const startDelivery = new StartDelivery(fulfillmentRepository, unitOfWork, eventBus);
+  const completeDelivery = new CompleteDelivery(fulfillmentRepository, unitOfWork, eventBus);
+  const cancelFulfillment = new CancelFulfillment(fulfillmentRepository, unitOfWork, eventBus);
+  const failDelivery = new FailDelivery(fulfillmentRepository, unitOfWork, eventBus);
   const reassignRider = new ReassignRider(
     fulfillmentRepository,
     assignmentService,
     unitOfWork,
-    outboxStore,
     eventBus,
     offerTtlSeconds,
     assignRider
@@ -197,7 +186,6 @@ export function createFulfillmentContainer(
   const handleAssignmentTimeout = new HandleAssignmentTimeout(
     fulfillmentRepository,
     unitOfWork,
-    outboxStore,
     eventBus,
     offerRiderAssignment,
     cancelFulfillment,
@@ -213,7 +201,7 @@ export function createFulfillmentContainer(
     ? new FulfillmentTimeoutScheduler(jobScheduler, readyForPickupSlaSeconds, outForDeliverySlaSeconds)
     : undefined;
 
-  const projector = new FulfillmentProjector(projectionRepository, cache);
+  const projector = new FulfillmentProjector(trackingRepository, cache);
 
   let recordRiderLocation: RecordRiderLocation | undefined;
   let trackingStatusBridge: TrackingStatusBridge | undefined;
@@ -229,32 +217,25 @@ export function createFulfillmentContainer(
     trackingStatusBridge = new TrackingStatusBridge(realtime.broadcaster);
   }
 
-  const notificationDispatcher = notificationQueue
-    ? new FulfillmentNotificationDispatcher(notificationQueue)
-    : undefined;
-
   registerFulfillmentEventHandlers(
     eventBus,
-    onOrderRequested,
     onReadyForPickup,
     timeoutScheduler,
     projector,
-    trackingStatusBridge,
-    notificationDispatcher
+    trackingStatusBridge
   );
 
   return {
     fulfillmentRepository,
-    projectionRepository,
+    trackingRepository,
+    queryRepository,
     assignmentService,
     unitOfWork,
-    outboxStore,
     txContext,
     createFulfillment,
     markPreparing,
     markReadyForPickup,
     getRestaurantFulfillments,
-    getFulfillment,
     getLiveTracking,
     listCustomerOrders,
     getRiderQueue,
@@ -279,6 +260,5 @@ export function createFulfillmentContainer(
     projector,
     recordRiderLocation,
     trackingStatusBridge,
-    notificationDispatcher,
   };
 }

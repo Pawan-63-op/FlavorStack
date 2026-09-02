@@ -1,5 +1,5 @@
 import { DomainEvent } from '../../domain/shared/DomainEvent';
-import { IEventBus } from '../../application/shared/events/IEventBus';
+import { IOutboxDispatcher } from '../../application/shared/outbox/IOutboxDispatcher';
 import { OutboxConfig } from '../../config/outbox';
 import { logger } from '../observability/logger';
 import { MongoOutboxRepository } from '../repositories/OutboxRepository';
@@ -12,7 +12,7 @@ export class OutboxProcessor {
 
   constructor(
     private readonly repo: MongoOutboxRepository,
-    private readonly eventBus: IEventBus,
+    private readonly dispatcher: IOutboxDispatcher,
     private readonly config: OutboxConfig,
   ) {}
 
@@ -48,6 +48,14 @@ export class OutboxProcessor {
   /** Drain one batch of due rows. Public so callers/tests can run a single,
    *  deterministic tick without the timer. */
   async processBatch(): Promise<void> {
+    const reclaimed = await this.repo.reclaimStale(this.config.leaseMs);
+    if (reclaimed > 0) {
+      logger.warn(
+        { reclaimed, leaseMs: this.config.leaseMs },
+        '[OutboxProcessor] reclaimed stale PROCESSING rows',
+      );
+    }
+
     const rows = await this.repo.findPending(this.config.batchSize);
     for (const row of rows) {
       await this.processRow(row);
@@ -57,8 +65,10 @@ export class OutboxProcessor {
   private async processRow(row: OutboxEventDocument): Promise<void> {
     const id = String(row._id);
     try {
-      await this.repo.markProcessing(id);
-      await this.eventBus.publish(this.toDomainEvent(row));
+      // Lost the race to another relay (or the row moved on since findPending):
+      // leave it entirely alone — the claimer owns settling it.
+      if (!(await this.repo.claim(id))) return;
+      await this.dispatcher.dispatch(this.toDomainEvent(row));
       await this.repo.markProcessed(id);
     } catch (err) {
       await this.handleFailure(row, err);

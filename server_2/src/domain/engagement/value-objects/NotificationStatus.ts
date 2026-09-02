@@ -34,6 +34,11 @@ export class NotificationStatus extends ValueObject<NotificationStatusProps> {
     return new NotificationStatus({ value: NOTIFICATION_STATUS.PENDING });
   }
 
+  /** Start state for a synchronously-delivered notification (INBOX): there is no PENDING window. */
+  public static sent(): NotificationStatus {
+    return new NotificationStatus({ value: NOTIFICATION_STATUS.SENT });
+  }
+
   public isTerminal(): boolean {
     return ALLOWED_TRANSITIONS[this.props.value].length === 0;
   }

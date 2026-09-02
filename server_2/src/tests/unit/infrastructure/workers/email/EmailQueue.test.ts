@@ -27,22 +27,22 @@ describe('EmailQueue', () => {
 
   it('enqueues a job using its type as the job name and forwards jobId', async () => {
     const queue = new EmailQueue();
-    const job: EmailJob = { type: 'welcome', to: 'user@example.com', name: 'User' };
+    const job: EmailJob = { type: 'notification', to: 'user@example.com', subject: 'S', body: 'B' };
 
     await queue.enqueue(job, { jobId: 'event-1' });
 
     const instance = (Queue as unknown as jest.Mock).mock.instances[0];
-    expect(instance.add).toHaveBeenCalledWith('welcome', job, { jobId: 'event-1' });
+    expect(instance.add).toHaveBeenCalledWith('notification', job, { jobId: 'event-1' });
   });
 
   it('enqueues without a jobId when none is provided', async () => {
     const queue = new EmailQueue();
-    const job: EmailJob = { type: 'password-reset', to: 'user@example.com' };
+    const job: EmailJob = { type: 'notification', to: 'user@example.com', subject: 'S', body: 'B' };
 
     await queue.enqueue(job);
 
     const instance = (Queue as unknown as jest.Mock).mock.instances[0];
-    expect(instance.add).toHaveBeenCalledWith('password-reset', job, { jobId: undefined });
+    expect(instance.add).toHaveBeenCalledWith('notification', job, { jobId: undefined });
   });
 
   it('closes the underlying queue', async () => {

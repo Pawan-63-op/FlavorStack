@@ -43,8 +43,8 @@ describe('AddToCart use-case', () => {
     const saved = await cartRepo.findByCustomerId('customer-1');
     expect(saved).not.toBeNull();
     expect(unitOfWork.committed).toBe(true);
-    expect(eventBus.publishedEvents).toHaveLength(1);
-    expect(eventBus.publishedEvents[0].eventName).toBe('CartItemAdded');
+    // Phase 6: cart mutations raise no domain event — nothing subscribed to them.
+    expect(eventBus.publishedEvents).toHaveLength(0);
   });
 
   it('merges an identical line into the existing cart', async () => {

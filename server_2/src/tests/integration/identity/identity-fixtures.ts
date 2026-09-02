@@ -56,7 +56,6 @@ export function buildCustomer(overrides: Record<string, unknown> = {}): Customer
     savedRestaurants: [],
     dietaryPreferences: [],
     defaultPaymentMethod: null,
-    fcmTokens: [],
     notificationsEnabled: true,
     ...overrides,
   });
@@ -86,7 +85,6 @@ export function buildDriver(overrides: Record<string, unknown> = {}): Driver {
     averageRating: 0,
     totalDeliveries: 0,
     totalRatings: 0,
-    fcmTokens: [],
     ...overrides,
   });
 }

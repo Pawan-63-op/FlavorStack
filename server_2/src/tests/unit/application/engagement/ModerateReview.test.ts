@@ -1,9 +1,7 @@
 import { ModerateReview } from '../../../../application/engagement/use-cases/ModerateReview';
-import { RecomputeRestaurantRating } from '../../../../application/engagement/use-cases/RecomputeRestaurantRating';
 import { NotFoundError } from '../../../../domain/shared/errors/NotFoundError';
 import { Review } from '../../../../domain/engagement/entities/Review';
-import { Result } from '../../../../domain/shared/Result';
-import { makeReviewRepo, makeUnitOfWork, makeOutbox, makeEventBus } from './_helpers';
+import { makeReviewRepo, makeUnitOfWork, makeEventBus } from './_helpers';
 
 function buildReview(): Review {
   const r = Review.submit({
@@ -19,31 +17,31 @@ function buildReview(): Review {
 
 function build(review: Review | null) {
   const repo = makeReviewRepo({ findById: jest.fn().mockResolvedValue(review) });
-  const outbox = makeOutbox();
   const bus = makeEventBus();
-  const recompute = { execute: jest.fn().mockResolvedValue(Result.ok(undefined)) } as unknown as RecomputeRestaurantRating;
-  const uc = new ModerateReview(repo, makeUnitOfWork(), outbox, bus, recompute);
-  return { uc, repo, outbox, bus, recompute };
+  const uc = new ModerateReview(repo, makeUnitOfWork(), bus);
+  return { uc, repo, bus };
 }
 
 describe('ModerateReview', () => {
-  it('approves a review, appends ReviewModerated, publishes, and recomputes the rating', async () => {
+  // Phase 6: `ReviewModerated` had no subscriber once the rating became a read-time aggregation,
+  // so moderation now persists state and raises nothing.
+  it('approves a review and persists it, raising no domain event', async () => {
     const review = buildReview();
-    const { uc, repo, outbox, bus, recompute } = build(review);
+    const { uc, repo, bus } = build(review);
 
     const result = await uc.execute({ moderatorId: 'mod-1', reviewId: review.id.toString(), action: 'APPROVE' });
 
     expect(result.isSuccess).toBe(true);
     expect(result.getValue().moderationStatus).toBe('APPROVED');
     expect(repo.update).toHaveBeenCalledTimes(1);
-    expect(outbox.append.mock.calls[0][0][0].eventName).toBe('ReviewModerated');
-    expect(bus.publishAll).toHaveBeenCalledTimes(1);
-    expect(recompute.execute).toHaveBeenCalledWith({ restaurantId: 'rest-1' });
+    // Raises no domain event, but the success path still reaches the post-commit publish.
+    expect(bus.publishAll).toHaveBeenCalledWith([]);
   });
 
-  it('rejects a review and does NOT recompute the rating', async () => {
+  // The rating is aggregated on read now, so moderation has no second write to make.
+  it('rejects a review without any rating write-back', async () => {
     const review = buildReview();
-    const { uc, recompute } = build(review);
+    const { uc, repo } = build(review);
 
     const result = await uc.execute({
       moderatorId: 'mod-1',
@@ -54,7 +52,7 @@ describe('ModerateReview', () => {
 
     expect(result.isSuccess).toBe(true);
     expect(result.getValue().moderationStatus).toBe('REJECTED');
-    expect(recompute.execute).not.toHaveBeenCalled();
+    expect(repo.update).toHaveBeenCalledTimes(1);
   });
 
   it('returns NotFoundError when the review does not exist', async () => {
@@ -77,10 +75,10 @@ describe('ModerateReview', () => {
     const review = buildReview();
     review.approve('mod-1');
     review.pullDomainEvents();
-    const { uc, repo, outbox } = build(review);
+    const { uc, repo, bus } = build(review);
     const result = await uc.execute({ moderatorId: 'mod-2', reviewId: review.id.toString(), action: 'APPROVE' });
     expect(result.isFailure).toBe(true);
     expect(repo.update).not.toHaveBeenCalled();
-    expect(outbox.append).not.toHaveBeenCalled();
+    expect(bus.publishAll).not.toHaveBeenCalled();
   });
 });

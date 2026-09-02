@@ -22,7 +22,6 @@ export class CustomerMapper {
       savedRestaurants: customer.savedRestaurants,
       dietaryPreferences: customer.dietaryPreferences,
       defaultPaymentMethod: customer.defaultPaymentMethod,
-      fcmTokens: customer.fcmTokens,
       notificationsEnabled: customer.notificationsEnabled,
     };
   }
@@ -43,7 +42,6 @@ export class CustomerMapper {
       savedRestaurants: doc.savedRestaurants,
       dietaryPreferences: doc.dietaryPreferences,
       defaultPaymentMethod: doc.defaultPaymentMethod,
-      fcmTokens: doc.fcmTokens,
       notificationsEnabled: doc.notificationsEnabled,
     });
     customer.clearDomainEvents();

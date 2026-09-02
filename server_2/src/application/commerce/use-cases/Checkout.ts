@@ -15,7 +15,6 @@ import { MenuItemSnapshot } from '../../../domain/commerce/value-objects/snapsho
 import { VariantSnapshot } from '../../../domain/commerce/value-objects/snapshots/VariantSnapshot';
 import { IUnitOfWork } from '../../shared/ports/IUnitOfWork';
 import { IOutboxStore } from '../../shared/outbox/IOutboxStore';
-import { IEventBus } from '../../shared/events/IEventBus';
 import { CheckoutContextAssembler, CheckoutAssembly, ResolvedCheckoutLine } from '../services/CheckoutContextAssembler';
 import { CheckoutRequestDto } from '../dtos/CheckoutRequestDto';
 import { OrderRequestSummaryResponse, toOrderRequestSummaryResponse } from '../responses/OrderRequestSummaryResponse';
@@ -31,7 +30,6 @@ export class Checkout {
     private readonly pricingCalculator: IPricingCalculator,
     private readonly unitOfWork: IUnitOfWork,
     private readonly outboxStore: IOutboxStore,
-    private readonly eventBus: IEventBus,
     private readonly telemetry: CommerceTelemetry = new CommerceTelemetry()
   ) {}
 
@@ -112,17 +110,20 @@ export class Checkout {
 
     const clearResult = cart.clear();
     if (clearResult.isFailure) return fail(clearResult.getError(), span);
-    const cartEvents = cart.pullDomainEvents();
 
     await this.unitOfWork.runInTransaction(async (ctx) => {
       await this.orderRequestRepo.save(order);
+      // The one durable async edge in the system: Commerce → Fulfillment. Checkout has committed
+      // and the customer has been charged; if `OrderRequested` is lost, the order silently never
+      // reaches the restaurant. The relay (OutboxProcessor → OutboxDispatcher → OnOrderRequested)
+      // is its ONLY delivery path — there is deliberately no inline publish here.
       await this.outboxStore.append(orderEvents, ctx);
       await this.cartRepo.save(cart);
     });
 
-    await this.eventBus.publishAll([...orderEvents, ...cartEvents]);
-
     const orderRequestId = order.id.toString();
+    // After the commit, so this counts events that are durably the relay's problem now.
+    this.telemetry.outboxAppended(orderEvents.length, { orderRequestId, customerId: dto.customerId });
     this.telemetry.orderRequestCreated({
       orderRequestId,
       customerId: dto.customerId,

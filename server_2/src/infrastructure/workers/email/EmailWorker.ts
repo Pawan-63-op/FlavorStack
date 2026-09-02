@@ -4,7 +4,6 @@ import { IEmailProvider } from '../../../domain/identity/services/IEmailProvider
 import { Email } from '../../../domain/identity/value-objects/Email.vo';
 import { EmailJob } from '../../../application/shared/queues/jobs';
 import { getBullConnection, QUEUE } from '../../../config/bullmq';
-import { DLQHandler } from '../shared/DLQHandler';
 import { JobLogger } from '../shared/JobLogger';
 
 export class EmailWorker {
@@ -12,23 +11,15 @@ export class EmailWorker {
 
   constructor(
     private readonly emailProvider: IEmailProvider,
-    dlqHandler: DLQHandler,
     jobLogger: JobLogger,
   ) {
     this.worker = new Worker<EmailJob>(QUEUE.email, (job) => this.process(job), {
       connection: getBullConnection(),
     });
 
+    // An exhausted job is retained by `removeOnFail: false` and logged by `jobLogger` — there
+    // is no dead-letter copy to make (Phase 8).
     jobLogger.register(this.worker);
-
-    this.worker.on('failed', (job, err) => {
-      if (!job) return;
-
-      const maxAttempts = job.opts.attempts ?? 1;
-      if (job.attemptsMade >= maxAttempts) {
-        void dlqHandler.handle(QUEUE.email, job, err);
-      }
-    });
   }
 
   async process(job: Job<EmailJob>): Promise<void> {
@@ -39,28 +30,9 @@ export class EmailWorker {
     }
     const to = emailResult.getValue();
 
-    switch (data.type) {
-      case 'welcome':
-        await this.emailProvider.sendNotification(
-          to,
-          'Welcome to FlavorStack',
-          `Hi ${data.name}, your account has been created. Please verify your email to get started.`,
-        );
-        return;
-      case 'password-reset':
-        await this.emailProvider.sendNotification(
-          to,
-          'Password Reset Requested',
-          'A password reset was requested for your account. If this was you, check your messages for the reset code we sent.',
-        );
-        return;
-      case 'verification':
-        await this.emailProvider.sendVerification(to, data.token);
-        return;
-      case 'notification':
-        await this.emailProvider.sendNotification(to, data.subject, data.body);
-        return;
-    }
+    // Transport only — every job arrives pre-rendered from `notification_templates` (Phase 5
+    // Batch 3). No copy lives in this worker.
+    await this.emailProvider.sendNotification(to, data.subject, data.body);
   }
 
   async close(): Promise<void> {

@@ -38,7 +38,11 @@ else
 fi
 
 head "Backend stack (docker compose down)"
-DOWN_ARGS=(-f "$SERVER_DIR/docker-compose.yml" -f "$SERVER_DIR/docker-compose.dev.yml" down)
+# --remove-orphans: a service renamed or deleted from the compose file (Phase 8 collapsed
+# worker-outbox/email/fulfillment into worker-relay/jobs) leaves its old container behind, and
+# `restart: unless-stopped` brings it back — two generations of workers then consume the same
+# BullMQ queues. `down` alone does not clean those up.
+DOWN_ARGS=(-f "$SERVER_DIR/docker-compose.yml" -f "$SERVER_DIR/docker-compose.dev.yml" down --remove-orphans)
 [ "$DOWN_VOLUMES" -eq 1 ] && DOWN_ARGS+=(--volumes)
 docker compose "${DOWN_ARGS[@]}"
 [ "$DOWN_VOLUMES" -eq 1 ] && log "dropped mongo-data + redis-data volumes" || log "data volumes preserved"

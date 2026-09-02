@@ -4,7 +4,6 @@ import {
   InMemoryUserRepository,
   FakePasswordHasher,
   InMemoryUnitOfWork,
-  InMemoryOutboxStore,
 } from '../../../mocks/identity.mocks';
 import { createEventBusSpy } from '../../../mocks/shared.mocks';
 import { Driver } from '../../../../domain/identity/entities/Driver';
@@ -15,7 +14,6 @@ describe('RegisterDriver use-case', () => {
   let userRepo: InMemoryUserRepository;
   let passwordHasher: FakePasswordHasher;
   let unitOfWork: InMemoryUnitOfWork;
-  let outboxStore: InMemoryOutboxStore;
   let eventBus: ReturnType<typeof createEventBusSpy>;
   let useCase: RegisterDriver;
 
@@ -38,9 +36,8 @@ describe('RegisterDriver use-case', () => {
     userRepo = new InMemoryUserRepository();
     passwordHasher = new FakePasswordHasher();
     unitOfWork = new InMemoryUnitOfWork();
-    outboxStore = new InMemoryOutboxStore();
     eventBus = createEventBusSpy();
-    useCase = new RegisterDriver(userRepo, passwordHasher, unitOfWork, outboxStore, eventBus);
+    useCase = new RegisterDriver(userRepo, passwordHasher, unitOfWork, eventBus);
   });
 
   describe('success', () => {
@@ -68,10 +65,10 @@ describe('RegisterDriver use-case', () => {
       expect(saved).toBeInstanceOf(Driver);
     });
 
-    it('appends UserRegistered to outbox', async () => {
+    it('publishes UserRegistered', async () => {
       await useCase.execute(validDto);
-      expect(outboxStore.appended.length).toBe(1);
-      expect(outboxStore.appended[0].eventName).toBe('UserRegistered');
+      expect(eventBus.publishedEvents.length).toBe(1);
+      expect(eventBus.publishedEvents[0].eventName).toBe('UserRegistered');
     });
 
     it('publishes UserRegistered via event bus', async () => {

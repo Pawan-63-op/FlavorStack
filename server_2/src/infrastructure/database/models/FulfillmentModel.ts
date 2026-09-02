@@ -171,7 +171,14 @@ const FulfillmentSchema = new Schema<FulfillmentDocument>(
 
 FulfillmentSchema.index({ orderRequestId: 1 }, { unique: true });
 FulfillmentSchema.index({ restaurantId: 1, fulfillmentStatus: 1 });
-FulfillmentSchema.index({ 'currentAssignment.riderId': 1, deliveryStatus: 1 });
 FulfillmentSchema.index({ customerId: 1, createdAt: -1 });
+
+// Phase 3 read paths. These back the admin-dashboard, analytics and rider queries that used to be
+// served by rider_queue_views / admin_dashboard_views, so the aggregate answers them directly.
+FulfillmentSchema.index({ createdAt: -1 });
+FulfillmentSchema.index({ fulfillmentStatus: 1, createdAt: -1 });
+FulfillmentSchema.index({ restaurantId: 1, createdAt: -1 });
+FulfillmentSchema.index({ 'currentAssignment.riderId': 1, 'currentAssignment.offeredAt': -1 });
+FulfillmentSchema.index({ 'currentAssignment.riderId': 1, fulfillmentStatus: 1, deliveredAt: -1 });
 
 export const FulfillmentModel = model<FulfillmentDocument>('Fulfillment', FulfillmentSchema);

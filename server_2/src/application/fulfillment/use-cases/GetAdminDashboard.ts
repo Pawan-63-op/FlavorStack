@@ -1,15 +1,15 @@
 import { Result } from '../../../domain/shared/Result';
 import {
-  IFulfillmentProjectionRepository,
+  IFulfillmentQueryRepository,
   AdminDashboardView,
-} from '../../../domain/fulfillment/repositories/IFulfillmentProjectionRepository';
+} from '../../../domain/fulfillment/repositories/IFulfillmentQueryRepository';
 import { IFulfillmentReadCache } from '../../../domain/fulfillment/services/IFulfillmentCache';
 import { GetAdminDashboardDto } from '../dtos/GetAdminDashboardDto';
 import { AdminDashboardItemResponse, toAdminDashboardItemResponse } from '../responses/AdminDashboardResponse';
 
 export class GetAdminDashboard {
   constructor(
-    private readonly projectionRepo: IFulfillmentProjectionRepository,
+    private readonly queryRepo: IFulfillmentQueryRepository,
     private readonly cache?: IFulfillmentReadCache
   ) {}
 
@@ -21,7 +21,7 @@ export class GetAdminDashboard {
       limit: dto.limit,
       offset: dto.offset,
     };
-    const loadItems = (): Promise<AdminDashboardView[]> => this.projectionRepo.findAdminDashboard(query);
+    const loadItems = (): Promise<AdminDashboardView[]> => this.queryRepo.findAdminDashboard(query);
     const items = this.cache
       ? await this.cache.rememberDashboard(dashboardDiscriminator(dto), loadItems)
       : await loadItems();

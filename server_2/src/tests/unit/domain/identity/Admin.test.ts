@@ -4,8 +4,6 @@ import { PERMISSION_RESOURCE } from '../../../../domain/identity/enums/permissio
 import { PERMISSION_ACTION } from '../../../../domain/identity/enums/permission-action.enum';
 import { Permission } from '../../../../domain/identity/value-objects/Permission.vo';
 import { UserRegistered } from '../../../../domain/identity/events/UserRegistered';
-import { PermissionGranted } from '../../../../domain/identity/events/PermissionGranted';
-import { RoleAssigned } from '../../../../domain/identity/events/RoleAssigned';
 import { ForbiddenError } from '../../../../domain/shared/errors/ForbiddenError';
 
 describe('Admin Entity', () => {
@@ -76,7 +74,7 @@ describe('Admin Entity', () => {
   });
 
   describe('permission management', () => {
-    it('should grant permission and raise PermissionGranted event if not already possessed', () => {
+    it('should grant permission if not already possessed, raising no domain event', () => {
       const admin = Admin.create(validAdminInput);
       admin.clearDomainEvents();
 
@@ -90,15 +88,7 @@ describe('Admin Entity', () => {
 
       expect(admin.permissions.length).toBe(1);
       expect(admin.permissions[0]).toBe(permission);
-
-      const events = admin.pullDomainEvents();
-      expect(events.length).toBe(1);
-      const event = events[0] as PermissionGranted;
-      expect(event).toBeInstanceOf(PermissionGranted);
-      expect(event.aggregateId).toBe(admin._id);
-      expect(event.resource).toBe(PERMISSION_RESOURCE.MENU);
-      expect(event.action).toBe(PERMISSION_ACTION.UPDATE);
-      expect(event.scope).toBe('branch-1');
+      expect(admin.pullDomainEvents()).toEqual([]);
     });
 
     it('should not duplicate permission or raise event if already possessed', () => {
@@ -151,7 +141,7 @@ describe('Admin Entity', () => {
   });
 
   describe('role assignment', () => {
-    it('should assign role and raise RoleAssigned event when admin has update user permission', () => {
+    it('should authorise a role assignment when admin has update user permission', () => {
       const permission = Permission.create({
         resource: PERMISSION_RESOURCE.USER,
         action: PERMISSION_ACTION.UPDATE,
@@ -163,15 +153,8 @@ describe('Admin Entity', () => {
       });
       admin.clearDomainEvents();
 
-      admin.assignRole('user-abc', USER_ROLE.DRIVER);
-
-      const events = admin.pullDomainEvents();
-      expect(events.length).toBe(1);
-      const event = events[0] as RoleAssigned;
-      expect(event).toBeInstanceOf(RoleAssigned);
-      expect(event.aggregateId).toBe('user-abc');
-      expect(event.assignedRole).toBe(USER_ROLE.DRIVER);
-      expect(event.assignedBy).toBe(admin._id);
+      expect(() => admin.assignRole(USER_ROLE.DRIVER)).not.toThrow();
+      expect(admin.pullDomainEvents()).toEqual([]);
     });
 
     it('should throw ForbiddenError when assigning admin role by regular admin', () => {
@@ -186,7 +169,7 @@ describe('Admin Entity', () => {
       });
 
       expect(() => {
-        admin.assignRole('user-abc', USER_ROLE.ADMIN);
+        admin.assignRole(USER_ROLE.ADMIN);
       }).toThrow(ForbiddenError);
     });
 
@@ -194,19 +177,15 @@ describe('Admin Entity', () => {
       const admin = Admin.createSuperAdmin(validAdminInput);
       admin.clearDomainEvents();
 
-      admin.assignRole('user-abc', USER_ROLE.ADMIN);
-
-      const events = admin.pullDomainEvents();
-      expect(events.length).toBe(1);
-      const event = events[0] as RoleAssigned;
-      expect(event.assignedRole).toBe(USER_ROLE.ADMIN);
+      expect(() => admin.assignRole(USER_ROLE.ADMIN)).not.toThrow();
+      expect(admin.pullDomainEvents()).toEqual([]);
     });
 
     it('should throw ForbiddenError when admin without user update permission tries to assign role', () => {
       const admin = Admin.create(validAdminInput); // No permissions
 
       expect(() => {
-        admin.assignRole('user-abc', USER_ROLE.DRIVER);
+        admin.assignRole(USER_ROLE.DRIVER);
       }).toThrow(ForbiddenError);
     });
   });

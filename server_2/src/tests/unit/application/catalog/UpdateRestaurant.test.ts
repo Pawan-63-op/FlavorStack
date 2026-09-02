@@ -1,6 +1,6 @@
 import { UpdateRestaurant } from '../../../../application/catalog/use-cases/UpdateRestaurant';
 import { InMemoryRestaurantRepository } from '../../../mocks/catalog.mocks';
-import { InMemoryUnitOfWork, InMemoryOutboxStore } from '../../../mocks/identity.mocks';
+import { InMemoryUnitOfWork } from '../../../mocks/identity.mocks';
 import { createEventBusSpy, EventBusSpy } from '../../../mocks/shared.mocks';
 import { buildRestaurant } from './helpers';
 import { NotFoundError } from '../../../../domain/shared/errors/NotFoundError';
@@ -9,16 +9,14 @@ import { ForbiddenError } from '../../../../domain/shared/errors/ForbiddenError'
 describe('UpdateRestaurant use-case', () => {
   let restaurantRepo: InMemoryRestaurantRepository;
   let unitOfWork: InMemoryUnitOfWork;
-  let outboxStore: InMemoryOutboxStore;
   let eventBus: EventBusSpy;
   let useCase: UpdateRestaurant;
 
   beforeEach(() => {
     restaurantRepo = new InMemoryRestaurantRepository();
     unitOfWork = new InMemoryUnitOfWork();
-    outboxStore = new InMemoryOutboxStore();
     eventBus = createEventBusSpy();
-    useCase = new UpdateRestaurant(restaurantRepo, unitOfWork, outboxStore, eventBus);
+    useCase = new UpdateRestaurant(restaurantRepo, unitOfWork, eventBus);
   });
 
   it('updates the profile and emits RestaurantUpdated', async () => {
@@ -33,8 +31,8 @@ describe('UpdateRestaurant use-case', () => {
 
     expect(result.isSuccess).toBe(true);
     expect(result.getValue().name).toBe('Renamed Bistro');
-    expect(outboxStore.appended).toHaveLength(1);
-    expect(outboxStore.appended[0].eventName).toBe('RestaurantUpdated');
+    expect(eventBus.publishedEvents).toHaveLength(1);
+    expect(eventBus.publishedEvents[0].eventName).toBe('RestaurantUpdated');
     expect(eventBus.publishedEvents).toHaveLength(1);
   });
 
@@ -54,7 +52,7 @@ describe('UpdateRestaurant use-case', () => {
     });
 
     expect(result.getError()).toBeInstanceOf(ForbiddenError);
-    expect(outboxStore.appended).toHaveLength(0);
+    expect(eventBus.publishedEvents).toHaveLength(0);
   });
 
   it('allows a super-admin to update a restaurant they do not own', async () => {
@@ -83,6 +81,6 @@ describe('UpdateRestaurant use-case', () => {
     });
 
     expect(result.isFailure).toBe(true);
-    expect(outboxStore.appended).toHaveLength(0);
+    expect(eventBus.publishedEvents).toHaveLength(0);
   });
 });

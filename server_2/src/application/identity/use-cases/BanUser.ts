@@ -6,7 +6,6 @@ import { IUserRepository } from '../../../domain/identity/repositories/IUserRepo
 import { Admin } from '../../../domain/identity/entities/Admin';
 import { ISessionStore } from '../../../domain/identity/services/ISessionStore';
 import { IUnitOfWork } from '../../shared/ports/IUnitOfWork';
-import { IOutboxStore } from '../../shared/outbox/IOutboxStore';
 import { IEventBus } from '../../shared/events/IEventBus';
 import { BanUserDto } from '../dtos/BanUserDto';
 
@@ -15,7 +14,6 @@ export class BanUser {
     private userRepo: IUserRepository,
     private sessionStore: ISessionStore,
     private unitOfWork: IUnitOfWork,
-    private outboxStore: IOutboxStore,
     private eventBus: IEventBus,
   ) {}
 
@@ -39,9 +37,8 @@ export class BanUser {
 
     const events = target.pullDomainEvents();
 
-    await this.unitOfWork.runInTransaction(async (ctx) => {
+    await this.unitOfWork.runInTransaction(async () => {
       await this.userRepo.update(target);
-      await this.outboxStore.append(events, ctx);
     });
 
     await this.eventBus.publishAll(events);

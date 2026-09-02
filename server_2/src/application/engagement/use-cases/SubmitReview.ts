@@ -4,9 +4,8 @@ import { ForbiddenError } from '../../../domain/shared/errors/ForbiddenError';
 import { ConflictError } from '../../../domain/shared/errors/ConflictError';
 import { Review } from '../../../domain/engagement/entities/Review';
 import { IReviewRepository } from '../../../domain/engagement/repositories/IReviewRepository';
-import { IReviewEligibilityRepository } from '../../../domain/engagement/repositories/IReviewEligibilityRepository';
+import { IFulfillmentGateway } from '../../../domain/engagement/services/IFulfillmentGateway';
 import { IUnitOfWork } from '../../shared/ports/IUnitOfWork';
-import { IOutboxStore } from '../../shared/outbox/IOutboxStore';
 import { IEventBus } from '../../shared/events/IEventBus';
 import { SubmitReviewDto } from '../dtos/ReviewDtos';
 import { ReviewResponse, toReviewResponse } from '../responses/ReviewResponse';
@@ -14,27 +13,28 @@ import { ReviewResponse, toReviewResponse } from '../responses/ReviewResponse';
 export class SubmitReview {
   constructor(
     private readonly reviewRepo: IReviewRepository,
-    private readonly eligibilityRepo: IReviewEligibilityRepository,
+    private readonly fulfillmentGateway: IFulfillmentGateway,
     private readonly unitOfWork: IUnitOfWork,
-    private readonly outboxStore: IOutboxStore,
     private readonly eventBus: IEventBus
   ) {}
 
   async execute(dto: SubmitReviewDto): Promise<Result<ReviewResponse>> {
-    const eligibility = await this.eligibilityRepo.findByFulfillmentId(dto.fulfillmentId);
-    if (!eligibility || !eligibility.deliveredAt) {
+    // Eligibility is read from the fulfillment aggregate rather than a replicated
+    // `reviewed` flag, so there is no window in which the two disagree.
+    const subject = await this.fulfillmentGateway.getForReview(dto.fulfillmentId);
+    if (!subject || !subject.deliveredAt) {
       return Result.fail(new ValidationError('review_not_eligible'));
     }
-    if (eligibility.customerId !== dto.customerId) {
+    if (subject.customerId !== dto.customerId) {
       return Result.fail(new ForbiddenError('review_not_owned'));
     }
-    if (eligibility.restaurantId !== dto.restaurantId) {
+    if (subject.restaurantId !== dto.restaurantId) {
       return Result.fail(new ValidationError('review_restaurant_mismatch'));
     }
-    if (eligibility.reviewed) {
-      return Result.fail(new ConflictError('review_already_submitted'));
-    }
 
+    // "Already reviewed" is now a lookup on `reviews` itself, under the unique
+    // {customerId, fulfillmentId} index that is also the race-safe backstop: a concurrent
+    // second submit passes this check but fails the insert with a ConflictError.
     const existing = await this.reviewRepo.findByCustomerAndFulfillment(dto.customerId, dto.fulfillmentId);
     if (existing) {
       return Result.fail(new ConflictError('review_already_submitted'));
@@ -53,10 +53,8 @@ export class SubmitReview {
     const review = reviewResult.getValue();
     const events = review.pullDomainEvents();
 
-    await this.unitOfWork.runInTransaction(async (ctx) => {
+    await this.unitOfWork.runInTransaction(async () => {
       await this.reviewRepo.save(review);
-      if (events.length > 0) await this.outboxStore.append(events, ctx);
-      await this.eligibilityRepo.markReviewed(dto.fulfillmentId);
     });
 
     await this.eventBus.publishAll(events);

@@ -9,6 +9,10 @@ const config = {
       tsconfig: 'tsconfig.json'
     }]
   },
+  // NodeNext requires explicit .js specifiers on dynamic imports; map them back to the .ts source.
+  moduleNameMapper: {
+    '^(\\.{1,2}/.*)\\.js$': '$1',
+  },
   verbose: true,
   forceExit: true,
   clearMocks: true,

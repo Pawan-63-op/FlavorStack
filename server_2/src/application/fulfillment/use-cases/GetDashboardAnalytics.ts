@@ -2,9 +2,9 @@ import { Result } from '../../../domain/shared/Result';
 import { ValidationError } from '../../../domain/shared/errors/ValidationError';
 import { FULFILLMENT_STATUS } from '../../../domain/fulfillment/enums/fulfillment-status.enum';
 import {
-  IFulfillmentProjectionRepository,
+  IFulfillmentQueryRepository,
   AnalyticsAggregate,
-} from '../../../domain/fulfillment/repositories/IFulfillmentProjectionRepository';
+} from '../../../domain/fulfillment/repositories/IFulfillmentQueryRepository';
 import { IRestaurantDirectory } from '../ports/IRestaurantDirectory';
 import { GetDashboardAnalyticsDto } from '../dtos/GetDashboardAnalyticsDto';
 import {
@@ -23,7 +23,7 @@ const TERMINAL_STATUSES = new Set<string>([
 
 export class GetDashboardAnalytics {
   constructor(
-    private readonly projectionRepo: IFulfillmentProjectionRepository,
+    private readonly queryRepo: IFulfillmentQueryRepository,
     private readonly restaurantDirectory: IRestaurantDirectory,
     private readonly now: () => Date = () => new Date()
   ) {}
@@ -50,7 +50,7 @@ export class GetDashboardAnalytics {
       restaurantCount = await this.restaurantDirectory.countAll();
     }
 
-    const agg = await this.projectionRepo.aggregateAnalytics({ restaurantIds, from, to, prevFrom });
+    const agg = await this.queryRepo.aggregateAnalytics({ restaurantIds, from, to, prevFrom });
     const response = await this.toResponse(dto.scope, windowDays, restaurantCount, agg);
     return Result.ok(response);
   }

@@ -4,7 +4,7 @@ import { NOTIFICATION_CHANNEL } from '../../../../domain/engagement/enums/notifi
 function validInput(overrides: Record<string, unknown> = {}) {
   return {
     key: 'order_confirmed',
-    channel: NOTIFICATION_CHANNEL.PUSH,
+    channel: NOTIFICATION_CHANNEL.INBOX,
     locale: 'en',
     titleTemplate: 'Order confirmed',
     bodyTemplate: 'Hi {{name}}, your order #{{orderId}} is confirmed.',

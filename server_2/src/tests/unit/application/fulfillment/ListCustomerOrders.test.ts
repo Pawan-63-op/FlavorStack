@@ -1,26 +1,14 @@
 import { ListCustomerOrders } from '../../../../application/fulfillment/use-cases/ListCustomerOrders';
 import {
-  IFulfillmentProjectionRepository,
+  ICustomerTrackingRepository,
   CustomerOrderSummaryView,
-} from '../../../../domain/fulfillment/repositories/IFulfillmentProjectionRepository';
+} from '../../../../domain/fulfillment/repositories/ICustomerTrackingRepository';
 
-function makeRepo(): jest.Mocked<IFulfillmentProjectionRepository> {
+function makeRepo(): jest.Mocked<ICustomerTrackingRepository> {
   return {
     upsertCustomerTracking: jest.fn().mockResolvedValue(undefined),
     findCustomerTracking: jest.fn().mockResolvedValue(null),
     findByCustomer: jest.fn().mockResolvedValue([]),
-    upsertRestaurantView: jest.fn().mockResolvedValue(undefined),
-    removeRestaurantView: jest.fn().mockResolvedValue(undefined),
-    findRestaurantQueue: jest.fn().mockResolvedValue([]),
-    upsertRiderQueueItem: jest.fn().mockResolvedValue(undefined),
-    removeRiderQueueItem: jest.fn().mockResolvedValue(undefined),
-    removeAllRiderQueueItemsForFulfillment: jest.fn().mockResolvedValue(undefined),
-    findRiderQueue: jest.fn().mockResolvedValue([]),
-    findRiderCompletedDeliveries: jest.fn().mockResolvedValue([]),
-    upsertAdminView: jest.fn().mockResolvedValue(undefined),
-    patchAdminView: jest.fn().mockResolvedValue(undefined),
-    findAdminDashboard: jest.fn().mockResolvedValue([]),
-    aggregateAnalytics: jest.fn(),
   };
 }
 

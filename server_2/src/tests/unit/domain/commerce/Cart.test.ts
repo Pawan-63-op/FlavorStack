@@ -5,8 +5,6 @@ import { Money } from '../../../../domain/shared/Money';
 import { ValidationError } from '../../../../domain/shared/errors/ValidationError';
 import { ConflictError } from '../../../../domain/shared/errors/ConflictError';
 import { NotFoundError } from '../../../../domain/shared/errors/NotFoundError';
-import { CartItemAdded } from '../../../../domain/commerce/events/CartItemAdded';
-import { CartCleared } from '../../../../domain/commerce/events/CartCleared';
 
 function selection(overrides: Partial<{ menuItemId: string; selectedOptionIds: string[]; quantity: number }> = {}) {
   return LineItemSelection.create({
@@ -58,18 +56,14 @@ describe('Cart aggregate', () => {
       expect(cart.version).toBe(1);
     });
 
-    it('raises a CartItemAdded event', () => {
+    // Phase 6: cart mutations raise no domain events — nothing subscribed to them, and the
+    // cart's state is the only thing any reader cares about.
+    it('raises no domain event', () => {
       const cart = Cart.create('customer-1').getValue();
 
       cart.addItem('restaurant-1', selection({ menuItemId: 'menu-1', quantity: 2 }), money(15000));
 
-      const events = cart.pullDomainEvents();
-      expect(events).toHaveLength(1);
-      expect(events[0]).toBeInstanceOf(CartItemAdded);
-      const event = events[0] as CartItemAdded;
-      expect(event.aggregateId).toBe(cart.id.toString());
-      expect(event.menuItemId).toBe('menu-1');
-      expect(event.quantity).toBe(2);
+      expect(cart.pullDomainEvents()).toEqual([]);
     });
 
     it('merges identical lines by summing quantity', () => {
@@ -209,17 +203,14 @@ describe('Cart aggregate', () => {
       expect(cart.currency).toBeNull();
     });
 
-    it('raises a CartCleared event', () => {
+    it('raises no domain event', () => {
       const cart = Cart.create('customer-1').getValue();
       cart.addItem('restaurant-1', selection({ menuItemId: 'menu-1' }), money(15000));
       cart.pullDomainEvents();
 
       cart.clear();
 
-      const events = cart.pullDomainEvents();
-      expect(events).toHaveLength(1);
-      expect(events[0]).toBeInstanceOf(CartCleared);
-      expect(events[0].aggregateId).toBe(cart.id.toString());
+      expect(cart.pullDomainEvents()).toEqual([]);
     });
   });
 

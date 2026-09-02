@@ -2,8 +2,6 @@ import { Driver } from '../../../../domain/identity/entities/Driver';
 import { DRIVER_STATUS } from '../../../../domain/identity/enums/driver-status.enum';
 import { USER_ROLE } from '../../../../domain/identity/enums/user-role.enum';
 import { UserRegistered } from '../../../../domain/identity/events/UserRegistered';
-import { DriverVerified } from '../../../../domain/identity/events/DriverVerified';
-import { DriverSuspended } from '../../../../domain/identity/events/DriverSuspended';
 import { DomainError } from '../../../../domain/shared/errors/DomainError';
 import { ValidationError } from '../../../../domain/shared/errors/ValidationError';
 import { ForbiddenError } from '../../../../domain/shared/errors/ForbiddenError';
@@ -56,7 +54,7 @@ describe('Driver Entity', () => {
   });
 
   describe('verification and suspension', () => {
-    it('should verify driver and transition status PENDING_VERIFICATION -> OFFLINE raising DriverVerified event', () => {
+    it('should verify driver and transition status PENDING_VERIFICATION -> OFFLINE, raising no domain event', () => {
       const driver = Driver.create(validDriverInput);
       driver.clearDomainEvents(); // Clear registration event
 
@@ -64,34 +62,21 @@ describe('Driver Entity', () => {
 
       expect(driver.driverStatus).toBe(DRIVER_STATUS.OFFLINE);
       expect(driver.isVerified).toBe(true);
-
-      const events = driver.pullDomainEvents();
-      expect(events.length).toBe(1);
-      const event = events[0] as DriverVerified;
-      expect(event).toBeInstanceOf(DriverVerified);
-      expect(event.aggregateId).toBe(driver._id);
-      expect(event.eventName).toBe('DriverVerified');
+      expect(driver.pullDomainEvents()).toEqual([]);
     });
 
-    it('should suspend driver and set isAvailable to false, raising DriverSuspended event', () => {
+    it('should suspend driver and set isAvailable to false, raising no domain event', () => {
       const driver = Driver.create(validDriverInput);
       driver.verifyDriver();
       driver.goOnline();
       driver.clearDomainEvents();
 
-      driver.suspendDriver('Failed background check');
+      driver.suspendDriver();
 
       expect(driver.driverStatus).toBe(DRIVER_STATUS.SUSPENDED);
       expect(driver.isAvailable).toBe(false);
       expect(driver.isVerified).toBe(false);
-
-      const events = driver.pullDomainEvents();
-      expect(events.length).toBe(1);
-      const event = events[0] as DriverSuspended;
-      expect(event).toBeInstanceOf(DriverSuspended);
-      expect(event.aggregateId).toBe(driver._id);
-      expect(event.reason).toBe('Failed background check');
-      expect(event.eventName).toBe('DriverSuspended');
+      expect(driver.pullDomainEvents()).toEqual([]);
     });
   });
 

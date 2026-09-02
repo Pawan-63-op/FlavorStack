@@ -1,7 +1,6 @@
 import { VerifyDriver } from '../../../../application/identity/use-cases/VerifyDriver';
 import {
   InMemoryUserRepository,
-  InMemoryOutboxStore,
   InMemoryUnitOfWork,
 } from '../../../mocks/identity.mocks';
 import { createEventBusSpy, EventBusSpy } from '../../../mocks/shared.mocks';
@@ -27,19 +26,17 @@ function driver(status: string): Driver {
 describe('VerifyDriver use-case', () => {
   let userRepo: InMemoryUserRepository;
   let unitOfWork: InMemoryUnitOfWork;
-  let outboxStore: InMemoryOutboxStore;
   let eventBus: EventBusSpy;
   let useCase: VerifyDriver;
 
   beforeEach(() => {
     userRepo = new InMemoryUserRepository();
     unitOfWork = new InMemoryUnitOfWork();
-    outboxStore = new InMemoryOutboxStore();
     eventBus = createEventBusSpy();
-    useCase = new VerifyDriver(userRepo, unitOfWork, outboxStore, eventBus);
+    useCase = new VerifyDriver(userRepo, unitOfWork, eventBus);
   });
 
-  it('verifies a PENDING driver → OFFLINE, persists, and publishes DriverVerified', async () => {
+  it('verifies a PENDING driver → OFFLINE and persists, raising no domain event', async () => {
     await userRepo.save(driver(DRIVER_STATUS.PENDING_VERIFICATION));
 
     const result = await useCase.execute({ driverId: 'drv-1' });
@@ -50,8 +47,9 @@ describe('VerifyDriver use-case', () => {
       isAvailable: false,
       isOnline: false,
     });
-    expect(outboxStore.appended.map((e) => e.eventName)).toEqual(['DriverVerified']);
-    expect(eventBus.publishedEvents.map((e) => e.eventName)).toEqual(['DriverVerified']);
+    // Phase 6: verification raises no domain event — it had no subscriber.
+    expect(eventBus.publishedEvents).toHaveLength(0);
+    expect(eventBus.publishedEvents).toHaveLength(0);
   });
 
   it('re-verifies a SUSPENDED driver → OFFLINE (domain allows re-verification)', async () => {
@@ -61,7 +59,7 @@ describe('VerifyDriver use-case', () => {
 
     expect(result.isSuccess).toBe(true);
     expect(result.getValue().driverStatus).toBe(DRIVER_STATUS.OFFLINE);
-    expect(outboxStore.appended.map((e) => e.eventName)).toEqual(['DriverVerified']);
+    expect(eventBus.publishedEvents).toHaveLength(0);
   });
 
   it('returns NotFoundError when the user does not exist, without persisting', async () => {
@@ -69,7 +67,7 @@ describe('VerifyDriver use-case', () => {
 
     expect(result.isFailure).toBe(true);
     expect(result.getError()).toBeInstanceOf(NotFoundError);
-    expect(outboxStore.appended).toHaveLength(0);
+    expect(eventBus.publishedEvents).toHaveLength(0);
   });
 
   it('returns ForbiddenError when the target is not a driver, without persisting', async () => {
@@ -86,7 +84,7 @@ describe('VerifyDriver use-case', () => {
 
     expect(result.isFailure).toBe(true);
     expect(result.getError()).toBeInstanceOf(ForbiddenError);
-    expect(outboxStore.appended).toHaveLength(0);
+    expect(eventBus.publishedEvents).toHaveLength(0);
   });
 
   it('returns ConflictError when the driver is already verified, without persisting or emitting', async () => {
@@ -96,7 +94,7 @@ describe('VerifyDriver use-case', () => {
 
     expect(result.isFailure).toBe(true);
     expect(result.getError()).toBeInstanceOf(ConflictError);
-    expect(outboxStore.appended).toHaveLength(0);
+    expect(eventBus.publishedEvents).toHaveLength(0);
     expect(eventBus.publishedEvents).toHaveLength(0);
   });
 });

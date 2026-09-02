@@ -13,10 +13,15 @@ export const COMMERCE_METRICS = {
   checkoutIdempotentReplayTotal: 'commerce_checkout_idempotent_replay_total',
   /** Histogram(ms) — pricing pipeline latency. */
   pricingLatencyMs: 'commerce_pricing_latency_ms',
-  /** Histogram(ms) — projection lag (catalog event occurredOn → view rebuilt). */
-  projectionLagMs: 'commerce_projection_lag_ms',
   /** Counter{reason} — cart validation rejection reasons. */
   validationRejectionTotal: 'commerce_validation_rejection_total',
+  /**
+   * Counter — domain events durably handed to the relay by Checkout's outbox append.
+   * Deliberately separate from `checkoutTotal{result=success}`: "orders accepted" and
+   * "orders handed to the relay" diverging is *precisely* the failure the outbox exists to
+   * make visible, and a single counter cannot show it.
+   */
+  outboxAppendTotal: 'commerce_outbox_append_total',
 } as const;
 
 export type CommerceMetricName = (typeof COMMERCE_METRICS)[keyof typeof COMMERCE_METRICS];
@@ -63,15 +68,20 @@ export class CommerceTelemetry {
   }
 
   /**
+   * Records that `count` events were committed to the outbox alongside the OrderRequest.
+   * Called only *after* the transaction commits, so it counts durable handoffs — a commit
+   * that appended nothing increments by zero, which is the divergence worth alerting on.
+   */
+  outboxAppended(count: number, fields?: LogFields): void {
+    this.t.increment(COMMERCE_METRICS.outboxAppendTotal, undefined, count);
+    this.t.debug('commerce.checkout.outbox_appended', { count, ...fields });
+  }
+
+  /**
    * Audit record for a created OrderRequest. The OrderRequest itself is the immutable,
    * self-contained audit artifact (§11); this emits a structured, correlatable trail entry.
    */
   orderRequestCreated(fields: LogFields): void {
     this.t.info('commerce.order_request.created', { audit: true, ...fields });
-  }
-
-  recordProjectionLag(ms: number, fields?: LogFields): void {
-    this.t.observe(COMMERCE_METRICS.projectionLagMs, ms);
-    this.t.debug('commerce.projection.applied', { lagMs: ms, ...fields });
   }
 }

@@ -1,32 +1,58 @@
 import { getConnection } from '../../../infrastructure/database/connection';
 import { InMemoryEventBus } from '../../../application/shared/events/InMemoryEventBus';
-import { INotificationQueue } from '../../../application/shared/queues/INotificationQueue';
-import { NotificationJob, EnqueueOptions } from '../../../application/shared/queues/jobs';
 import { DomainEvent } from '../../../domain/shared/DomainEvent';
 import { createEngagementContainer, EngagementContainer } from '../../../container/engagement.container';
 import { seedNotificationTemplates } from '../../../infrastructure/database/seeds/notification-templates.seed';
 import { NotificationPreference } from '../../../domain/engagement/entities/NotificationPreference';
 import { NOTIFICATION_CATEGORY } from '../../../domain/engagement/enums/notification-category.enum';
 import { NOTIFICATION_CHANNEL } from '../../../domain/engagement/enums/notification-channel.enum';
+import { MongoFulfillmentQueryRepository } from '../../../infrastructure/repositories/FulfillmentQueryRepository';
+import { FULFILLMENT_STATUS } from '../../../domain/fulfillment/enums/fulfillment-status.enum';
 
 import { NotificationModel } from '../../../infrastructure/database/models/NotificationModel';
 import { ReviewModel } from '../../../infrastructure/database/models/ReviewModel';
-import { ReviewEligibilityModel } from '../../../infrastructure/database/models/ReviewEligibilityModel';
 import { NotificationTemplateModel } from '../../../infrastructure/database/models/NotificationTemplateModel';
 import { NotificationPreferenceModel } from '../../../infrastructure/database/models/NotificationPreferenceModel';
-import { RestaurantRatingViewModel } from '../../../infrastructure/database/models/RestaurantRatingViewModel';
+import { FulfillmentModel } from '../../../infrastructure/database/models/FulfillmentModel';
 import { OutboxEventModel } from '../../../infrastructure/database/models/OutboxEventModel';
 
-class FakeNotificationQueue implements INotificationQueue {
-  public readonly jobs: { job: NotificationJob; opts?: EnqueueOptions }[] = [];
-  async enqueue(job: NotificationJob, opts?: EnqueueOptions): Promise<void> {
-    this.jobs.push({ job, opts });
-  }
-  async close(): Promise<void> {}
-}
 
 let seq = 0;
 const nextId = (prefix: string) => `${prefix}-${(seq += 1)}`;
+
+/**
+ * Phase 4: Engagement reads the `fulfillments` aggregate through IFulfillmentGateway
+ * instead of keeping a `review_eligibility` copy, so these chains seed a real fulfillment.
+ */
+async function seedFulfillment(args: {
+  fulfillmentId: string;
+  customerId: string;
+  restaurantId: string;
+  delivered?: boolean;
+  deliveredAt?: Date;
+}): Promise<void> {
+  const now = new Date();
+  await FulfillmentModel.create({
+    _id: args.fulfillmentId,
+    orderRequestId: nextId('ord'),
+    customerId: args.customerId,
+    restaurantId: args.restaurantId,
+    lines: [],
+    deliveryAddress: {
+      street: '1 Test St',
+      city: 'Pune',
+      state: 'MH',
+      pinCode: '411001',
+      coordinates: { lat: 18.52, lng: 73.85 },
+    },
+    pricingTotal: { amount: 2599, currency: 'INR' },
+    fulfillmentStatus: args.delivered ? FULFILLMENT_STATUS.DELIVERED : FULFILLMENT_STATUS.CREATED,
+    deliveryStatus: 'UNASSIGNED',
+    createdAt: now,
+    updatedAt: now,
+    ...(args.delivered ? { deliveredAt: args.deliveredAt ?? now } : {}),
+  });
+}
 
 function busEvent(eventName: string, aggregateId: string, payload: Record<string, unknown> = {}): DomainEvent {
   return {
@@ -40,24 +66,25 @@ function busEvent(eventName: string, aggregateId: string, payload: Record<string
 
 describe('Engagement cross-context E2E chains (Phase 6.A)', () => {
   let eventBus: InMemoryEventBus;
-  let queue: FakeNotificationQueue;
   let container: EngagementContainer;
 
   beforeAll(async () => {
     await Promise.all([
       NotificationModel.init(),
       ReviewModel.init(),
-      ReviewEligibilityModel.init(),
       NotificationTemplateModel.init(),
       NotificationPreferenceModel.init(),
-      RestaurantRatingViewModel.init(),
+      FulfillmentModel.init(),
     ]);
   });
 
   beforeEach(async () => {
     eventBus = new InMemoryEventBus();
-    queue = new FakeNotificationQueue();
-    container = createEngagementContainer(getConnection(), eventBus, queue);
+    container = createEngagementContainer(
+      getConnection(),
+      eventBus,
+      new MongoFulfillmentQueryRepository()
+    );
     await seedNotificationTemplates(container.templateRepository);
   });
 
@@ -65,16 +92,17 @@ describe('Engagement cross-context E2E chains (Phase 6.A)', () => {
     await Promise.all([
       NotificationModel.deleteMany({}),
       ReviewModel.deleteMany({}),
-      ReviewEligibilityModel.deleteMany({}),
       NotificationTemplateModel.deleteMany({}),
       NotificationPreferenceModel.deleteMany({}),
-      RestaurantRatingViewModel.deleteMany({}),
+      FulfillmentModel.deleteMany({}),
       OutboxEventModel.deleteMany({}),
     ]);
   });
 
-  describe('UserRegistered → welcome', () => {
-    it('seeds a default NotificationPreference and renders a PENDING welcome notification', async () => {
+  describe('UserRegistered → default preferences', () => {
+    // Phase 5 Batch 3: Engagement only seeds preferences here. The welcome *email* is sent by
+    // Identity's own `OnUserRegistered`, so no `notifications` row appears.
+    it('seeds a default NotificationPreference and writes no notification', async () => {
       const userId = nextId('user');
 
       await eventBus.publish(
@@ -85,31 +113,24 @@ describe('Engagement cross-context E2E chains (Phase 6.A)', () => {
       expect(pref).not.toBeNull();
       expect(pref?.userId).toBe(userId);
 
-      const note = await NotificationModel.findOne({ recipientUserId: userId }).lean();
-      expect(note).not.toBeNull();
-      expect(note?.status).toBe('PENDING');
-      expect(note?.templateKey).toBe('welcome');
-      expect(note?.channel).toBe('EMAIL');
-      expect(note?.category).toBe('SECURITY');
-      expect(note?.renderedBody).toContain('Jane');
-
-      expect(queue.jobs).toHaveLength(1);
-      expect(queue.jobs[0].job).toMatchObject({ type: 'engagement', channel: 'EMAIL' });
+      expect(await NotificationModel.countDocuments({ recipientUserId: userId })).toBe(0);
     });
   });
 
-  describe('marquee chain: created → delivered → submit → approve → rating view', () => {
-    it('recomputes the RestaurantRatingView from approved reviews across two fulfillments', async () => {
+  describe('marquee chain: created → delivered → submit → approve → rating', () => {
+    it('aggregates the rating from approved reviews across two fulfillments', async () => {
       const restaurantId = nextId('rest');
       const customerA = nextId('cust');
       const customerB = nextId('cust');
       const fulfillmentA = nextId('ful');
       const fulfillmentB = nextId('ful');
 
+      const deliveredAt = new Date('2026-06-17T10:00:00.000Z');
       for (const [fulfillmentId, customerId] of [
         [fulfillmentA, customerA],
         [fulfillmentB, customerB],
       ]) {
+        await seedFulfillment({ fulfillmentId, customerId, restaurantId, delivered: true, deliveredAt });
         await eventBus.publish(
           busEvent('FulfillmentCreated', fulfillmentId, {
             customerId,
@@ -118,16 +139,12 @@ describe('Engagement cross-context E2E chains (Phase 6.A)', () => {
           })
         );
       }
-      expect(await container.eligibilityRepository.findByFulfillmentId(fulfillmentA)).not.toBeNull();
 
-      const deliveredAt = new Date('2026-06-17T10:00:00.000Z');
       for (const fulfillmentId of [fulfillmentA, fulfillmentB]) {
         await eventBus.publish(busEvent('DeliveryCompleted', fulfillmentId, { deliveredAt: deliveredAt.toISOString() }));
       }
-      const eligA = await container.eligibilityRepository.findByFulfillmentId(fulfillmentA);
-      expect(eligA?.deliveredAt?.toISOString()).toBe(deliveredAt.toISOString());
       const deliveredNote = await NotificationModel.findOne({ recipientUserId: customerA, templateKey: 'delivered' }).lean();
-      expect(deliveredNote?.status).toBe('PENDING');
+      expect(deliveredNote?.status).toBe('SENT');
 
       const submitA = await container.submitReview.execute({
         customerId: customerA,
@@ -148,7 +165,8 @@ describe('Engagement cross-context E2E chains (Phase 6.A)', () => {
       expect(submitA.isSuccess).toBe(true);
       expect(submitB.isSuccess).toBe(true);
 
-      expect(await container.ratingViewRepository.findByRestaurantId(restaurantId)).toBeNull();
+      // PENDING reviews do not count yet — the aggregation filters on APPROVED.
+      expect((await container.getRestaurantRating.execute({ restaurantId })).getValue().reviewCount).toBe(0);
 
       const approveA = await container.moderateReview.execute({
         moderatorId: 'mod-1',
@@ -163,22 +181,20 @@ describe('Engagement cross-context E2E chains (Phase 6.A)', () => {
       expect(approveA.isSuccess).toBe(true);
       expect(approveB.isSuccess).toBe(true);
 
-      const view = await container.ratingViewRepository.findByRestaurantId(restaurantId);
-      expect(view).not.toBeNull();
-      expect(view?.reviewCount).toBe(2);
-      expect(view?.avgRating).toBeCloseTo(4, 2); // (5 + 3) / 2
-      expect(view?.distribution).toEqual({ 1: 0, 2: 0, 3: 1, 4: 0, 5: 1 });
-
       const ratingResp = await container.getRestaurantRating.execute({ restaurantId });
       expect(ratingResp.isSuccess).toBe(true);
-      expect(ratingResp.getValue().reviewCount).toBe(2);
+      const rating = ratingResp.getValue();
+      expect(rating.reviewCount).toBe(2);
+      expect(rating.avgRating).toBeCloseTo(4, 2); // (5 + 3) / 2
+      expect(rating.distribution).toEqual({ 1: 0, 2: 0, 3: 1, 4: 0, 5: 1 });
     });
 
-    it('a rejected review does NOT contribute to the rating view', async () => {
+    it('a rejected review does NOT contribute to the rating', async () => {
       const restaurantId = nextId('rest');
       const customerId = nextId('cust');
       const fulfillmentId = nextId('ful');
 
+      await seedFulfillment({ fulfillmentId, customerId, restaurantId, delivered: true });
       await eventBus.publish(
         busEvent('FulfillmentCreated', fulfillmentId, {
           customerId,
@@ -205,11 +221,13 @@ describe('Engagement cross-context E2E chains (Phase 6.A)', () => {
       });
       expect(reject.isSuccess).toBe(true);
 
-      expect(await container.ratingViewRepository.findByRestaurantId(restaurantId)).toBeNull();
+      const rating = (await container.getRestaurantRating.execute({ restaurantId })).getValue();
+      expect(rating.reviewCount).toBe(0);
+      expect(rating.avgRating).toBe(0);
     });
   });
 
-  describe('status-notification chains (recipient resolved from the projection)', () => {
+  describe('status-notification chains (recipient resolved via the fulfillment gateway)', () => {
     const restaurantId = 'rest-status';
     let fulfillmentId: string;
     let customerId: string;
@@ -217,40 +235,36 @@ describe('Engagement cross-context E2E chains (Phase 6.A)', () => {
     beforeEach(async () => {
       fulfillmentId = nextId('ful');
       customerId = nextId('cust');
-      await container.eligibilityRepository.upsert({
-        fulfillmentId,
-        customerId,
-        restaurantId,
-        deliveredAt: null,
-        reviewed: false,
-      });
+      await seedFulfillment({ fulfillmentId, customerId, restaurantId });
     });
 
     it.each([
-      ['ReadyForPickup', { readyAt: new Date() }, 'ready_for_pickup', 'ORDER_UPDATES', 'PUSH'],
-      ['RiderAssigned', { riderId: 'r-1', assignedAt: new Date() }, 'rider_assigned', 'DELIVERY', 'PUSH'],
-      ['OutForDelivery', { riderId: 'r-1' }, 'out_for_delivery', 'DELIVERY', 'PUSH'],
-      ['FulfillmentCancelled', { reason: 'restaurant_closed' }, 'order_cancelled', 'ORDER_UPDATES', 'PUSH'],
-    ])('%s → a PENDING %s notification to the resolved customer', async (eventName, payload, templateKey, category, channel) => {
+      ['ReadyForPickup', { readyAt: new Date() }, 'ready_for_pickup', 'ORDER_UPDATES', 'INBOX'],
+      ['RiderAssigned', { riderId: 'r-1', assignedAt: new Date() }, 'rider_assigned', 'DELIVERY', 'INBOX'],
+      ['OutForDelivery', { riderId: 'r-1' }, 'out_for_delivery', 'DELIVERY', 'INBOX'],
+      ['FulfillmentCancelled', { reason: 'restaurant_closed' }, 'order_cancelled', 'ORDER_UPDATES', 'INBOX'],
+    ])('%s → a SENT %s notification to the resolved customer', async (eventName, payload, templateKey, category, channel) => {
       await eventBus.publish(busEvent(eventName, fulfillmentId, payload));
 
       const note = await NotificationModel.findOne({ recipientUserId: customerId, templateKey }).lean();
       expect(note).not.toBeNull();
-      expect(note?.status).toBe('PENDING');
+      // Phase 5: INBOX is delivered synchronously — the Mongo row is born SENT.
+      expect(note?.status).toBe('SENT');
+      expect(note?.sentAt).toBeInstanceOf(Date);
+      expect(note?.provider).toBeUndefined();
       expect(note?.category).toBe(category);
       expect(note?.channel).toBe(channel);
-      expect(queue.jobs).toHaveLength(1);
     });
   });
 
   describe('preference suppression', () => {
-    it('a disabled channel suppresses the dispatch (no notification row, no enqueue)', async () => {
+    it('a disabled channel suppresses the dispatch (no notification row)', async () => {
       const restaurantId = nextId('rest');
       const customerId = nextId('cust');
       const fulfillmentId = nextId('ful');
 
       const pref = NotificationPreference.createDefault(customerId);
-      pref.setChannel(NOTIFICATION_CATEGORY.ORDER_UPDATES, NOTIFICATION_CHANNEL.PUSH, false);
+      pref.setChannel(NOTIFICATION_CATEGORY.ORDER_UPDATES, NOTIFICATION_CHANNEL.INBOX, false);
       await container.preferenceRepository.save(pref);
 
       await eventBus.publish(
@@ -261,9 +275,7 @@ describe('Engagement cross-context E2E chains (Phase 6.A)', () => {
         })
       );
 
-      expect(await container.eligibilityRepository.findByFulfillmentId(fulfillmentId)).not.toBeNull();
       expect(await NotificationModel.findOne({ recipientUserId: customerId }).lean()).toBeNull();
-      expect(queue.jobs).toHaveLength(0);
     });
   });
 });

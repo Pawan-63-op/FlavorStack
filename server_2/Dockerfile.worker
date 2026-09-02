@@ -1,5 +1,6 @@
 # Same codebase as Dockerfile (API), entrypoint = workers/index.ts.
-# WORKER_TYPE env var selects outbox|email|notification at runtime.
+# WORKER_TYPE env var selects relay|jobs at runtime (Phase 8) — one image, two containers.
+# An unrecognised value throws at boot rather than starting a no-op process.
 
 FROM node:22-alpine AS builder
 WORKDIR /app

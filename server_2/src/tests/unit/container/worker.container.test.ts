@@ -1,17 +1,6 @@
-jest.mock('bullmq', () => ({
-  Queue: jest.fn().mockImplementation(function (this: { add: jest.Mock; close: jest.Mock }) {
-    this.add = jest.fn();
-    this.close = jest.fn();
-  }),
-}));
-
-import { Queue } from 'bullmq';
-import { buildEmailWorkerDeps, buildNotificationWorkerDeps } from '../../../container/worker.container';
+import { buildEmailWorkerDeps } from '../../../container/worker.container';
 import { ResendEmailProvider } from '../../../infrastructure/external/email/ResendEmailProvider';
-import { LoggerPushProvider } from '../../../infrastructure/external/push/LoggerPushProvider';
-import { DLQHandler } from '../../../infrastructure/workers/shared/DLQHandler';
 import { JobLogger } from '../../../infrastructure/workers/shared/JobLogger';
-import { QUEUE } from '../../../config/bullmq';
 
 describe('worker.container', () => {
   const originalEnv = { ...process.env };
@@ -35,26 +24,15 @@ describe('worker.container', () => {
       const deps = buildEmailWorkerDeps();
 
       expect(deps.emailProvider).toBeInstanceOf(ResendEmailProvider);
-      expect(deps.dlqHandler).toBeInstanceOf(DLQHandler);
       expect(deps.jobLogger).toBeInstanceOf(JobLogger);
-      expect(deps.dlqQueue).toBeInstanceOf(Queue);
-      expect(Queue).toHaveBeenCalledWith(QUEUE.dlq, expect.objectContaining({ connection: expect.anything() }));
     });
-  });
 
-  describe('buildNotificationWorkerDeps', () => {
-    it('builds notification worker dependencies with no required env', () => {
-      delete process.env.RESEND_API_KEY;
-      delete process.env.JWT_PRIVATE_KEY;
-      delete process.env.JWT_PUBLIC_KEY;
+    // Phase 8: the dead-letter queue is gone, so building worker deps no longer opens a BullMQ
+    // Queue at all. Exhausted jobs are retained in place by `removeOnFail: false`.
+    it('opens no queue connection', () => {
+      process.env.RESEND_API_KEY = 'test-key';
 
-      const deps = buildNotificationWorkerDeps();
-
-      expect(deps.pushProvider).toBeInstanceOf(LoggerPushProvider);
-      expect(deps.dlqHandler).toBeInstanceOf(DLQHandler);
-      expect(deps.jobLogger).toBeInstanceOf(JobLogger);
-      expect(deps.dlqQueue).toBeInstanceOf(Queue);
-      expect(Queue).toHaveBeenCalledWith(QUEUE.dlq, expect.objectContaining({ connection: expect.anything() }));
+      expect(Object.keys(buildEmailWorkerDeps())).toEqual(['emailProvider', 'jobLogger']);
     });
   });
 });

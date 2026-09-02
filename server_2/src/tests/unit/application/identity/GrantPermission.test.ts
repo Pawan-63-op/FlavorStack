@@ -2,7 +2,6 @@ import { GrantPermission } from '../../../../application/identity/use-cases/Gran
 import { GrantPermissionDto } from '../../../../application/identity/dtos/GrantPermissionDto';
 import {
   InMemoryUserRepository,
-  InMemoryOutboxStore,
   InMemoryUnitOfWork,
 } from '../../../mocks/identity.mocks';
 import { createEventBusSpy, EventBusSpy } from '../../../mocks/shared.mocks';
@@ -59,16 +58,14 @@ function makeCustomer(): Customer {
 describe('GrantPermission use-case', () => {
   let userRepo: InMemoryUserRepository;
   let unitOfWork: InMemoryUnitOfWork;
-  let outboxStore: InMemoryOutboxStore;
   let eventBus: EventBusSpy;
   let useCase: GrantPermission;
 
   beforeEach(() => {
     userRepo = new InMemoryUserRepository();
     unitOfWork = new InMemoryUnitOfWork();
-    outboxStore = new InMemoryOutboxStore();
     eventBus = createEventBusSpy();
-    useCase = new GrantPermission(userRepo, unitOfWork, outboxStore, eventBus);
+    useCase = new GrantPermission(userRepo, unitOfWork, eventBus);
   });
 
   describe('success', () => {
@@ -90,12 +87,9 @@ describe('GrantPermission use-case', () => {
       const updated = (await userRepo.findById(target._id)) as Admin;
       expect(updated.hasPermission(PERMISSION_RESOURCE.MENU, PERMISSION_ACTION.UPDATE)).toBe(true);
 
-      expect(outboxStore.appended).toHaveLength(1);
-      expect(outboxStore.appended[0].eventName).toBe('PermissionGranted');
-      expect(outboxStore.appended[0].aggregateId).toBe(target._id);
-
-      expect(eventBus.publishedEvents).toHaveLength(1);
-      expect(eventBus.publishedEvents[0].eventName).toBe('PermissionGranted');
+      // Phase 6: this state change raises no domain event — it had no subscriber.
+      expect(eventBus.publishedEvents).toHaveLength(0);
+      expect(eventBus.publishedEvents).toHaveLength(0);
     });
 
     it('admin with USER:MANAGE permission grants a permission to another admin', async () => {
@@ -137,7 +131,7 @@ describe('GrantPermission use-case', () => {
       expect(result.isSuccess).toBe(true);
       const updated = (await userRepo.findById(target._id)) as Admin;
       expect(updated.permissions).toHaveLength(1);
-      expect(outboxStore.appended).toHaveLength(0);
+      expect(eventBus.publishedEvents).toHaveLength(0);
       expect(eventBus.publishedEvents).toHaveLength(0);
     });
   });
@@ -222,7 +216,7 @@ describe('GrantPermission use-case', () => {
 
       expect(result.isFailure).toBe(true);
       expect(result.getError()).toBeInstanceOf(ForbiddenError);
-      expect(outboxStore.appended).toHaveLength(0);
+      expect(eventBus.publishedEvents).toHaveLength(0);
       expect(eventBus.publishedEvents).toHaveLength(0);
     });
 

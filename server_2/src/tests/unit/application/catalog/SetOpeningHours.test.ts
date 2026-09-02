@@ -1,6 +1,6 @@
 import { SetOpeningHours } from '../../../../application/catalog/use-cases/SetOpeningHours';
 import { InMemoryRestaurantRepository } from '../../../mocks/catalog.mocks';
-import { InMemoryUnitOfWork, InMemoryOutboxStore } from '../../../mocks/identity.mocks';
+import { InMemoryUnitOfWork } from '../../../mocks/identity.mocks';
 import { createEventBusSpy, EventBusSpy } from '../../../mocks/shared.mocks';
 import { buildRestaurant } from './helpers';
 import { WeeklySchedule } from '../../../../domain/catalog/value-objects/OpeningHours.vo';
@@ -24,16 +24,14 @@ function schedule(interval: { open: string; close: string }): WeeklySchedule {
 describe('SetOpeningHours use-case', () => {
   let restaurantRepo: InMemoryRestaurantRepository;
   let unitOfWork: InMemoryUnitOfWork;
-  let outboxStore: InMemoryOutboxStore;
   let eventBus: EventBusSpy;
   let useCase: SetOpeningHours;
 
   beforeEach(() => {
     restaurantRepo = new InMemoryRestaurantRepository();
     unitOfWork = new InMemoryUnitOfWork();
-    outboxStore = new InMemoryOutboxStore();
     eventBus = createEventBusSpy();
-    useCase = new SetOpeningHours(restaurantRepo, unitOfWork, outboxStore, eventBus);
+    useCase = new SetOpeningHours(restaurantRepo, unitOfWork, eventBus);
   });
 
   it('sets the weekly schedule and emits RestaurantUpdated', async () => {
@@ -47,8 +45,8 @@ describe('SetOpeningHours use-case', () => {
     });
 
     expect(result.isSuccess).toBe(true);
-    expect(outboxStore.appended).toHaveLength(1);
-    expect(outboxStore.appended[0].eventName).toBe('RestaurantUpdated');
+    expect(eventBus.publishedEvents).toHaveLength(1);
+    expect(eventBus.publishedEvents[0].eventName).toBe('RestaurantUpdated');
   });
 
   it('fails with NotFoundError when the restaurant does not exist', async () => {
@@ -83,6 +81,6 @@ describe('SetOpeningHours use-case', () => {
     });
 
     expect(result.isFailure).toBe(true);
-    expect(outboxStore.appended).toHaveLength(0);
+    expect(eventBus.publishedEvents).toHaveLength(0);
   });
 });

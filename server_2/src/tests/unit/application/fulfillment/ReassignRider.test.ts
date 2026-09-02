@@ -7,7 +7,6 @@ import {
   buildReadyFulfillment,
   makeRepo,
   makeUnitOfWork,
-  makeOutbox,
   makeEventBus,
   makeAssignmentService,
 } from './assignment-uc-fixtures';
@@ -28,19 +27,18 @@ function makeUc(
   repo = makeRepo(),
   service = makeAssignmentService(RIDER_2),
   assignRider?: AssignRider
-): { uc: ReassignRider; outbox: ReturnType<typeof makeOutbox>; bus: ReturnType<typeof makeEventBus> } {
-  const outbox = makeOutbox();
+): { uc: ReassignRider; bus: ReturnType<typeof makeEventBus> } {
   const bus = makeEventBus();
-  const ar = assignRider ?? new AssignRider(repo, service, makeUnitOfWork(), outbox, bus, TTL);
-  const uc = new ReassignRider(repo, service, makeUnitOfWork(), outbox, bus, TTL, ar);
-  return { uc, outbox, bus };
+  const ar = assignRider ?? new AssignRider(repo, service, makeUnitOfWork(), bus, TTL);
+  const uc = new ReassignRider(repo, service, makeUnitOfWork(), bus, TTL, ar);
+  return { uc, bus };
 }
 
 describe('ReassignRider', () => {
   it('hands an ACCEPTED delivery to the admin-named rider, emitting RiderReassigned', async () => {
     const f = buildAssigned();
     const repo = makeRepo({ findById: jest.fn().mockResolvedValue(f) });
-    const { uc, outbox } = makeUc(repo, makeAssignmentService(null));
+    const { uc, bus } = makeUc(repo, makeAssignmentService(null));
 
     const result = await uc.execute({ fulfillmentId: f.id.toString(), riderId: RIDER_2 });
 
@@ -48,7 +46,7 @@ describe('ReassignRider', () => {
     expect(result.getValue().currentAssignment).toEqual(
       expect.objectContaining({ riderId: RIDER_2, status: RIDER_ASSIGNMENT_STATUS.ACCEPTED, attempt: 2 })
     );
-    const events = outbox.append.mock.calls[0][0];
+    const events = bus.publishAll.mock.calls[0][0];
     expect(events).toHaveLength(1);
     expect(events[0].eventName).toBe('RiderReassigned');
   });
@@ -72,15 +70,14 @@ describe('ReassignRider', () => {
     const f = buildReadyFulfillment(); // UNASSIGNED, no current assignment
     const repo = makeRepo({ findById: jest.fn().mockResolvedValue(f) });
     const service = makeAssignmentService(RIDER_1);
-    const outbox = makeOutbox();
     const bus = makeEventBus();
-    const assignRider = new AssignRider(repo, service, makeUnitOfWork(), outbox, bus, TTL);
-    const uc = new ReassignRider(repo, service, makeUnitOfWork(), outbox, bus, TTL, assignRider);
+    const assignRider = new AssignRider(repo, service, makeUnitOfWork(), bus, TTL);
+    const uc = new ReassignRider(repo, service, makeUnitOfWork(), bus, TTL, assignRider);
 
     const result = await uc.execute({ fulfillmentId: f.id.toString(), riderId: RIDER_1 });
 
     expect(result.isSuccess).toBe(true);
-    const events = outbox.append.mock.calls[0][0];
+    const events = bus.publishAll.mock.calls[0][0];
     expect(events[0].eventName).toBe('RiderOffered');
     expect(result.getValue().currentAssignment).toEqual(
       expect.objectContaining({ riderId: RIDER_1, status: RIDER_ASSIGNMENT_STATUS.OFFERED })

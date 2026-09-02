@@ -38,7 +38,6 @@ export class Customer extends BaseUser {
     dietaryPreferences!: string[]
     defaultPaymentMethod!: string | null
 
-    fcmTokens!: string[]
     notificationsEnabled!: boolean
 
     constructor(data: Partial<Customer>) {
@@ -56,7 +55,6 @@ export class Customer extends BaseUser {
         this.defaultAddressId = data.defaultAddressId ?? null
         this.savedRestaurants = data.savedRestaurants ?? []
         this.dietaryPreferences = data.dietaryPreferences ?? []
-        this.fcmTokens = data.fcmTokens ?? []
         this.notificationsEnabled = data.notificationsEnabled ?? true
     }
 
@@ -155,14 +153,6 @@ export class Customer extends BaseUser {
 
     }
     
-    registerFcmToken(token: string) { 
-        if (!this.fcmTokens.includes(token)) this.fcmTokens.push(token) 
-    }
-    
-    removeFcmToken(token: string) { 
-        this.fcmTokens = this.fcmTokens.filter(t => t !== token) 
-    }
-
     static create(input: CreateCustomerInput): Customer {
         const defaultAddressId = input.defaultAddress ? randomUUID() : null;
         const addresses: CustomerAddress[] = [];
@@ -184,7 +174,6 @@ export class Customer extends BaseUser {
             addresses,
             defaultAddressId,
             savedRestaurants: [],
-            fcmTokens: [],
         });
 
         customer.addDomainEvent(

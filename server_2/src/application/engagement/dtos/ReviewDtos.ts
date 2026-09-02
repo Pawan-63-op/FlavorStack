@@ -22,10 +22,6 @@ export interface ModerateReviewDto {
   reason?: string;
 }
 
-export interface RecomputeRestaurantRatingDto {
-  restaurantId: string;
-}
-
 export interface GetRestaurantReviewsDto {
   restaurantId: string;
   limit?: number;

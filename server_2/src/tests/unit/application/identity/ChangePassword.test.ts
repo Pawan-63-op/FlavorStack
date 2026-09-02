@@ -2,7 +2,6 @@ import { ChangePassword } from '../../../../application/identity/use-cases/Chang
 import { ChangePasswordDto } from '../../../../application/identity/dtos/ChangePasswordDto';
 import {
   InMemoryUserRepository,
-  InMemoryOutboxStore,
   InMemoryUnitOfWork,
   InMemorySessionStore,
   FakePasswordHasher,
@@ -32,7 +31,6 @@ describe('ChangePassword use-case', () => {
   let passwordHasher: FakePasswordHasher;
   let sessionStore: InMemorySessionStore;
   let unitOfWork: InMemoryUnitOfWork;
-  let outboxStore: InMemoryOutboxStore;
   let eventBus: EventBusSpy;
   let useCase: ChangePassword;
 
@@ -41,9 +39,8 @@ describe('ChangePassword use-case', () => {
     passwordHasher = new FakePasswordHasher();
     sessionStore = new InMemorySessionStore();
     unitOfWork = new InMemoryUnitOfWork();
-    outboxStore = new InMemoryOutboxStore();
     eventBus = createEventBusSpy();
-    useCase = new ChangePassword(userRepo, passwordHasher, sessionStore, unitOfWork, outboxStore, eventBus);
+    useCase = new ChangePassword(userRepo, passwordHasher, sessionStore, unitOfWork, eventBus);
   });
 
   describe('success', () => {
@@ -88,7 +85,7 @@ describe('ChangePassword use-case', () => {
       expect(sessions).toHaveLength(0);
     });
 
-    it('appends PasswordChanged to the outbox and publishes it post-commit', async () => {
+    it('publishes PasswordChanged post-commit', async () => {
       const customer = makeCustomer();
       await userRepo.save(customer);
 
@@ -98,9 +95,9 @@ describe('ChangePassword use-case', () => {
         newPassword: NEW_PASSWORD,
       });
 
-      expect(outboxStore.appended).toHaveLength(1);
-      expect(outboxStore.appended[0].eventName).toBe('PasswordChanged');
-      expect(outboxStore.appended[0].aggregateId).toBe(customer._id);
+      expect(eventBus.publishedEvents).toHaveLength(1);
+      expect(eventBus.publishedEvents[0].eventName).toBe('PasswordChanged');
+      expect(eventBus.publishedEvents[0].aggregateId).toBe(customer._id);
 
       expect(eventBus.publishedEvents).toHaveLength(1);
       expect(eventBus.publishedEvents[0].eventName).toBe('PasswordChanged');
@@ -134,7 +131,7 @@ describe('ChangePassword use-case', () => {
 
       const updated = await userRepo.findById(customer._id);
       expect(updated!.passwordHash).toBe(`hashed:${CURRENT_PASSWORD}`);
-      expect(outboxStore.appended).toHaveLength(0);
+      expect(eventBus.publishedEvents).toHaveLength(0);
       expect(eventBus.publishedEvents).toHaveLength(0);
     });
 

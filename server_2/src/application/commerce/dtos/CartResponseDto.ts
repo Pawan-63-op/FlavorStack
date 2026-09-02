@@ -2,7 +2,7 @@ import { Cart } from '../../../domain/commerce/entities/Cart';
 import { CartItem } from '../../../domain/commerce/entities/CartItem';
 import { Money } from '../../../domain/shared/Money';
 import { ValidationReport } from '../../../domain/commerce/types/ValidationReport';
-import { CommerceCatalogRestaurantView } from '../../../domain/commerce/types/CommerceCatalogView';
+import { CartCatalogView } from '../../../domain/commerce/types/CatalogGatewayRead';
 
 export interface MoneyResponse {
   amount: number;
@@ -62,7 +62,7 @@ export function toAppliedPromotionResponse(cart: Cart): AppliedPromotionResponse
 
 export function enrichCartItem(
   item: CartItem,
-  view: CommerceCatalogRestaurantView | null
+  view: CartCatalogView | null
 ): CartItemEnrichment {
   const projected = view?.items.find((i) => i.menuItemId === item.menuItemId) ?? null;
   if (!projected) {
@@ -86,7 +86,7 @@ export function enrichCartItem(
 export function toCartResponse(
   cart: Cart,
   validation?: ValidationReport,
-  view?: CommerceCatalogRestaurantView | null
+  view?: CartCatalogView | null
 ): CartResponseDto {
   const enrich = view !== undefined;
   return {

@@ -9,6 +9,7 @@ const RULES: Record<RateLimitAction, RateLimitRule> = {
   'otp-generation': { windowSeconds: 2, max: 3 },
   'otp-verification': { windowSeconds: 2, max: 5 },
   'password-reset': { windowSeconds: 2, max: 3 },
+  'catalog-search': { windowSeconds: 2, max: 5 },
 };
 
 describe('RateLimiter', () => {

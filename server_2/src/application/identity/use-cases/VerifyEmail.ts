@@ -7,7 +7,6 @@ import { BaseUser } from '../../../domain/identity/entities/BaseUser';
 import { IUserRepository } from '../../../domain/identity/repositories/IUserRepository';
 import { IOtpStore } from '../../../domain/identity/services/IOtpStore';
 import { IUnitOfWork } from '../../shared/ports/IUnitOfWork';
-import { IOutboxStore } from '../../shared/outbox/IOutboxStore';
 import { IEventBus } from '../../shared/events/IEventBus';
 import { VerifyEmailDto } from '../dtos/VerifyEmailDto';
 import { UserResponse } from '../responses/UserResponse';
@@ -19,7 +18,6 @@ export class VerifyEmail {
     private userRepo: IUserRepository,
     private otpStore: IOtpStore,
     private unitOfWork: IUnitOfWork,
-    private outboxStore: IOutboxStore,
     private eventBus: IEventBus,
   ) {}
 
@@ -51,9 +49,8 @@ export class VerifyEmail {
 
     const events = user.pullDomainEvents();
 
-    await this.unitOfWork.runInTransaction(async (ctx) => {
+    await this.unitOfWork.runInTransaction(async () => {
       await this.userRepo.update(user);
-      await this.outboxStore.append(events, ctx);
     });
 
     await this.eventBus.publishAll(events);

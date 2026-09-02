@@ -22,16 +22,6 @@ export class ResendEmailProvider implements IEmailProvider {
     );
   }
 
-  async sendPasswordReset(to: Email, token: string): Promise<void> {
-    const url = `${this.config.appBaseUrl}/reset-password?token=${token}`;
-    await this.send(
-      to,
-      'Reset your password',
-      `<p>We received a request to reset your password. Click the link below to choose a new one.</p><p><a href="${url}">${url}</a></p>`,
-      `Reset your password: ${url}`,
-    );
-  }
-
   async sendNotification(to: Email, subject: string, body: string): Promise<void> {
     await this.send(to, subject, body, body);
   }

@@ -7,16 +7,16 @@ import { CANCELLED_BY } from '../../../domain/fulfillment/enums/cancelled-by.enu
 import { getConnection } from '../../../infrastructure/database/connection';
 import { TransactionContext } from '../../../infrastructure/database/TransactionContext';
 import { MongoUnitOfWork } from '../../../infrastructure/database/MongoUnitOfWork';
-import { MongoOutboxStore } from '../../../infrastructure/database/MongoOutboxStore';
 import { MongoFulfillmentRepository } from '../../../infrastructure/repositories/FulfillmentRepository';
 import { SimpleDeliveryAssignmentService } from '../../../infrastructure/services/SimpleDeliveryAssignmentService';
 import { FulfillmentModel } from '../../../infrastructure/database/models/FulfillmentModel';
 import { OutboxEventModel } from '../../../infrastructure/database/models/OutboxEventModel';
-import { InMemoryEventBus } from '../../../application/shared/events/InMemoryEventBus';
+import { createEventBusSpy, EventBusSpy, countPublished } from '../../mocks/shared.mocks';
 
 import { CreateFulfillment } from '../../../application/fulfillment/use-cases/CreateFulfillment';
 import { MarkPreparing } from '../../../application/fulfillment/use-cases/MarkPreparing';
 import { MarkReadyForPickup } from '../../../application/fulfillment/use-cases/MarkReadyForPickup';
+import { makeStubRestaurantDirectory } from '../../mocks/fulfillment.mocks';
 import { OfferRiderAssignment } from '../../../application/fulfillment/use-cases/OfferRiderAssignment';
 import { AcceptDelivery } from '../../../application/fulfillment/use-cases/AcceptDelivery';
 import { ConfirmPickup } from '../../../application/fulfillment/use-cases/ConfirmPickup';
@@ -25,6 +25,7 @@ import { OnOrderRequested } from '../../../application/fulfillment/event-handler
 
 const CUSTOMER_ID = 'cust-1';
 const RESTAURANT_ID = 'rest-1';
+const OWNER_ID = 'owner-1';
 const RIDER_ID = 'rider-1';
 
 function orderRequestedEvent(orderRequestId: string): DomainEvent {
@@ -53,8 +54,7 @@ describe('Fulfillment cancellation integration (Phase 5A)', () => {
   let txContext: TransactionContext;
   let repo: MongoFulfillmentRepository;
   let uow: MongoUnitOfWork;
-  let outbox: MongoOutboxStore;
-  let bus: InMemoryEventBus;
+  let bus: EventBusSpy;
 
   let createFulfillment: CreateFulfillment;
   let markPreparing: MarkPreparing;
@@ -69,18 +69,18 @@ describe('Fulfillment cancellation integration (Phase 5A)', () => {
     txContext = new TransactionContext();
     repo = new MongoFulfillmentRepository(txContext);
     uow = new MongoUnitOfWork(getConnection(), txContext);
-    outbox = new MongoOutboxStore(txContext);
-    bus = new InMemoryEventBus();
+    bus = createEventBusSpy();
 
     const service = new SimpleDeliveryAssignmentService(async () => [RIDER_ID]);
 
-    createFulfillment = new CreateFulfillment(repo, uow, outbox, bus);
-    markPreparing = new MarkPreparing(repo, uow, outbox, bus);
-    markReady = new MarkReadyForPickup(repo, uow, outbox, bus);
-    offer = new OfferRiderAssignment(repo, service, uow, outbox, bus, 60);
-    accept = new AcceptDelivery(repo, uow, outbox, bus);
-    confirmPickup = new ConfirmPickup(repo, uow, outbox, bus);
-    cancel = new CancelFulfillment(repo, uow, outbox, bus);
+    createFulfillment = new CreateFulfillment(repo, uow, bus);
+    const restaurantDirectory = makeStubRestaurantDirectory(RESTAURANT_ID, OWNER_ID);
+    markPreparing = new MarkPreparing(repo, restaurantDirectory, uow, bus);
+    markReady = new MarkReadyForPickup(repo, restaurantDirectory, uow, bus);
+    offer = new OfferRiderAssignment(repo, service, uow, bus, 60);
+    accept = new AcceptDelivery(repo, uow, bus);
+    confirmPickup = new ConfirmPickup(repo, uow, bus);
+    cancel = new CancelFulfillment(repo, uow, bus);
 
     onOrderRequested = new OnOrderRequested(createFulfillment);
     bus.subscribe('OrderRequested', (e) => onOrderRequested.handle(e));
@@ -112,7 +112,7 @@ describe('Fulfillment cancellation integration (Phase 5A)', () => {
     expect(reloaded.cancellation!.cancelledBy).toBe(CANCELLED_BY.CUSTOMER);
     expect(reloaded.cancellation!.reason).toBe('changed my mind');
 
-    expect(await OutboxEventModel.countDocuments({ eventName: 'FulfillmentCancelled' })).toBe(1);
+    expect(countPublished(bus, 'FulfillmentCancelled')).toBe(1);
   });
 
   it('blocks cancellation once the order is PICKED_UP', async () => {
@@ -120,8 +120,8 @@ describe('Fulfillment cancellation integration (Phase 5A)', () => {
     await onOrderRequested.handle(orderRequestedEvent(orderRequestId));
     const id = ((await repo.findByOrderRequestId(orderRequestId)) as Fulfillment).id.toString();
 
-    await markPreparing.execute({ fulfillmentId: id, restaurantId: RESTAURANT_ID });
-    await markReady.execute({ fulfillmentId: id, restaurantId: RESTAURANT_ID });
+    await markPreparing.execute({ fulfillmentId: id, actorUserId: OWNER_ID });
+    await markReady.execute({ fulfillmentId: id, actorUserId: OWNER_ID });
     await offer.execute({ fulfillmentId: id });
     await accept.execute({ fulfillmentId: id, riderId: RIDER_ID });
     await confirmPickup.execute({ fulfillmentId: id, riderId: RIDER_ID });
@@ -136,6 +136,6 @@ describe('Fulfillment cancellation integration (Phase 5A)', () => {
     const reloaded = (await repo.findById(id)) as Fulfillment;
     expect(reloaded.fulfillmentStatus.value).toBe(FULFILLMENT_STATUS.PICKED_UP);
     expect(reloaded.cancellation).toBeNull();
-    expect(await OutboxEventModel.countDocuments({ eventName: 'FulfillmentCancelled' })).toBe(0);
+    expect(countPublished(bus, 'FulfillmentCancelled')).toBe(0);
   });
 });

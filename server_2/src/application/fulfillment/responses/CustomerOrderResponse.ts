@@ -1,4 +1,4 @@
-import { CustomerOrderSummaryView } from '../../../domain/fulfillment/repositories/IFulfillmentProjectionRepository';
+import { CustomerOrderSummaryView } from '../../../domain/fulfillment/repositories/ICustomerTrackingRepository';
 
 export interface CustomerOrderResponse {
   fulfillmentId: string;

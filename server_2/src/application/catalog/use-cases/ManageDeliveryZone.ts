@@ -7,7 +7,6 @@ import { GeoPolygon } from '../../../domain/catalog/value-objects/GeoPolygon.vo'
 import { DeliveryFeeMatrix, DeliveryFeeTier } from '../../../domain/catalog/value-objects/DeliveryFeeMatrix.vo';
 import { IRestaurantRepository } from '../../../domain/catalog/repositories/IRestaurantRepository';
 import { IUnitOfWork } from '../../shared/ports/IUnitOfWork';
-import { IOutboxStore } from '../../shared/outbox/IOutboxStore';
 import { IEventBus } from '../../shared/events/IEventBus';
 import { DELIVERY_ZONE_ACTION, ManageDeliveryZoneDto } from '../dtos/ManageDeliveryZoneDto';
 import { RestaurantResponse } from '../responses/RestaurantResponse';
@@ -19,7 +18,6 @@ export class ManageDeliveryZone {
   constructor(
     private restaurantRepo: IRestaurantRepository,
     private unitOfWork: IUnitOfWork,
-    private outboxStore: IOutboxStore,
     private eventBus: IEventBus
   ) {}
 
@@ -86,11 +84,8 @@ export class ManageDeliveryZone {
 
     const events = restaurant.pullDomainEvents();
 
-    await this.unitOfWork.runInTransaction(async (ctx) => {
+    await this.unitOfWork.runInTransaction(async () => {
       await this.restaurantRepo.update(restaurant);
-      if (events.length > 0) {
-        await this.outboxStore.append(events, ctx);
-      }
     });
 
     await this.eventBus.publishAll(events);

@@ -30,7 +30,6 @@ export interface DriverDocument extends UserDocument {
   averageRating: number;
   totalDeliveries: number;
   totalRatings: number;
-  fcmTokens: string[];
 }
 
 const VehicleInfoSchema = new Schema<VehicleInfoDocument>(
@@ -70,7 +69,6 @@ const DriverSchema = new Schema<DriverDocument>({
   averageRating: { type: Number, default: 0 },
   totalDeliveries: { type: Number, default: 0 },
   totalRatings: { type: Number, default: 0 },
-  fcmTokens: { type: [String], default: [] },
 });
 
 DriverSchema.index({ currentLocation: '2dsphere' });

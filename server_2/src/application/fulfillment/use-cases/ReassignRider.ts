@@ -5,7 +5,6 @@ import { RIDER_ASSIGNMENT_STATUS } from '../../../domain/fulfillment/enums/rider
 import { IFulfillmentRepository } from '../../../domain/fulfillment/repositories/IFulfillmentRepository';
 import { IDeliveryAssignmentService } from '../../../domain/fulfillment/services/IDeliveryAssignmentService';
 import { IUnitOfWork } from '../../shared/ports/IUnitOfWork';
-import { IOutboxStore } from '../../shared/outbox/IOutboxStore';
 import { IEventBus } from '../../shared/events/IEventBus';
 import { ReassignRiderDto } from '../dtos/ReassignRiderDto';
 import { FulfillmentResponse, toFulfillmentResponse } from '../responses/FulfillmentResponse';
@@ -17,7 +16,6 @@ export class ReassignRider {
     private readonly fulfillmentRepo: IFulfillmentRepository,
     private readonly assignmentService: IDeliveryAssignmentService,
     private readonly unitOfWork: IUnitOfWork,
-    private readonly outboxStore: IOutboxStore,
     private readonly eventBus: IEventBus,
     private readonly offerTtlSeconds: number,
     private readonly assignRider: AssignRider
@@ -48,9 +46,8 @@ export class ReassignRider {
 
     const events = fulfillment.pullDomainEvents();
 
-    await this.unitOfWork.runInTransaction(async (ctx) => {
+    await this.unitOfWork.runInTransaction(async () => {
       await this.fulfillmentRepo.update(fulfillment);
-      if (events.length > 0) await this.outboxStore.append(events, ctx);
     });
 
     await this.eventBus.publishAll(events);

@@ -1,6 +1,6 @@
 import { AddCategory } from '../../../../application/catalog/use-cases/AddCategory';
 import { InMemoryRestaurantRepository } from '../../../mocks/catalog.mocks';
-import { InMemoryUnitOfWork, InMemoryOutboxStore } from '../../../mocks/identity.mocks';
+import { InMemoryUnitOfWork } from '../../../mocks/identity.mocks';
 import { createEventBusSpy, EventBusSpy } from '../../../mocks/shared.mocks';
 import { buildRestaurant } from './helpers';
 import { NotFoundError } from '../../../../domain/shared/errors/NotFoundError';
@@ -10,16 +10,14 @@ import { ValidationError } from '../../../../domain/shared/errors/ValidationErro
 describe('AddCategory use-case', () => {
   let restaurantRepo: InMemoryRestaurantRepository;
   let unitOfWork: InMemoryUnitOfWork;
-  let outboxStore: InMemoryOutboxStore;
   let eventBus: EventBusSpy;
   let useCase: AddCategory;
 
   beforeEach(() => {
     restaurantRepo = new InMemoryRestaurantRepository();
     unitOfWork = new InMemoryUnitOfWork();
-    outboxStore = new InMemoryOutboxStore();
     eventBus = createEventBusSpy();
-    useCase = new AddCategory(restaurantRepo, unitOfWork, outboxStore, eventBus);
+    useCase = new AddCategory(restaurantRepo, unitOfWork, eventBus);
   });
 
   it('adds a new category to the restaurant', async () => {
@@ -38,8 +36,8 @@ describe('AddCategory use-case', () => {
     const updated = await restaurantRepo.findById(restaurant.id.toString());
     expect(updated!.categories).toHaveLength(2);
 
-    expect(outboxStore.appended).toHaveLength(1);
-    expect(outboxStore.appended[0].eventName).toBe('CategoryAdded');
+    expect(eventBus.publishedEvents).toHaveLength(1);
+    expect(eventBus.publishedEvents[0].eventName).toBe('CategoryAdded');
     expect(eventBus.publishedEvents).toHaveLength(1);
   });
 
@@ -76,7 +74,7 @@ describe('AddCategory use-case', () => {
 
     expect(result.isFailure).toBe(true);
     expect(result.getError()).toBeInstanceOf(ValidationError);
-    expect(outboxStore.appended).toHaveLength(0);
+    expect(eventBus.publishedEvents).toHaveLength(0);
     expect(eventBus.publishedEvents).toHaveLength(0);
   });
 });

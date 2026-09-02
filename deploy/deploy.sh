@@ -31,7 +31,7 @@ log "docker OK · server_2/.env present · TLS cert present"
 log "public origin: $PUBLIC_ORIGIN"
 
 head "Build + start the production stack"
-"${COMPOSE[@]}" up -d --build
+"${COMPOSE[@]}" up -d --build --remove-orphans
 log "compose up -d --build issued"
 
 head "Waiting for Mongo replica set rs0"

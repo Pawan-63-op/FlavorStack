@@ -16,7 +16,6 @@ export interface CustomerTrackingViewDocument {
   deliveryStatus: string;
   riderId: string | null;
   timeline: TrackingTimelineEntryDocument[];
-  processedEventIds: string[];
   deliveryAddress: {
     label?: string;
     street: string;
@@ -75,7 +74,6 @@ const CustomerTrackingViewSchema = new Schema<CustomerTrackingViewDocument>(
     deliveryStatus: { type: String, required: true },
     riderId: { type: String, default: null },
     timeline: { type: [TimelineEntrySchema], default: [] },
-    processedEventIds: { type: [String], default: [] },
     deliveryAddress: { type: TrackingAddressSchema, required: true },
     total: {
       type: new Schema({ amount: Number, currency: String }, { _id: false }),

@@ -7,8 +7,6 @@ import { Rating } from '../value-objects/Rating';
 import { ReviewComment } from '../value-objects/ReviewComment';
 import { ModerationStatus } from '../value-objects/ModerationStatus';
 import { MODERATION_STATUS } from '../enums/moderation-status.enum';
-import { ReviewSubmitted } from '../events/ReviewSubmitted';
-import { ReviewModerated } from '../events/ReviewModerated';
 
 const PROFANITY_WORDLIST = ['fuck', 'shit', 'bastard', 'asshole', 'bitch'];
 
@@ -120,19 +118,6 @@ export class Review extends AggregateRoot<ReviewProps> {
       input.id
     );
 
-    review.addDomainEvent(
-      new ReviewSubmitted({
-        reviewId: review.id.toString(),
-        customerId: review.props.customerId,
-        restaurantId: review.props.restaurantId,
-        fulfillmentId: review.props.fulfillmentId,
-        restaurantRating: review.props.restaurantRating.value,
-        deliveryRating: review.props.deliveryRating?.value ?? null,
-        hasComment: review.props.comment !== null,
-        moderationStatus: review.props.moderationStatus.value,
-      })
-    );
-
     return Result.ok<Review>(review);
   }
 
@@ -170,15 +155,6 @@ export class Review extends AggregateRoot<ReviewProps> {
     this.props.moderationStatus = transition.getValue();
     this.props.moderatedAt = new Date();
     this.props.moderatedBy = moderatorId;
-
-    this.addDomainEvent(
-      new ReviewModerated({
-        reviewId: this.id.toString(),
-        restaurantId: this.props.restaurantId,
-        status: target,
-        moderatorId,
-      })
-    );
 
     return Result.ok<void>(undefined);
   }

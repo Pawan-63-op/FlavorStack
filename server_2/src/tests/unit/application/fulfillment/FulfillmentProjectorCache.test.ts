@@ -1,26 +1,14 @@
 import { randomUUID } from 'crypto';
 import { DomainEvent } from '../../../../domain/shared/DomainEvent';
 import { FulfillmentProjector } from '../../../../application/fulfillment/projector/FulfillmentProjector';
-import { IFulfillmentProjectionRepository } from '../../../../domain/fulfillment/repositories/IFulfillmentProjectionRepository';
+import { ICustomerTrackingRepository } from '../../../../domain/fulfillment/repositories/ICustomerTrackingRepository';
 import { IFulfillmentCacheInvalidator } from '../../../../domain/fulfillment/services/IFulfillmentCache';
 
-function makeRepo(): jest.Mocked<IFulfillmentProjectionRepository> {
+function makeRepo(): jest.Mocked<ICustomerTrackingRepository> {
   return {
     upsertCustomerTracking: jest.fn().mockResolvedValue(undefined),
     findCustomerTracking: jest.fn().mockResolvedValue({ restaurantId: 'rest-1', deliveryAddress: {}, total: {}, currentStatus: 'PREPARING' }),
     findByCustomer: jest.fn().mockResolvedValue([]),
-    upsertRestaurantView: jest.fn().mockResolvedValue(undefined),
-    removeRestaurantView: jest.fn().mockResolvedValue(undefined),
-    findRestaurantQueue: jest.fn().mockResolvedValue([]),
-    upsertRiderQueueItem: jest.fn().mockResolvedValue(undefined),
-    removeRiderQueueItem: jest.fn().mockResolvedValue(undefined),
-    removeAllRiderQueueItemsForFulfillment: jest.fn().mockResolvedValue(undefined),
-    findRiderQueue: jest.fn().mockResolvedValue([]),
-    findRiderCompletedDeliveries: jest.fn().mockResolvedValue([]),
-    upsertAdminView: jest.fn().mockResolvedValue(undefined),
-    patchAdminView: jest.fn().mockResolvedValue(undefined),
-    findAdminDashboard: jest.fn().mockResolvedValue([]),
-    aggregateAnalytics: jest.fn(),
   };
 }
 
@@ -31,7 +19,7 @@ function evt(name: string, aggregateId: string, extra: Record<string, unknown> =
 const FID = 'f-1';
 
 describe('FulfillmentProjector cache invalidation', () => {
-  let repo: jest.Mocked<IFulfillmentProjectionRepository>;
+  let repo: jest.Mocked<ICustomerTrackingRepository>;
   let invalidator: jest.Mocked<IFulfillmentCacheInvalidator>;
   let projector: FulfillmentProjector;
 
@@ -55,7 +43,7 @@ describe('FulfillmentProjector cache invalidation', () => {
 
   it('invalidates AFTER the projection write is applied (ordering guarantee)', async () => {
     const calls: string[] = [];
-    repo.patchAdminView.mockImplementation(async () => {
+    repo.upsertCustomerTracking.mockImplementation(async () => {
       calls.push('write');
     });
     invalidator.invalidateFulfillment.mockImplementation(async () => {
@@ -67,10 +55,22 @@ describe('FulfillmentProjector cache invalidation', () => {
     expect(calls).toEqual(['write', 'invalidate']);
   });
 
-  it('does NOT invalidate for rider-queue-only events (RiderOffered)', async () => {
-    await projector.onRiderOffered(evt('RiderOffered', FID, { riderId: 'rider-1', attempt: 1, expiresAt: new Date() }));
-    expect(invalidator.invalidateFulfillment).not.toHaveBeenCalled();
-  });
+  it.each([
+    ['onFulfillmentCreated', 'FulfillmentCreated', { orderRequestId: 'or-1', customerId: 'c-1', restaurantId: 'rest-1', total: { amount: 1, currency: 'INR' } }],
+    ['onReadyForPickup', 'ReadyForPickup', { restaurantId: 'rest-1', readyAt: new Date() }],
+    ['onRiderAssigned', 'RiderAssigned', { riderId: 'rider-1', assignedAt: new Date() }],
+    ['onPickupConfirmed', 'PickupConfirmed', { riderId: 'rider-1', pickedUpAt: new Date() }],
+    ['onOutForDelivery', 'OutForDelivery', { riderId: 'rider-1' }],
+    ['onDeliveryCompleted', 'DeliveryCompleted', { riderId: 'rider-1', deliveredAt: new Date() }],
+    ['onDeliveryFailed', 'DeliveryFailed', { riderId: 'rider-1', failureReason: 'x' }],
+    ['onRiderReassigned', 'RiderReassigned', { previousRiderId: 'rider-1', newRiderId: 'rider-2', attempt: 2 }],
+  ] as const)(
+    'still invalidates on %s after the Batch 5 reduction',
+    async (handler, eventName, payload) => {
+      await (projector[handler] as (e: DomainEvent) => Promise<void>)(evt(eventName, FID, payload));
+      expect(invalidator.invalidateFulfillment).toHaveBeenCalledWith(FID);
+    }
+  );
 
   it('is a no-op when no invalidator is wired', async () => {
     const plain = new FulfillmentProjector(repo);

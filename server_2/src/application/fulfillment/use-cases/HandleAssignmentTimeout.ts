@@ -3,7 +3,6 @@ import { RIDER_ASSIGNMENT_STATUS } from '../../../domain/fulfillment/enums/rider
 import { CANCELLED_BY } from '../../../domain/fulfillment/enums/cancelled-by.enum';
 import { IFulfillmentRepository } from '../../../domain/fulfillment/repositories/IFulfillmentRepository';
 import { IUnitOfWork } from '../../shared/ports/IUnitOfWork';
-import { IOutboxStore } from '../../shared/outbox/IOutboxStore';
 import { IEventBus } from '../../shared/events/IEventBus';
 import { OfferRiderAssignment } from './OfferRiderAssignment';
 import { CancelFulfillment } from './CancelFulfillment';
@@ -18,7 +17,6 @@ export class HandleAssignmentTimeout {
   constructor(
     private readonly fulfillmentRepo: IFulfillmentRepository,
     private readonly unitOfWork: IUnitOfWork,
-    private readonly outboxStore: IOutboxStore,
     private readonly eventBus: IEventBus,
     private readonly offerRiderAssignment: OfferRiderAssignment,
     private readonly cancelFulfillment: CancelFulfillment,
@@ -43,9 +41,8 @@ export class HandleAssignmentTimeout {
     if (expired.isFailure) return Result.ok<void>(undefined); // lost a race; let the live state win
 
     const events = fulfillment.pullDomainEvents();
-    await this.unitOfWork.runInTransaction(async (ctx) => {
+    await this.unitOfWork.runInTransaction(async () => {
       await this.fulfillmentRepo.update(fulfillment);
-      if (events.length > 0) await this.outboxStore.append(events, ctx);
     });
     await this.eventBus.publishAll(events);
 

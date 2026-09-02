@@ -10,11 +10,11 @@ import { MongoRestaurantRepository } from '../../../infrastructure/repositories/
 import { MongoMenuItemRepository } from '../../../infrastructure/repositories/MenuItemRepository';
 import { MongoDeliveryZoneRepository } from '../../../infrastructure/repositories/DeliveryZoneRepository';
 import { MongoCatalogReadRepository } from '../../../infrastructure/repositories/CatalogReadRepository';
+import { MongoCatalogQueryRepository } from '../../../infrastructure/repositories/CatalogQueryRepository';
 import { CatalogProjectionWriter } from '../../../infrastructure/database/projections/CatalogProjectionWriter';
 import { RestaurantModel } from '../../../infrastructure/database/models/RestaurantModel';
 import { MenuItemModel } from '../../../infrastructure/database/models/MenuItemModel';
 import { RestaurantSummaryModel } from '../../../infrastructure/database/models/RestaurantSummaryModel';
-import { RestaurantMenuViewModel } from '../../../infrastructure/database/models/RestaurantMenuViewModel';
 import { MenuItemSearchModel } from '../../../infrastructure/database/models/MenuItemSearchModel';
 import { InMemoryEventBus } from '../../../application/shared/events/InMemoryEventBus';
 import { CatalogProjector } from '../../../application/catalog/handlers/CatalogProjector';
@@ -50,6 +50,7 @@ describe('Catalog query use-cases (projection-driven)', () => {
   let menuItemRepo: MongoMenuItemRepository;
   let deliveryZoneRepo: MongoDeliveryZoneRepository;
   let readRepo: MongoCatalogReadRepository;
+  let queryRepo: MongoCatalogQueryRepository;
   let projector: CatalogProjector;
   let bus: InMemoryEventBus;
 
@@ -58,7 +59,8 @@ describe('Catalog query use-cases (projection-driven)', () => {
     restaurantRepo = new MongoRestaurantRepository(txContext);
     menuItemRepo = new MongoMenuItemRepository(txContext);
     deliveryZoneRepo = new MongoDeliveryZoneRepository(txContext);
-    readRepo = new MongoCatalogReadRepository();
+    queryRepo = new MongoCatalogQueryRepository();
+    readRepo = new MongoCatalogReadRepository(queryRepo);
     projector = new CatalogProjector(restaurantRepo, menuItemRepo, new CatalogProjectionWriter());
     bus = new InMemoryEventBus();
     registerCatalogProjector(bus, projector);
@@ -69,7 +71,6 @@ describe('Catalog query use-cases (projection-driven)', () => {
       RestaurantModel.deleteMany({}),
       MenuItemModel.deleteMany({}),
       RestaurantSummaryModel.deleteMany({}),
-      RestaurantMenuViewModel.deleteMany({}),
       MenuItemSearchModel.deleteMany({}),
     ]);
   });
@@ -196,7 +197,7 @@ describe('Catalog query use-cases (projection-driven)', () => {
     it('returns the restaurant + resolved fee for a point inside its delivery zone', async () => {
       const { restaurant } = await seed({ withZone: true, centerLat: 19.0, centerLng: 73.0 });
 
-      const result = await new CheckServiceability(deliveryZoneRepo, readRepo).execute({
+      const result = await new CheckServiceability(deliveryZoneRepo, queryRepo).execute({
         lat: 19.0,
         lng: 73.0,
         subtotalAmount: 0,
@@ -211,16 +212,51 @@ describe('Catalog query use-cases (projection-driven)', () => {
 
     it('returns empty for a point outside any delivery zone', async () => {
       await seed({ withZone: true, centerLat: 19.0, centerLng: 73.0 });
-      const result = await new CheckServiceability(deliveryZoneRepo, readRepo).execute({
+      const result = await new CheckServiceability(deliveryZoneRepo, queryRepo).execute({
         lat: 1.0,
         lng: 1.0,
       });
       expect(result.getValue()).toHaveLength(0);
     });
 
+    // The publish gate used to be enforced implicitly by the `restaurant_summary` read
+    // returning null. Now that the point is resolved straight from `restaurants`, these
+    // pin the {visibility: PUBLIC, status: ACTIVE, deletedAt: null} filter in place.
+    it('excludes a zone whose restaurant is not PUBLIC', async () => {
+      await seed({
+        withZone: true,
+        centerLat: 19.0,
+        centerLng: 73.0,
+        visibility: CATALOG_VISIBILITY.HIDDEN,
+      });
+      const result = await new CheckServiceability(deliveryZoneRepo, queryRepo).execute({
+        lat: 19.0,
+        lng: 73.0,
+      });
+      expect(result.getValue()).toHaveLength(0);
+    });
+
+    it('excludes a zone whose restaurant is unpublished (DRAFT)', async () => {
+      await seed({ withZone: true, centerLat: 19.0, centerLng: 73.0, publish: false });
+      const result = await new CheckServiceability(deliveryZoneRepo, queryRepo).execute({
+        lat: 19.0,
+        lng: 73.0,
+      });
+      expect(result.getValue()).toHaveLength(0);
+    });
+
+    it('excludes a zone whose restaurant is paused (INACTIVE)', async () => {
+      await seed({ withZone: true, centerLat: 19.0, centerLng: 73.0, pause: true });
+      const result = await new CheckServiceability(deliveryZoneRepo, queryRepo).execute({
+        lat: 19.0,
+        lng: 73.0,
+      });
+      expect(result.getValue()).toHaveLength(0);
+    });
+
     it('waives the fee when subtotal meets the free-delivery threshold', async () => {
       await seed({ withZone: true, centerLat: 19.0, centerLng: 73.0 });
-      const result = await new CheckServiceability(deliveryZoneRepo, readRepo).execute({
+      const result = await new CheckServiceability(deliveryZoneRepo, queryRepo).execute({
         lat: 19.0,
         lng: 73.0,
         subtotalAmount: 60000, // ≥ freeAboveSubtotal (50000)

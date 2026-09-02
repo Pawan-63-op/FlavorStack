@@ -8,11 +8,10 @@ import {
   SEED_LNG,
 } from "./fixtures/seed";
 import { flushRateLimits } from "./fixtures/seed";
+import { isEnabled } from "./fixtures/flags";
 
 
-const REVIEWS_ON =
-  process.env.NEXT_PUBLIC_FEATURE_REVIEWS === "true" ||
-  process.env.NEXT_PUBLIC_FEATURE_REVIEWS === "1";
+const REVIEWS_ON = isEnabled("reviews");
 
 function orderRequestIdFromUrl(url: string): string {
   const id = new URL(url).searchParams.get("orderRequestId");

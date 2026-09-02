@@ -12,20 +12,17 @@ import { Cart } from '../../../domain/commerce/entities/Cart';
 import { LineItemSelection } from '../../../domain/commerce/value-objects/LineItemSelection';
 import { Money } from '../../../domain/shared/Money';
 import { Result } from '../../../domain/shared/Result';
-import { DomainEvent } from '../../../domain/shared/DomainEvent';
 import { ConflictError } from '../../../domain/shared/errors/ConflictError';
 import { PAYMENT_METHOD } from '../../../domain/commerce/enums/payment-method.enum';
 import { COMMERCE_RESTAURANT_STATUS } from '../../../domain/commerce/enums/restaurant-status.enum';
 
 import { ICatalogGateway } from '../../../domain/commerce/services/ICatalogGateway';
-import { ICommerceCatalogReadRepository } from '../../../domain/commerce/repositories/ICommerceCatalogReadRepository';
-import { IEventBus } from '../../../application/shared/events/IEventBus';
 import {
+  CartMenuItemView,
   CheckoutRestaurant,
   CheckoutMenuItem,
   CheckoutServiceability,
 } from '../../../domain/commerce/types/CatalogGatewayRead';
-import { CommerceCatalogMenuItemView } from '../../../domain/commerce/types/CommerceCatalogView';
 
 import { TransactionContext } from '../../../infrastructure/database/TransactionContext';
 import { MongoUnitOfWork } from '../../../infrastructure/database/MongoUnitOfWork';
@@ -81,12 +78,16 @@ function fakeGateway(): ICatalogGateway {
     getItemsSnapshot: async () => Result.ok(items),
     checkServiceability: async () => Result.ok(serviceability),
     isRestaurantOpen: async () => Result.ok(true),
+    // Variant option groups for checkout option resolution.
+    getRestaurantForCart: async () => Result.ok(null),
+    getItemsForCart: async () => Result.ok([variantView()]),
   };
 }
 
-function fakeProjection(): ICommerceCatalogReadRepository {
-  const view: CommerceCatalogMenuItemView = {
+function variantView(): CartMenuItemView {
+  return {
     menuItemId: 'menu-1',
+    restaurantId: 'rest-1',
     categoryId: 'cat-1',
     name: 'Margherita',
     basePriceAmount: 1000,
@@ -107,35 +108,11 @@ function fakeProjection(): ICommerceCatalogReadRepository {
       },
     ],
   };
-  return {
-    findRestaurantView: async () => null,
-    findMenuItemViews: async () => [view],
-    upsertRestaurantView: async () => undefined,
-    removeRestaurantView: async () => undefined,
-    markEventProcessed: async () => true,
-  };
-}
-
-function fakeEventBus(): { bus: IEventBus; published: DomainEvent[] } {
-  const published: DomainEvent[] = [];
-  return {
-    published,
-    bus: {
-      subscribe: () => undefined,
-      publish: async (e) => {
-        published.push(e);
-      },
-      publishAll: async (events) => {
-        published.push(...events);
-      },
-    },
-  };
 }
 
 function buildAssembler(): CheckoutContextAssembler {
   return new CheckoutContextAssembler(
     fakeGateway(),
-    fakeProjection(),
     new PromotionService(buildDefaultCommerceCoupons()),
     buildDefaultCommercePricingPolicy()
   );
@@ -178,7 +155,7 @@ describe('Checkout — simultaneous double-submit (concurrency)', () => {
   }
 
   function newCheckout(): Checkout {
-    return new Checkout(cartRepo, orderRepo, buildAssembler(), new PricingCalculator(), unitOfWork, outboxStore, fakeEventBus().bus);
+    return new Checkout(cartRepo, orderRepo, buildAssembler(), new PricingCalculator(), unitOfWork, outboxStore);
   }
 
   it('N concurrent submits with the SAME idempotency key create exactly one OrderRequest', async () => {
@@ -196,8 +173,8 @@ describe('Checkout — simultaneous double-submit (concurrency)', () => {
     const winnerId = String(theOrder!._id);
 
     const rows = await OutboxEventModel.find({ aggregateId: winnerId }).lean();
-    expect(rows.map((r) => r.eventName).sort()).toEqual(['CheckoutReadyForPayment', 'OrderRequested']);
-    expect(await OutboxEventModel.countDocuments({})).toBe(2);
+    expect(rows.map((r) => r.eventName)).toEqual(['OrderRequested']);
+    expect(await OutboxEventModel.countDocuments({})).toBe(1);
 
     const fulfilled = settled.filter(
       (s): s is PromiseFulfilledResult<Awaited<ReturnType<Checkout['execute']>>> => s.status === 'fulfilled'

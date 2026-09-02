@@ -1,24 +1,16 @@
 import type { ClientSession } from 'mongoose';
-import { DomainEvent } from '../../domain/shared/DomainEvent';
 import { TransactionContext } from '../database/TransactionContext';
 import {
   OutboxEventModel,
   OutboxEventDocument,
   OUTBOX_STATUS,
 } from '../database/models/OutboxEventModel';
-import { toOutboxRow } from '../database/MongoOutboxStore';
 
 export class MongoOutboxRepository {
   constructor(private readonly txContext: TransactionContext) {}
 
   private get session(): ClientSession | undefined {
     return this.txContext.getSession();
-  }
-
-  /** Persist a single PENDING outbox row for an event. */
-  async save(event: DomainEvent, aggregateType?: string): Promise<void> {
-    const row = toOutboxRow(event, aggregateType);
-    await OutboxEventModel.create([row], { session: this.session });
   }
 
   /**
@@ -38,20 +30,40 @@ export class MongoOutboxRepository {
       .lean<OutboxEventDocument[]>();
   }
 
-  /** Claim a row for processing: PENDING → PROCESSING. */
-  async markProcessing(id: string): Promise<void> {
-    await OutboxEventModel.updateOne(
+  /**
+   * Claim a row for processing: PENDING → PROCESSING, stamping the lease.
+   * The `{_id, status: PENDING}` filter makes the transition atomic; returning
+   * whether it actually matched is what turns it into a real lease — a second
+   * relay that lost the race gets `false` and must skip the row.
+   */
+  async claim(id: string): Promise<boolean> {
+    const result = await OutboxEventModel.updateOne(
       { _id: id, status: OUTBOX_STATUS.PENDING },
-      { $set: { status: OUTBOX_STATUS.PROCESSING } },
+      { $set: { status: OUTBOX_STATUS.PROCESSING, lockedAt: new Date() } },
       { session: this.session },
     );
+    return result.modifiedCount === 1;
   }
 
-  /** Settle a row: mark PROCESSED and stamp the processing time. */
+  /**
+   * Return rows whose lease has expired to PENDING so a crashed relay cannot
+   * strand them in PROCESSING forever. Returns how many were reclaimed.
+   */
+  async reclaimStale(leaseMs: number): Promise<number> {
+    const cutoff = new Date(Date.now() - leaseMs);
+    const result = await OutboxEventModel.updateMany(
+      { status: OUTBOX_STATUS.PROCESSING, lockedAt: { $lt: cutoff } },
+      { $set: { status: OUTBOX_STATUS.PENDING, lockedAt: null } },
+      { session: this.session },
+    );
+    return result.modifiedCount;
+  }
+
+  /** Settle a row: mark PROCESSED, stamp the processing time, release the lease. */
   async markProcessed(id: string): Promise<void> {
     await OutboxEventModel.updateOne(
       { _id: id },
-      { $set: { status: OUTBOX_STATUS.PROCESSED, processedAt: new Date() } },
+      { $set: { status: OUTBOX_STATUS.PROCESSED, processedAt: new Date(), lockedAt: null } },
       { session: this.session },
     );
   }
@@ -73,6 +85,7 @@ export class MongoOutboxRepository {
           retryCount: update.retryCount,
           nextAttemptAt: update.nextAttemptAt,
           lastError: update.lastError,
+          lockedAt: null,
         },
       },
       { session: this.session },
@@ -83,7 +96,7 @@ export class MongoOutboxRepository {
   async markFailed(id: string, lastError: string): Promise<void> {
     await OutboxEventModel.updateOne(
       { _id: id },
-      { $set: { status: OUTBOX_STATUS.FAILED, lastError } },
+      { $set: { status: OUTBOX_STATUS.FAILED, lastError, lockedAt: null } },
       { session: this.session },
     );
   }

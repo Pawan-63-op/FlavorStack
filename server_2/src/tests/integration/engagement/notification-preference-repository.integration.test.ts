@@ -29,7 +29,7 @@ describe('MongoNotificationPreferenceRepository', () => {
     expect(reloaded.userId).toBe('user-1');
     expect(reloaded.isEnabled(NOTIFICATION_CATEGORY.ORDER_UPDATES, NOTIFICATION_CHANNEL.EMAIL)).toBe(true);
     expect(reloaded.isEnabled(NOTIFICATION_CATEGORY.PROMOTIONS, NOTIFICATION_CHANNEL.EMAIL)).toBe(false);
-    expect(reloaded.isEnabled(NOTIFICATION_CATEGORY.PROMOTIONS, NOTIFICATION_CHANNEL.PUSH)).toBe(true);
+    expect(reloaded.isEnabled(NOTIFICATION_CATEGORY.PROMOTIONS, NOTIFICATION_CHANNEL.INBOX)).toBe(true);
   });
 
   it('round-trips a channel mutation through save then update', async () => {

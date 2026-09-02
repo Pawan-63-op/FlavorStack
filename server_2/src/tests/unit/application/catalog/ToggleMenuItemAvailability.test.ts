@@ -1,6 +1,6 @@
 import { ToggleMenuItemAvailability } from '../../../../application/catalog/use-cases/ToggleMenuItemAvailability';
 import { InMemoryRestaurantRepository, InMemoryMenuItemRepository } from '../../../mocks/catalog.mocks';
-import { InMemoryUnitOfWork, InMemoryOutboxStore } from '../../../mocks/identity.mocks';
+import { InMemoryUnitOfWork } from '../../../mocks/identity.mocks';
 import { createEventBusSpy, EventBusSpy } from '../../../mocks/shared.mocks';
 import { buildRestaurant, buildMenuItem } from './helpers';
 import { NotFoundError } from '../../../../domain/shared/errors/NotFoundError';
@@ -11,7 +11,6 @@ describe('ToggleMenuItemAvailability use-case', () => {
   let restaurantRepo: InMemoryRestaurantRepository;
   let menuItemRepo: InMemoryMenuItemRepository;
   let unitOfWork: InMemoryUnitOfWork;
-  let outboxStore: InMemoryOutboxStore;
   let eventBus: EventBusSpy;
   let useCase: ToggleMenuItemAvailability;
 
@@ -19,9 +18,8 @@ describe('ToggleMenuItemAvailability use-case', () => {
     restaurantRepo = new InMemoryRestaurantRepository();
     menuItemRepo = new InMemoryMenuItemRepository();
     unitOfWork = new InMemoryUnitOfWork();
-    outboxStore = new InMemoryOutboxStore();
     eventBus = createEventBusSpy();
-    useCase = new ToggleMenuItemAvailability(restaurantRepo, menuItemRepo, unitOfWork, outboxStore, eventBus);
+    useCase = new ToggleMenuItemAvailability(restaurantRepo, menuItemRepo, unitOfWork, eventBus);
   });
 
   async function seed() {
@@ -47,8 +45,8 @@ describe('ToggleMenuItemAvailability use-case', () => {
     expect(result.getValue().availability.isAvailable).toBe(false);
     expect(result.getValue().availability.outOfStockReason).toBe('Out of paneer');
 
-    expect(outboxStore.appended).toHaveLength(1);
-    expect(outboxStore.appended[0].eventName).toBe('MenuItemAvailabilityChanged');
+    expect(eventBus.publishedEvents).toHaveLength(1);
+    expect(eventBus.publishedEvents[0].eventName).toBe('MenuItemAvailabilityChanged');
     expect(eventBus.publishedEvents).toHaveLength(1);
   });
 
@@ -84,7 +82,7 @@ describe('ToggleMenuItemAvailability use-case', () => {
 
     expect(result.isFailure).toBe(true);
     expect(result.getError()).toBeInstanceOf(ValidationError);
-    expect(outboxStore.appended).toHaveLength(0);
+    expect(eventBus.publishedEvents).toHaveLength(0);
     expect(eventBus.publishedEvents).toHaveLength(0);
   });
 });

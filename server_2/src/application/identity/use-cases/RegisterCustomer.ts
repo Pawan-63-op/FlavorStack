@@ -10,7 +10,6 @@ import { IUserRepository } from '../../../domain/identity/repositories/IUserRepo
 import { ICustomerRepository } from '../../../domain/identity/repositories/ICustomerRepository';
 import { IPasswordHasher } from '../../../domain/identity/services/IPasswordHasher';
 import { IUnitOfWork } from '../../shared/ports/IUnitOfWork';
-import { IOutboxStore } from '../../shared/outbox/IOutboxStore';
 import { IEventBus } from '../../shared/events/IEventBus';
 import { RegisterCustomerDto } from '../dtos/RegisterCustomerDto';
 import { AuthResponse } from '../responses/AuthResponse';
@@ -22,7 +21,6 @@ export class RegisterCustomer {
     private customerRepo: ICustomerRepository,
     private passwordHasher: IPasswordHasher,
     private unitOfWork: IUnitOfWork,
-    private outboxStore: IOutboxStore,
     private eventBus: IEventBus,
   ) {}
 
@@ -80,11 +78,8 @@ export class RegisterCustomer {
 
     const events = customer.pullDomainEvents();
 
-    await this.unitOfWork.runInTransaction(async (ctx) => {
+    await this.unitOfWork.runInTransaction(async () => {
       await this.userRepo.save(customer);
-      if (events.length > 0) {
-        await this.outboxStore.append(events, ctx);
-      }
     });
 
     await this.eventBus.publishAll(events);

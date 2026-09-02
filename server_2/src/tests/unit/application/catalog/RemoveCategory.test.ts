@@ -1,6 +1,6 @@
 import { RemoveCategory } from '../../../../application/catalog/use-cases/RemoveCategory';
 import { InMemoryRestaurantRepository } from '../../../mocks/catalog.mocks';
-import { InMemoryUnitOfWork, InMemoryOutboxStore } from '../../../mocks/identity.mocks';
+import { InMemoryUnitOfWork } from '../../../mocks/identity.mocks';
 import { createEventBusSpy, EventBusSpy } from '../../../mocks/shared.mocks';
 import { buildRestaurant } from './helpers';
 import { NotFoundError } from '../../../../domain/shared/errors/NotFoundError';
@@ -10,16 +10,14 @@ import { ConflictError } from '../../../../domain/shared/errors/ConflictError';
 describe('RemoveCategory use-case', () => {
   let restaurantRepo: InMemoryRestaurantRepository;
   let unitOfWork: InMemoryUnitOfWork;
-  let outboxStore: InMemoryOutboxStore;
   let eventBus: EventBusSpy;
   let useCase: RemoveCategory;
 
   beforeEach(() => {
     restaurantRepo = new InMemoryRestaurantRepository();
     unitOfWork = new InMemoryUnitOfWork();
-    outboxStore = new InMemoryOutboxStore();
     eventBus = createEventBusSpy();
-    useCase = new RemoveCategory(restaurantRepo, unitOfWork, outboxStore, eventBus);
+    useCase = new RemoveCategory(restaurantRepo, unitOfWork, eventBus);
   });
 
   it('removes a category from the restaurant', async () => {
@@ -38,8 +36,8 @@ describe('RemoveCategory use-case', () => {
     expect(result.isSuccess).toBe(true);
     expect(result.getValue().categories.find((c) => c.id === dessertsId)).toBeUndefined();
 
-    expect(outboxStore.appended).toHaveLength(1);
-    expect(outboxStore.appended[0].eventName).toBe('CategoryUpdated');
+    expect(eventBus.publishedEvents).toHaveLength(1);
+    expect(eventBus.publishedEvents[0].eventName).toBe('CategoryUpdated');
     expect(eventBus.publishedEvents).toHaveLength(1);
   });
 
@@ -94,7 +92,7 @@ describe('RemoveCategory use-case', () => {
 
     expect(result.isFailure).toBe(true);
     expect(result.getError()).toBeInstanceOf(ConflictError);
-    expect(outboxStore.appended).toHaveLength(0);
+    expect(eventBus.publishedEvents).toHaveLength(0);
     expect(eventBus.publishedEvents).toHaveLength(0);
   });
 });

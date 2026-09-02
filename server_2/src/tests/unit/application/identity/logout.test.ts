@@ -5,9 +5,8 @@ import {
   InMemoryUserRepository,
   InMemorySessionStore,
   InMemoryUnitOfWork,
-  InMemoryOutboxStore,
 } from '../../../mocks/identity.mocks';
-import { createEventBusSpy } from '../../../mocks/shared.mocks';
+import { createEventBusSpy, EventBusSpy } from '../../../mocks/shared.mocks';
 import { Customer } from '../../../../domain/identity/entities/Customer';
 import { NotFoundError } from '../../../../domain/shared/errors/NotFoundError';
 import { DomainError } from '../../../../domain/shared/errors/DomainError';
@@ -75,19 +74,18 @@ describe('Logout use-case', () => {
 });
 
 describe('LogoutAllSessions use-case', () => {
+  let eventBus: EventBusSpy;
   let userRepo: InMemoryUserRepository;
   let sessionStore: InMemorySessionStore;
   let unitOfWork: InMemoryUnitOfWork;
-  let outboxStore: InMemoryOutboxStore;
   let useCase: LogoutAllSessions;
 
   beforeEach(() => {
     userRepo = new InMemoryUserRepository();
     sessionStore = new InMemorySessionStore();
     unitOfWork = new InMemoryUnitOfWork();
-    outboxStore = new InMemoryOutboxStore();
-    const eventBus = createEventBusSpy();
-    useCase = new LogoutAllSessions(userRepo, sessionStore, unitOfWork, outboxStore, eventBus);
+    eventBus = createEventBusSpy();
+    useCase = new LogoutAllSessions(userRepo, sessionStore, unitOfWork, eventBus);
   });
 
   it('invalidates all sessions for the user', async () => {
@@ -129,12 +127,12 @@ describe('LogoutAllSessions use-case', () => {
     expect(err.message).toBe('user_not_found');
   });
 
-  it('does not append events to outbox (tokenVersion bump raises no event)', async () => {
+  it('publishes no events (tokenVersion bump raises no event)', async () => {
     const customer = makeCustomer();
     await userRepo.save(customer);
 
     await useCase.execute({ userId: customer._id });
-    expect(outboxStore.appended.length).toBe(0);
+    expect(eventBus.publishedEvents.length).toBe(0);
   });
 });
 

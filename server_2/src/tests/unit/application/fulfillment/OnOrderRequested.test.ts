@@ -56,7 +56,10 @@ describe('OnOrderRequested', () => {
     expect(dto.deliveryAddress.pinCode).toBe('560001');
   });
 
-  it('dedups a redelivered eventId after a successful handle', async () => {
+  // Phase 6 removed the per-handler in-memory `processedEventIds` set. Idempotency for this
+  // path is `CreateFulfillment`'s `findByOrderRequestId` short-circuit plus the unique
+  // `orderRequestId` index — durable, and the same guard the outbox relay will rely on.
+  it('delegates every delivery — de-duplication belongs to CreateFulfillment', async () => {
     const execute = jest.fn().mockResolvedValue(Result.ok({}));
     const handler = new OnOrderRequested({ execute } as unknown as CreateFulfillment);
 
@@ -64,20 +67,17 @@ describe('OnOrderRequested', () => {
     await handler.handle(event);
     await handler.handle(event);
 
-    expect(execute).toHaveBeenCalledTimes(1);
+    expect(execute).toHaveBeenCalledTimes(2);
   });
 
-  it('does NOT dedup when the use case fails (allows retry)', async () => {
-    const execute = jest
-      .fn()
-      .mockResolvedValueOnce(Result.fail('boom'))
-      .mockResolvedValueOnce(Result.ok({}));
+  // Phase 7 Batch 2: this handler runs in the outbox relay, so rejecting is what buys
+  // the retry with backoff and eventually a FAILED row. Swallowing the failure here
+  // meant a dropped order was invisible.
+  it('rejects when CreateFulfillment fails so the relay retries the row', async () => {
+    const execute = jest.fn().mockResolvedValue(Result.fail('boom'));
     const handler = new OnOrderRequested({ execute } as unknown as CreateFulfillment);
 
-    const event = orderRequestedEvent();
-    await handler.handle(event);
-    await handler.handle(event);
-
-    expect(execute).toHaveBeenCalledTimes(2);
+    await expect(handler.handle(orderRequestedEvent())).rejects.toThrow('boom');
+    expect(execute).toHaveBeenCalledTimes(1);
   });
 });

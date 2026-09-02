@@ -8,6 +8,7 @@ import { IOtpGenerator } from '../../domain/identity/services/IOtpGenerator';
 import { ISmsProvider } from '../../domain/identity/services/ISmsProvider';
 import { IEmailProvider } from '../../domain/identity/services/IEmailProvider';
 import { IEmailQueue } from '../../application/shared/queues/IEmailQueue';
+import { ComposedEmail, IEmailComposer } from '../../domain/identity/services/IEmailComposer';
 import { EmailJob, EnqueueOptions } from '../../application/shared/queues/jobs';
 import { IPasswordHasher } from '../../domain/identity/services/IPasswordHasher';
 import { IRefreshTokenHasher } from '../../domain/identity/services/IRefreshTokenHasher';
@@ -160,10 +161,6 @@ export class FakeEmailProvider implements IEmailProvider {
     this.sent.push({ type: 'verification', to: to.value, payload: { token } });
   }
 
-  async sendPasswordReset(to: Email, token: string): Promise<void> {
-    this.sent.push({ type: 'passwordReset', to: to.value, payload: { token } });
-  }
-
   async sendNotification(to: Email, subject: string, body: string): Promise<void> {
     this.sent.push({ type: 'notification', to: to.value, payload: { subject, body } });
   }
@@ -179,6 +176,25 @@ export class FakeEmailQueue implements IEmailQueue {
 
   async close(): Promise<void> {
     this.closed = true;
+  }
+}
+
+/**
+ * Renders `[<templateKey>] <k=v,...>` so a test can assert both the key and the vars that
+ * reached the composer. `missingKeys` makes `compose` return `null` for the null-template path.
+ */
+export class FakeEmailComposer implements IEmailComposer {
+  calls: Array<{ templateKey: string; vars: Record<string, string> }> = [];
+  missingKeys = new Set<string>();
+
+  async compose(templateKey: string, vars: Record<string, string>): Promise<ComposedEmail | null> {
+    this.calls.push({ templateKey, vars });
+    if (this.missingKeys.has(templateKey)) return null;
+
+    const rendered = Object.entries(vars)
+      .map(([k, v]) => `${k}=${v}`)
+      .join(',');
+    return { subject: `[${templateKey}]`, body: `[${templateKey}] ${rendered}` };
   }
 }
 

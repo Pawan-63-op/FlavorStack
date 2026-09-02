@@ -30,7 +30,7 @@ describe('UpdateNotificationPreferences', () => {
 
     const result = await uc.execute({
       userId: 'new-user',
-      changes: [{ category: NOTIFICATION_CATEGORY.PROMOTIONS, channel: NOTIFICATION_CHANNEL.PUSH, enabled: false }],
+      changes: [{ category: NOTIFICATION_CATEGORY.PROMOTIONS, channel: NOTIFICATION_CHANNEL.INBOX, enabled: false }],
     });
 
     expect(result.isSuccess).toBe(true);

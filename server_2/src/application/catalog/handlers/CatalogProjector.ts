@@ -2,7 +2,6 @@ import { DomainEvent } from '../../../domain/shared/DomainEvent';
 import { IRestaurantRepository } from '../../../domain/catalog/repositories/IRestaurantRepository';
 import { IMenuItemRepository } from '../../../domain/catalog/repositories/IMenuItemRepository';
 import { ICatalogProjectionWriter } from '../../../domain/catalog/repositories/ICatalogProjectionWriter';
-import { ICatalogCacheInvalidator } from '../../../domain/catalog/services/ICatalogCache';
 import { MenuItem } from '../../../domain/catalog/entities/MenuItem';
 
 const ITEM_PAGE_LIMIT = 100;
@@ -11,8 +10,7 @@ export class CatalogProjector {
   constructor(
     private readonly restaurantRepo: IRestaurantRepository,
     private readonly menuItemRepo: IMenuItemRepository,
-    private readonly projectionWriter: ICatalogProjectionWriter,
-    private readonly cacheInvalidator?: ICatalogCacheInvalidator
+    private readonly projectionWriter: ICatalogProjectionWriter
   ) {}
 
 
@@ -42,19 +40,10 @@ export class CatalogProjector {
     const restaurant = await this.restaurantRepo.findById(restaurantId);
     if (!restaurant) {
       await this.projectionWriter.removeRestaurant(restaurantId);
-      await this.invalidateCache(restaurantId);
       return;
     }
     const items = await this.loadAllItems(restaurantId);
     await this.projectionWriter.rebuildRestaurant(restaurant, items);
-    await this.invalidateCache(restaurantId);
-  }
-
-  /** No-op when no cache is wired (mock/non-cached setups). */
-  private async invalidateCache(restaurantId: string): Promise<void> {
-    if (this.cacheInvalidator) {
-      await this.cacheInvalidator.invalidateRestaurant(restaurantId);
-    }
   }
 
   private async loadAllItems(restaurantId: string): Promise<MenuItem[]> {

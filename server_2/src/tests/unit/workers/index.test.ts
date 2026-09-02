@@ -1,11 +1,8 @@
-const mockRunOutboxWorker = jest.fn().mockResolvedValue(undefined);
-jest.mock('../../../workers/outbox.worker', () => ({ run: mockRunOutboxWorker }));
+const mockRunRelayWorker = jest.fn().mockResolvedValue(undefined);
+jest.mock('../../../workers/relay.worker', () => ({ run: mockRunRelayWorker }));
 
-const mockRunEmailWorker = jest.fn().mockResolvedValue(undefined);
-jest.mock('../../../workers/email.worker', () => ({ run: mockRunEmailWorker }));
-
-const mockRunNotificationWorker = jest.fn().mockResolvedValue(undefined);
-jest.mock('../../../workers/notification.worker', () => ({ run: mockRunNotificationWorker }));
+const mockRunJobsWorker = jest.fn().mockResolvedValue(undefined);
+jest.mock('../../../workers/jobs.worker', () => ({ run: mockRunJobsWorker }));
 
 jest.mock('../../../infrastructure/observability/logger', () => ({
   logger: { info: jest.fn(), error: jest.fn() },
@@ -17,39 +14,30 @@ describe('workers/index dispatcher', () => {
   const originalEnv = process.env.WORKER_TYPE;
 
   beforeEach(() => {
-    mockRunOutboxWorker.mockClear().mockResolvedValue(undefined);
-    mockRunEmailWorker.mockClear().mockResolvedValue(undefined);
-    mockRunNotificationWorker.mockClear().mockResolvedValue(undefined);
+    mockRunRelayWorker.mockClear().mockResolvedValue(undefined);
+    mockRunJobsWorker.mockClear().mockResolvedValue(undefined);
   });
 
   afterEach(() => {
     process.env.WORKER_TYPE = originalEnv;
   });
 
-  it('dispatches to the outbox worker when WORKER_TYPE=outbox', async () => {
-    process.env.WORKER_TYPE = 'outbox';
+  it('dispatches to the relay worker when WORKER_TYPE=relay', async () => {
+    process.env.WORKER_TYPE = 'relay';
 
     await main();
 
-    expect(mockRunOutboxWorker).toHaveBeenCalledTimes(1);
-    expect(mockRunEmailWorker).not.toHaveBeenCalled();
-    expect(mockRunNotificationWorker).not.toHaveBeenCalled();
+    expect(mockRunRelayWorker).toHaveBeenCalledTimes(1);
+    expect(mockRunJobsWorker).not.toHaveBeenCalled();
   });
 
-  it('dispatches to the email worker when WORKER_TYPE=email', async () => {
-    process.env.WORKER_TYPE = 'email';
+  it('dispatches to the jobs worker when WORKER_TYPE=jobs', async () => {
+    process.env.WORKER_TYPE = 'jobs';
 
     await main();
 
-    expect(mockRunEmailWorker).toHaveBeenCalledTimes(1);
-  });
-
-  it('dispatches to the notification worker when WORKER_TYPE=notification', async () => {
-    process.env.WORKER_TYPE = 'notification';
-
-    await main();
-
-    expect(mockRunNotificationWorker).toHaveBeenCalledTimes(1);
+    expect(mockRunJobsWorker).toHaveBeenCalledTimes(1);
+    expect(mockRunRelayWorker).not.toHaveBeenCalled();
   });
 
   it('throws for an unknown or missing WORKER_TYPE', async () => {
@@ -60,4 +48,17 @@ describe('workers/index dispatcher', () => {
     process.env.WORKER_TYPE = 'bogus';
     await expect(main()).rejects.toThrow(/WORKER_TYPE/);
   });
+
+  // Phase 8 Batch 3 deliberately ships no back-compat aliases: a container left on a
+  // pre-Phase-8 WORKER_TYPE must fail at boot rather than start and quietly do nothing.
+  it.each(['outbox', 'email', 'fulfillment'])(
+    'throws for the retired WORKER_TYPE=%s, naming the valid set',
+    async (retired) => {
+      process.env.WORKER_TYPE = retired;
+
+      await expect(main()).rejects.toThrow(/relay, jobs/);
+      expect(mockRunRelayWorker).not.toHaveBeenCalled();
+      expect(mockRunJobsWorker).not.toHaveBeenCalled();
+    },
+  );
 });

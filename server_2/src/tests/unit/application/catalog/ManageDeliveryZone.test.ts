@@ -1,6 +1,6 @@
 import { ManageDeliveryZone } from '../../../../application/catalog/use-cases/ManageDeliveryZone';
 import { InMemoryRestaurantRepository } from '../../../mocks/catalog.mocks';
-import { InMemoryUnitOfWork, InMemoryOutboxStore } from '../../../mocks/identity.mocks';
+import { InMemoryUnitOfWork } from '../../../mocks/identity.mocks';
 import { createEventBusSpy, EventBusSpy } from '../../../mocks/shared.mocks';
 import { buildRestaurant, buildPolygon, buildFeeMatrix, money } from './helpers';
 import { DELIVERY_ZONE_ACTION } from '../../../../application/catalog/dtos/ManageDeliveryZoneDto';
@@ -22,16 +22,14 @@ const FEE_MATRIX = {
 describe('ManageDeliveryZone use-case', () => {
   let restaurantRepo: InMemoryRestaurantRepository;
   let unitOfWork: InMemoryUnitOfWork;
-  let outboxStore: InMemoryOutboxStore;
   let eventBus: EventBusSpy;
   let useCase: ManageDeliveryZone;
 
   beforeEach(() => {
     restaurantRepo = new InMemoryRestaurantRepository();
     unitOfWork = new InMemoryUnitOfWork();
-    outboxStore = new InMemoryOutboxStore();
     eventBus = createEventBusSpy();
-    useCase = new ManageDeliveryZone(restaurantRepo, unitOfWork, outboxStore, eventBus);
+    useCase = new ManageDeliveryZone(restaurantRepo, unitOfWork, eventBus);
   });
 
   function seedZone(restaurant: ReturnType<typeof buildRestaurant>) {
@@ -59,8 +57,8 @@ describe('ManageDeliveryZone use-case', () => {
     expect(result.getValue().deliveryZones).toHaveLength(1);
     expect(result.getValue().deliveryZones[0].minOrder.amount).toBe(10000);
 
-    expect(outboxStore.appended).toHaveLength(1);
-    expect(outboxStore.appended[0].eventName).toBe('DeliveryZoneChanged');
+    expect(eventBus.publishedEvents).toHaveLength(1);
+    expect(eventBus.publishedEvents[0].eventName).toBe('DeliveryZoneChanged');
     expect(eventBus.publishedEvents).toHaveLength(1);
   });
 
@@ -140,7 +138,7 @@ describe('ManageDeliveryZone use-case', () => {
 
     expect(result.isFailure).toBe(true);
     expect(result.getError()).toBeInstanceOf(ValidationError);
-    expect(outboxStore.appended).toHaveLength(0);
+    expect(eventBus.publishedEvents).toHaveLength(0);
     expect(eventBus.publishedEvents).toHaveLength(0);
   });
 

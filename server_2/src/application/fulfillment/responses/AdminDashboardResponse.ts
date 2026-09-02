@@ -1,4 +1,4 @@
-import { AdminDashboardView } from '../../../domain/fulfillment/repositories/IFulfillmentProjectionRepository';
+import { AdminDashboardView } from '../../../domain/fulfillment/repositories/IFulfillmentQueryRepository';
 
 export interface AdminDashboardItemResponse {
   fulfillmentId: string;

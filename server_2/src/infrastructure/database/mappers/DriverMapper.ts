@@ -27,7 +27,6 @@ export class DriverMapper {
       averageRating: driver.averageRating,
       totalDeliveries: driver.totalDeliveries,
       totalRatings: driver.totalRatings,
-      fcmTokens: driver.fcmTokens,
     };
   }
 
@@ -46,7 +45,6 @@ export class DriverMapper {
       averageRating: doc.averageRating,
       totalDeliveries: doc.totalDeliveries,
       totalRatings: doc.totalRatings,
-      fcmTokens: doc.fcmTokens,
     });
     driver.clearDomainEvents();
     return driver;

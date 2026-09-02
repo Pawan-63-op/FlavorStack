@@ -6,7 +6,7 @@ import { Fulfillment } from '../../../../domain/fulfillment/entities/Fulfillment
 import { FulfillmentLine } from '../../../../domain/fulfillment/value-objects/FulfillmentLine';
 import { DeliveryAddress } from '../../../../domain/fulfillment/value-objects/DeliveryAddress';
 import { GeoPoint } from '../../../../domain/identity/value-objects/GeoPoint.vo';
-import { makeRepo, makeUnitOfWork, makeOutbox, makeEventBus, money } from './assignment-uc-fixtures';
+import { makeRepo, makeUnitOfWork, makeEventBus, money } from './assignment-uc-fixtures';
 
 const CUSTOMER_ID = 'cust-1';
 const RESTAURANT_ID = 'rest-1';
@@ -42,9 +42,8 @@ describe('CancelFulfillment', () => {
   it('cancels by the owning customer, appends FulfillmentCancelled, publishes', async () => {
     const f = buildCreatedFulfillment();
     const repo = makeRepo({ findById: jest.fn().mockResolvedValue(f) });
-    const outbox = makeOutbox();
     const bus = makeEventBus();
-    const uc = new CancelFulfillment(repo, makeUnitOfWork(), outbox, bus);
+    const uc = new CancelFulfillment(repo, makeUnitOfWork(), bus);
 
     const result = await uc.execute({
       fulfillmentId: f.id.toString(),
@@ -59,7 +58,7 @@ describe('CancelFulfillment', () => {
       expect.objectContaining({ cancelledBy: CANCELLED_BY.CUSTOMER, reason: 'changed my mind' })
     );
     expect(repo.update).toHaveBeenCalledTimes(1);
-    const events = outbox.append.mock.calls[0][0];
+    const events = bus.publishAll.mock.calls[0][0];
     expect(events).toHaveLength(1);
     expect(events[0].eventName).toBe('FulfillmentCancelled');
     expect(bus.publishAll).toHaveBeenCalledTimes(1);
@@ -68,7 +67,7 @@ describe('CancelFulfillment', () => {
   it('lets an admin cancel as SYSTEM without an actorId', async () => {
     const f = buildCreatedFulfillment();
     const repo = makeRepo({ findById: jest.fn().mockResolvedValue(f) });
-    const uc = new CancelFulfillment(repo, makeUnitOfWork(), makeOutbox(), makeEventBus());
+    const uc = new CancelFulfillment(repo, makeUnitOfWork(), makeEventBus());
 
     const result = await uc.execute({
       fulfillmentId: f.id.toString(),
@@ -83,8 +82,8 @@ describe('CancelFulfillment', () => {
   it('fails (no persistence) when a non-owning customer attempts to cancel', async () => {
     const f = buildCreatedFulfillment();
     const repo = makeRepo({ findById: jest.fn().mockResolvedValue(f) });
-    const outbox = makeOutbox();
-    const uc = new CancelFulfillment(repo, makeUnitOfWork(), outbox, makeEventBus());
+    const bus = makeEventBus();
+    const uc = new CancelFulfillment(repo, makeUnitOfWork(), bus);
 
     const result = await uc.execute({
       fulfillmentId: f.id.toString(),
@@ -95,12 +94,12 @@ describe('CancelFulfillment', () => {
 
     expect(result.isFailure).toBe(true);
     expect(repo.update).not.toHaveBeenCalled();
-    expect(outbox.append).not.toHaveBeenCalled();
+    expect(bus.publishAll).not.toHaveBeenCalled();
   });
 
   it('returns NotFoundError for an unknown fulfillment', async () => {
     const repo = makeRepo({ findById: jest.fn().mockResolvedValue(null) });
-    const uc = new CancelFulfillment(repo, makeUnitOfWork(), makeOutbox(), makeEventBus());
+    const uc = new CancelFulfillment(repo, makeUnitOfWork(), makeEventBus());
 
     const result = await uc.execute({
       fulfillmentId: 'nope',

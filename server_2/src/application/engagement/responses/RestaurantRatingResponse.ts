@@ -1,7 +1,7 @@
 import {
+  RestaurantRatingAggregate,
   RestaurantRatingDistribution,
-  RestaurantRatingView,
-} from '../../../domain/engagement/repositories/IRestaurantRatingViewRepository';
+} from '../../../domain/engagement/repositories/IReviewRepository';
 
 export interface RestaurantRatingResponse {
   restaurantId: string;
@@ -10,19 +10,18 @@ export interface RestaurantRatingResponse {
   distribution: RestaurantRatingDistribution;
 }
 
-const ZERO_DISTRIBUTION = (): RestaurantRatingDistribution => ({ 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 });
-
+/**
+ * The zero case no longer needs special handling: the aggregation always returns a row,
+ * with zeros when a restaurant has no approved reviews. The response shape is unchanged
+ * from when this read a `restaurant_rating_views` document.
+ */
 export function toRestaurantRatingResponse(
-  restaurantId: string,
-  view: RestaurantRatingView | null
+  rating: RestaurantRatingAggregate
 ): RestaurantRatingResponse {
-  if (!view) {
-    return { restaurantId, avgRating: 0, reviewCount: 0, distribution: ZERO_DISTRIBUTION() };
-  }
   return {
-    restaurantId: view.restaurantId,
-    avgRating: view.avgRating,
-    reviewCount: view.reviewCount,
-    distribution: view.distribution,
+    restaurantId: rating.restaurantId,
+    avgRating: rating.avgRating,
+    reviewCount: rating.reviewCount,
+    distribution: rating.distribution,
   };
 }

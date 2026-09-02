@@ -26,19 +26,28 @@ else
 fi
 
 head "Containers running"
-for svc in api worker-outbox worker-email worker-notification worker-fulfillment; do
+for svc in api worker-relay worker-jobs; do
   state="$(docker compose -f "$SERVER_DIR/docker-compose.yml" -f "$SERVER_DIR/docker-compose.dev.yml" \
            ps --status running --services 2>/dev/null | grep -Fx "$svc" || true)"
   [ -n "$state" ] && ok "$svc running" || bad "$svc not running"
 done
 
-head "API reachable (no /health endpoint — probing a mounted route)"
-CODE="$(curl -s -o /dev/null -w '%{http_code}' "$API_BASE/api/v1/catalog/restaurants" 2>/dev/null || echo 000)"
+head "API readiness (/health)"
+BODY="$(curl -s -w '\n%{http_code}' "$API_BASE/health" 2>/dev/null || printf '\n000')"
+CODE="$(printf '%s' "$BODY" | tail -n1)"
 if [ "$CODE" = "200" ]; then
-  ok "GET /api/v1/catalog/restaurants → 200"
+  ok "GET /health → 200"
 else
-  bad "GET /api/v1/catalog/restaurants → $CODE (expected 200)"
+  bad "GET /health → $CODE (expected 200)"
 fi
+# The body is identical on 200 and 503, so the dependency rows are always meaningful.
+for dep in mongo redis; do
+  if printf '%s' "$BODY" | grep -q "\"$dep\":true"; then
+    ok "checks.$dep = true"
+  else
+    bad "checks.$dep not ok"
+  fi
+done
 
 head "Result"
 if [ "$FAIL" -eq 0 ]; then

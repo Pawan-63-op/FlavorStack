@@ -23,18 +23,10 @@ services:
       FULFILLMENT_READY_SLA_SECONDS: "7200"
       FULFILLMENT_DELIVERY_SLA_SECONDS: "7200"
 
-  worker-outbox:
+  worker-relay:
     environment:
       NODE_ENV: development
 
-  worker-email:
-    environment:
-      NODE_ENV: development
-
-  worker-notification:
-    environment:
-      NODE_ENV: development
-
-  worker-fulfillment:
+  worker-jobs:
     environment:
       NODE_ENV: development

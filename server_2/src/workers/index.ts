@@ -1,14 +1,15 @@
 import { logger } from '../infrastructure/observability/logger';
-import { run as runOutboxWorker } from './outbox.worker';
-import { run as runEmailWorker } from './email.worker';
-import { run as runNotificationWorker } from './notification.worker';
-import { run as runFulfillmentWorker } from './fulfillment.worker';
+import { run as runRelayWorker } from './relay.worker';
+import { run as runJobsWorker } from './jobs.worker';
 
+/**
+ * Two processes, deliberately no back-compat aliases: a container still carrying
+ * `WORKER_TYPE=outbox|email|fulfillment` must fail loudly at boot rather than silently
+ * doing nothing. The throw below names the valid set.
+ */
 const RUNNERS: Record<string, () => Promise<void>> = {
-  outbox: runOutboxWorker,
-  email: runEmailWorker,
-  notification: runNotificationWorker,
-  fulfillment: runFulfillmentWorker,
+  relay: runRelayWorker,
+  jobs: runJobsWorker,
 };
 
 export async function main(): Promise<void> {

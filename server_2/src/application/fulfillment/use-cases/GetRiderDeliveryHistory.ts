@@ -1,5 +1,5 @@
 import { Result } from '../../../domain/shared/Result';
-import { IFulfillmentProjectionRepository } from '../../../domain/fulfillment/repositories/IFulfillmentProjectionRepository';
+import { IFulfillmentQueryRepository } from '../../../domain/fulfillment/repositories/IFulfillmentQueryRepository';
 import { GetRiderDeliveryHistoryDto } from '../dtos/GetRiderDeliveryHistoryDto';
 import {
   RiderDeliveryHistoryResponse,
@@ -7,10 +7,10 @@ import {
 } from '../responses/RiderDeliveryHistoryResponse';
 
 export class GetRiderDeliveryHistory {
-  constructor(private readonly projectionRepo: IFulfillmentProjectionRepository) {}
+  constructor(private readonly queryRepo: IFulfillmentQueryRepository) {}
 
   async execute(dto: GetRiderDeliveryHistoryDto): Promise<Result<RiderDeliveryHistoryResponse>> {
-    const views = await this.projectionRepo.findRiderCompletedDeliveries(dto.riderId, {
+    const views = await this.queryRepo.findRiderCompletedDeliveries(dto.riderId, {
       limit: dto.limit,
       offset: dto.offset,
     });

@@ -28,17 +28,26 @@ fi
 
 head "Containers running"
 RUNNING="$("${COMPOSE[@]}" ps --status running --services 2>/dev/null || true)"
-for svc in api worker-outbox worker-email worker-notification worker-fulfillment my-app nginx; do
+for svc in api worker-relay worker-jobs my-app nginx; do
   if grep -Fxq "$svc" <<<"$RUNNING"; then ok "$svc running"; else bad "$svc not running"; fi
 done
 
-head "App reachable through nginx (no /health endpoint — probing a mounted route)"
-CODE="$(curl -sk -o /dev/null -w '%{http_code}' "$PUBLIC_ORIGIN/api/v1/catalog/restaurants" 2>/dev/null || echo 000)"
+head "API readiness through nginx (/health)"
+BODY="$(curl -sk -w '\n%{http_code}' "$PUBLIC_ORIGIN/health" 2>/dev/null || printf '\n000')"
+CODE="$(printf '%s' "$BODY" | tail -n1)"
 if [ "$CODE" = "200" ]; then
-  ok "GET $PUBLIC_ORIGIN/api/v1/catalog/restaurants → 200"
+  ok "GET $PUBLIC_ORIGIN/health → 200"
 else
-  bad "GET $PUBLIC_ORIGIN/api/v1/catalog/restaurants → $CODE (expected 200)"
+  bad "GET $PUBLIC_ORIGIN/health → $CODE (expected 200)"
 fi
+# The body is identical on 200 and 503, so the dependency rows are always meaningful.
+for dep in mongo redis; do
+  if printf '%s' "$BODY" | grep -q "\"$dep\":true"; then
+    ok "checks.$dep = true"
+  else
+    bad "checks.$dep not ok"
+  fi
+done
 
 head "Result"
 if [ "$FAIL" -eq 0 ]; then

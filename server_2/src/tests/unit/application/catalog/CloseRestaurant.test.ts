@@ -1,6 +1,6 @@
 import { CloseRestaurant } from '../../../../application/catalog/use-cases/CloseRestaurant';
 import { InMemoryRestaurantRepository } from '../../../mocks/catalog.mocks';
-import { InMemoryUnitOfWork, InMemoryOutboxStore } from '../../../mocks/identity.mocks';
+import { InMemoryUnitOfWork } from '../../../mocks/identity.mocks';
 import { createEventBusSpy, EventBusSpy } from '../../../mocks/shared.mocks';
 import { buildRestaurant } from './helpers';
 import { RESTAURANT_STATUS } from '../../../../domain/catalog/enums/restaurant-status.enum';
@@ -11,16 +11,14 @@ import { ValidationError } from '../../../../domain/shared/errors/ValidationErro
 describe('CloseRestaurant use-case', () => {
   let restaurantRepo: InMemoryRestaurantRepository;
   let unitOfWork: InMemoryUnitOfWork;
-  let outboxStore: InMemoryOutboxStore;
   let eventBus: EventBusSpy;
   let useCase: CloseRestaurant;
 
   beforeEach(() => {
     restaurantRepo = new InMemoryRestaurantRepository();
     unitOfWork = new InMemoryUnitOfWork();
-    outboxStore = new InMemoryOutboxStore();
     eventBus = createEventBusSpy();
-    useCase = new CloseRestaurant(restaurantRepo, unitOfWork, outboxStore, eventBus);
+    useCase = new CloseRestaurant(restaurantRepo, unitOfWork, eventBus);
   });
 
   it('transitions an ACTIVE restaurant to CLOSED', async () => {
@@ -37,8 +35,8 @@ describe('CloseRestaurant use-case', () => {
     const updated = await restaurantRepo.findById(restaurant.id.toString());
     expect(updated!.status.value).toBe(RESTAURANT_STATUS.CLOSED);
 
-    expect(outboxStore.appended).toHaveLength(1);
-    expect(outboxStore.appended[0].eventName).toBe('RestaurantStatusChanged');
+    expect(eventBus.publishedEvents).toHaveLength(1);
+    expect(eventBus.publishedEvents[0].eventName).toBe('RestaurantStatusChanged');
     expect(eventBus.publishedEvents).toHaveLength(1);
   });
 
@@ -69,7 +67,7 @@ describe('CloseRestaurant use-case', () => {
 
     expect(result.isFailure).toBe(true);
     expect(result.getError()).toBeInstanceOf(ValidationError);
-    expect(outboxStore.appended).toHaveLength(0);
+    expect(eventBus.publishedEvents).toHaveLength(0);
     expect(eventBus.publishedEvents).toHaveLength(0);
   });
 });

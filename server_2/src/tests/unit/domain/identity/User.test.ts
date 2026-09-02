@@ -1,12 +1,7 @@
 import { BaseUser } from '../../../../domain/identity/entities/BaseUser';
 import { USER_ROLE } from '../../../../domain/identity/enums/user-role.enum';
 import { AUTH_PROVIDER } from '../../../../domain/identity/enums/auth-provider.enum';
-import { UserVerified } from '../../../../domain/identity/events/UserVerified';
 import { PasswordChanged } from '../../../../domain/identity/events/PasswordChanged';
-import { PasswordResetRequested } from '../../../../domain/identity/events/PasswordResetRequested';
-import { PasswordResetCompleted } from '../../../../domain/identity/events/PasswordResetCompleted';
-import { UserBanned } from '../../../../domain/identity/events/UserBanned';
-import { UserUnbanned } from '../../../../domain/identity/events/UserUnbanned';
 
 class TestUser extends BaseUser {
   get displayName(): string {
@@ -113,21 +108,17 @@ describe('BaseUser Entity Invariants', () => {
     });
   });
 
-  describe('Email verification event', () => {
-    it('should verify email and record UserVerified event', () => {
+  // Phase 6: `PasswordChanged` is the only lifecycle event `BaseUser` still raises — it is the
+  // only one with a subscriber (the security-notice email). The rest were written, outboxed and
+  // dropped; the state lives on the aggregate and the audit trail is `audit_logs`.
+  describe('Email verification', () => {
+    it('should verify email, raising no domain event', () => {
       const user = createDefaultUser();
       expect(user.isEmailVerified).toBe(false);
 
       user.verifyEmail();
       expect(user.isEmailVerified).toBe(true);
-
-      const events = user.pullDomainEvents();
-      expect(events.length).toBe(1);
-      const event = events[0] as UserVerified;
-      expect(event).toBeInstanceOf(UserVerified);
-      expect(event.eventName).toBe('UserVerified');
-      expect(event.aggregateId).toBe(user._id);
-      expect(event.email).toBe(user.email);
+      expect(user.pullDomainEvents()).toEqual([]);
     });
   });
 
@@ -147,20 +138,7 @@ describe('BaseUser Entity Invariants', () => {
       expect(event.aggregateId).toBe(user._id);
     });
 
-    it('should request password reset and record PasswordResetRequested event', () => {
-      const user = createDefaultUser();
-      user.requestPasswordReset();
-
-      const events = user.pullDomainEvents();
-      expect(events.length).toBe(1);
-      const event = events[0] as PasswordResetRequested;
-      expect(event).toBeInstanceOf(PasswordResetRequested);
-      expect(event.eventName).toBe('PasswordResetRequested');
-      expect(event.aggregateId).toBe(user._id);
-      expect(event.email).toBe(user.email);
-    });
-
-    it('should complete password reset, increment token version, and record PasswordResetCompleted event', () => {
+    it('should complete password reset and increment token version, raising no domain event', () => {
       const user = createDefaultUser();
       const oldTokenVersion = user.tokenVersion;
 
@@ -168,35 +146,22 @@ describe('BaseUser Entity Invariants', () => {
       expect(user.passwordHash).toBe('resetpwd123');
       expect(user.passwordChangedAt).toBeInstanceOf(Date);
       expect(user.tokenVersion).toBe(oldTokenVersion + 1);
-
-      const events = user.pullDomainEvents();
-      expect(events.length).toBe(1);
-      const event = events[0] as PasswordResetCompleted;
-      expect(event).toBeInstanceOf(PasswordResetCompleted);
-      expect(event.eventName).toBe('PasswordResetCompleted');
-      expect(event.aggregateId).toBe(user._id);
+      expect(user.pullDomainEvents()).toEqual([]);
     });
   });
 
-  describe('Ban and Unban events', () => {
-    it('should ban user, update active status, and record UserBanned event', () => {
+  describe('Ban and Unban', () => {
+    it('should ban user and update active status, raising no domain event', () => {
       const user = createDefaultUser();
       user.ban('Violation of terms');
 
       expect(user.isBanned).toBe(true);
       expect(user.banReason).toBe('Violation of terms');
       expect(user.isActive).toBe(false);
-
-      const events = user.pullDomainEvents();
-      expect(events.length).toBe(1);
-      const event = events[0] as UserBanned;
-      expect(event).toBeInstanceOf(UserBanned);
-      expect(event.eventName).toBe('UserBanned');
-      expect(event.aggregateId).toBe(user._id);
-      expect(event.reason).toBe('Violation of terms');
+      expect(user.pullDomainEvents()).toEqual([]);
     });
 
-    it('should unban user, update active status, and record UserUnbanned event', () => {
+    it('should unban user and update active status, raising no domain event', () => {
       const user = createDefaultUser({
         isBanned: true,
         banReason: 'Violation of terms',
@@ -207,13 +172,7 @@ describe('BaseUser Entity Invariants', () => {
       expect(user.isBanned).toBe(false);
       expect(user.banReason).toBeNull();
       expect(user.isActive).toBe(true);
-
-      const events = user.pullDomainEvents();
-      expect(events.length).toBe(1);
-      const event = events[0] as UserUnbanned;
-      expect(event).toBeInstanceOf(UserUnbanned);
-      expect(event.eventName).toBe('UserUnbanned');
-      expect(event.aggregateId).toBe(user._id);
+      expect(user.pullDomainEvents()).toEqual([]);
     });
   });
 

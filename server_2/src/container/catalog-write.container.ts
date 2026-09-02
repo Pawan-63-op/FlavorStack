@@ -4,7 +4,6 @@ import { IEventBus } from '../application/shared/events/IEventBus';
 import { MongoRestaurantRepository } from '../infrastructure/repositories/RestaurantRepository';
 import { MongoMenuItemRepository } from '../infrastructure/repositories/MenuItemRepository';
 import { MongoUnitOfWork } from '../infrastructure/database/MongoUnitOfWork';
-import { MongoOutboxStore } from '../infrastructure/database/MongoOutboxStore';
 import { TransactionContext } from '../infrastructure/database/TransactionContext';
 import { InMemoryImageStorage } from '../infrastructure/external/storage/InMemoryImageStorage';
 import { CloudinaryImageStorage } from '../infrastructure/external/cloudinary/CloudinaryImageStorage';
@@ -67,7 +66,6 @@ export function createCatalogWriteContainer(
   const restaurantRepo = new MongoRestaurantRepository(txContext);
   const menuItemRepo = new MongoMenuItemRepository(txContext);
   const unitOfWork = new MongoUnitOfWork(connection, txContext);
-  const outboxStore = new MongoOutboxStore(txContext);
 
   const cloudinaryConfig = getCloudinaryConfig();
   const imageStorage: IImageStorage = cloudinaryConfig
@@ -77,38 +75,35 @@ export function createCatalogWriteContainer(
   return {
     imageStorage,
     commands: {
-      createRestaurant: new CreateRestaurant(restaurantRepo, unitOfWork, outboxStore, eventBus),
+      createRestaurant: new CreateRestaurant(restaurantRepo, unitOfWork, eventBus),
       listOwnerRestaurants: new ListOwnerRestaurants(restaurantRepo),
-      updateRestaurant: new UpdateRestaurant(restaurantRepo, unitOfWork, outboxStore, eventBus),
-      publishRestaurant: new PublishRestaurant(restaurantRepo, unitOfWork, outboxStore, eventBus),
-      pauseRestaurant: new PauseRestaurant(restaurantRepo, unitOfWork, outboxStore, eventBus),
-      closeRestaurant: new CloseRestaurant(restaurantRepo, unitOfWork, outboxStore, eventBus),
+      updateRestaurant: new UpdateRestaurant(restaurantRepo, unitOfWork, eventBus),
+      publishRestaurant: new PublishRestaurant(restaurantRepo, unitOfWork, eventBus),
+      pauseRestaurant: new PauseRestaurant(restaurantRepo, unitOfWork, eventBus),
+      closeRestaurant: new CloseRestaurant(restaurantRepo, unitOfWork, eventBus),
       deleteRestaurant: new DeleteRestaurant(restaurantRepo, unitOfWork),
       setRestaurantVisibility: new SetRestaurantVisibility(
         restaurantRepo,
         unitOfWork,
-        outboxStore,
         eventBus,
       ),
-      setOpeningHours: new SetOpeningHours(restaurantRepo, unitOfWork, outboxStore, eventBus),
-      addCategory: new AddCategory(restaurantRepo, unitOfWork, outboxStore, eventBus),
-      updateCategory: new UpdateCategory(restaurantRepo, unitOfWork, outboxStore, eventBus),
-      reorderCategories: new ReorderCategories(restaurantRepo, unitOfWork, outboxStore, eventBus),
-      removeCategory: new RemoveCategory(restaurantRepo, unitOfWork, outboxStore, eventBus),
-      manageDeliveryZone: new ManageDeliveryZone(restaurantRepo, unitOfWork, outboxStore, eventBus),
-      addMenuItem: new AddMenuItem(restaurantRepo, menuItemRepo, unitOfWork, outboxStore, eventBus),
+      setOpeningHours: new SetOpeningHours(restaurantRepo, unitOfWork, eventBus),
+      addCategory: new AddCategory(restaurantRepo, unitOfWork, eventBus),
+      updateCategory: new UpdateCategory(restaurantRepo, unitOfWork, eventBus),
+      reorderCategories: new ReorderCategories(restaurantRepo, unitOfWork, eventBus),
+      removeCategory: new RemoveCategory(restaurantRepo, unitOfWork, eventBus),
+      manageDeliveryZone: new ManageDeliveryZone(restaurantRepo, unitOfWork, eventBus),
+      addMenuItem: new AddMenuItem(restaurantRepo, menuItemRepo, unitOfWork, eventBus),
       updateMenuItem: new UpdateMenuItem(
         restaurantRepo,
         menuItemRepo,
         unitOfWork,
-        outboxStore,
         eventBus,
       ),
       toggleMenuItemAvailability: new ToggleMenuItemAvailability(
         restaurantRepo,
         menuItemRepo,
         unitOfWork,
-        outboxStore,
         eventBus,
       ),
       removeMenuItem: new RemoveMenuItem(restaurantRepo, menuItemRepo, unitOfWork),
@@ -116,7 +111,6 @@ export function createCatalogWriteContainer(
         restaurantRepo,
         menuItemRepo,
         unitOfWork,
-        outboxStore,
         eventBus,
       ),
     },

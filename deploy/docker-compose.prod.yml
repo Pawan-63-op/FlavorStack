@@ -86,8 +86,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      # Probe an EXISTING public read (no app /health endpoint — backend frozen).
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/v1/catalog/restaurants >/dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/health >/dev/null 2>&1 || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -101,14 +100,16 @@ services:
         reservations:
           memory: 256M
 
-  worker-outbox:
+  # Phase 8: three worker services collapsed to two, matching the two queues. The healthcheck
+  # is unchanged and deliberately worker-type-agnostic — it only proves the process is alive.
+  worker-relay:
     build:
       context: ../server_2
       dockerfile: Dockerfile.worker
     env_file: ../server_2/.env
     environment:
       NODE_ENV: production
-      WORKER_TYPE: outbox
+      WORKER_TYPE: relay
       MONGO_URI: mongodb://mongo:27017/flavorstack?replicaSet=rs0
       REDIS_HOST: redis
     depends_on:
@@ -129,67 +130,16 @@ services:
           cpus: "0.5"
           memory: 256M
 
-  worker-email:
+  # Unlike the worker-email it replaces, worker-jobs calls bootstrapWorker() and runs the
+  # fulfillment timeout jobs — so it needs MONGO_URI and the mongo-init gate.
+  worker-jobs:
     build:
       context: ../server_2
       dockerfile: Dockerfile.worker
     env_file: ../server_2/.env
     environment:
       NODE_ENV: production
-      WORKER_TYPE: email
-      REDIS_HOST: redis
-    depends_on:
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "pgrep -f dist/workers/index.js >/dev/null || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: "0.5"
-          memory: 256M
-
-  worker-notification:
-    build:
-      context: ../server_2
-      dockerfile: Dockerfile.worker
-    env_file: ../server_2/.env
-    environment:
-      NODE_ENV: production
-      WORKER_TYPE: notification
-      MONGO_URI: mongodb://mongo:27017/flavorstack?replicaSet=rs0
-      REDIS_HOST: redis
-    depends_on:
-      mongo-init:
-        condition: service_completed_successfully
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "pgrep -f dist/workers/index.js >/dev/null || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: "0.5"
-          memory: 256M
-
-  worker-fulfillment:
-    build:
-      context: ../server_2
-      dockerfile: Dockerfile.worker
-    env_file: ../server_2/.env
-    environment:
-      NODE_ENV: production
-      WORKER_TYPE: fulfillment
+      WORKER_TYPE: jobs
       MONGO_URI: mongodb://mongo:27017/flavorstack?replicaSet=rs0
       REDIS_HOST: redis
     depends_on:

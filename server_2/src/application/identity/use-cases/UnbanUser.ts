@@ -5,7 +5,6 @@ import { DomainError } from '../../../domain/shared/errors/DomainError';
 import { IUserRepository } from '../../../domain/identity/repositories/IUserRepository';
 import { Admin } from '../../../domain/identity/entities/Admin';
 import { IUnitOfWork } from '../../shared/ports/IUnitOfWork';
-import { IOutboxStore } from '../../shared/outbox/IOutboxStore';
 import { IEventBus } from '../../shared/events/IEventBus';
 import { UnbanUserDto } from '../dtos/UnbanUserDto';
 
@@ -13,7 +12,6 @@ export class UnbanUser {
   constructor(
     private userRepo: IUserRepository,
     private unitOfWork: IUnitOfWork,
-    private outboxStore: IOutboxStore,
     private eventBus: IEventBus,
   ) {}
 
@@ -36,9 +34,8 @@ export class UnbanUser {
 
     const events = target.pullDomainEvents();
 
-    await this.unitOfWork.runInTransaction(async (ctx) => {
+    await this.unitOfWork.runInTransaction(async () => {
       await this.userRepo.update(target);
-      await this.outboxStore.append(events, ctx);
     });
 
     await this.eventBus.publishAll(events);

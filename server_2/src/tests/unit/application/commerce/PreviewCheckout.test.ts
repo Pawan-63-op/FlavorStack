@@ -13,13 +13,12 @@ import { Money } from '../../../../domain/shared/Money';
 import { Result } from '../../../../domain/shared/Result';
 import { ICartRepository } from '../../../../domain/commerce/repositories/ICartRepository';
 import { ICatalogGateway } from '../../../../domain/commerce/services/ICatalogGateway';
-import { ICommerceCatalogReadRepository } from '../../../../domain/commerce/repositories/ICommerceCatalogReadRepository';
 import {
   CheckoutRestaurant,
   CheckoutMenuItem,
   CheckoutServiceability,
 } from '../../../../domain/commerce/types/CatalogGatewayRead';
-import { CommerceCatalogMenuItemView } from '../../../../domain/commerce/types/CommerceCatalogView';
+import { CartMenuItemView } from '../../../../domain/commerce/types/CatalogGatewayRead';
 
 const money = (amount: number, currency = 'INR') => Money.create(amount, currency).getValue();
 
@@ -42,6 +41,7 @@ interface GatewayConfig {
   restaurant?: CheckoutRestaurant;
   items?: CheckoutMenuItem[];
   serviceability?: CheckoutServiceability;
+  variants?: CartMenuItemView[];
 }
 
 function defaultRestaurant(): CheckoutRestaurant {
@@ -71,12 +71,16 @@ function fakeGateway(cfg: GatewayConfig = {}): ICatalogGateway {
     getItemsSnapshot: async () => Result.ok(cfg.items ?? defaultItems()),
     checkServiceability: async () => Result.ok(cfg.serviceability ?? defaultServiceability()),
     isRestaurantOpen: async () => Result.ok(true),
+    // Variant option groups for checkout option resolution.
+    getRestaurantForCart: async () => Result.ok(null),
+    getItemsForCart: async () => Result.ok(cfg.variants ?? [defaultVariantView()]),
   };
 }
 
-function defaultProjectionView(): CommerceCatalogMenuItemView {
+function defaultVariantView(): CartMenuItemView {
   return {
     menuItemId: 'menu-1',
+    restaurantId: 'rest-1',
     categoryId: 'cat-1',
     name: 'Margherita',
     basePriceAmount: 1000,
@@ -99,16 +103,6 @@ function defaultProjectionView(): CommerceCatalogMenuItemView {
   };
 }
 
-function fakeProjection(view: CommerceCatalogMenuItemView | null = defaultProjectionView()): ICommerceCatalogReadRepository {
-  return {
-    findRestaurantView: async () => null,
-    findMenuItemViews: async () => (view ? [view] : []),
-    upsertRestaurantView: async () => undefined,
-    removeRestaurantView: async () => undefined,
-    markEventProcessed: async () => true,
-  };
-}
-
 function fakeCartRepo(cart: Cart | null): ICartRepository {
   return {
     findById: async () => cart,
@@ -121,13 +115,11 @@ function fakeCartRepo(cart: Cart | null): ICartRepository {
 function buildUseCase(opts: {
   cart?: Cart | null;
   gateway?: ICatalogGateway;
-  projection?: ICommerceCatalogReadRepository;
   promotionService?: PromotionService;
 } = {}): PreviewCheckout {
   const promotionService = opts.promotionService ?? new PromotionService(buildDefaultCommerceCoupons());
   const assembler = new CheckoutContextAssembler(
     opts.gateway ?? fakeGateway(),
-    opts.projection ?? fakeProjection(),
     promotionService,
     buildDefaultCommercePricingPolicy()
   );
@@ -262,9 +254,9 @@ describe('PreviewCheckout', () => {
     });
 
     it('fails when a selected variant option is unavailable', async () => {
-      const view = defaultProjectionView();
+      const view = defaultVariantView();
       view.variantGroups[0].options[0].isAvailable = false;
-      const result = await buildUseCase({ projection: fakeProjection(view) }).execute({
+      const result = await buildUseCase({ gateway: fakeGateway({ variants: [view] }) }).execute({
         customerId: 'cust-1',
         deliveryPoint: DELIVERY_POINT,
       });

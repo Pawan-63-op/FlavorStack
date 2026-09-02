@@ -4,7 +4,6 @@ import { DeliveryAddress } from '../../../../domain/fulfillment/value-objects/De
 import { IFulfillmentRepository } from '../../../../domain/fulfillment/repositories/IFulfillmentRepository';
 import { IDeliveryAssignmentService } from '../../../../domain/fulfillment/services/IDeliveryAssignmentService';
 import { IUnitOfWork } from '../../../../application/shared/ports/IUnitOfWork';
-import { IOutboxStore } from '../../../../application/shared/outbox/IOutboxStore';
 import { IEventBus } from '../../../../application/shared/events/IEventBus';
 import { Money } from '../../../../domain/shared/Money';
 import { GeoPoint } from '../../../../domain/identity/value-objects/GeoPoint.vo';
@@ -56,10 +55,6 @@ export function makeRepo(overrides: Partial<IFulfillmentRepository> = {}): jest.
 
 export function makeUnitOfWork(): IUnitOfWork {
   return { runInTransaction: jest.fn(<T>(work: (ctx: unknown) => Promise<T>) => work({})) };
-}
-
-export function makeOutbox(): jest.Mocked<IOutboxStore> {
-  return { append: jest.fn().mockResolvedValue(undefined) } as jest.Mocked<IOutboxStore>;
 }
 
 export function makeEventBus(): jest.Mocked<IEventBus> {

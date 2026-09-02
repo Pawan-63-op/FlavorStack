@@ -2,7 +2,10 @@ import { Result } from '../../../../../domain/shared/Result';
 import { DomainEvent } from '../../../../../domain/shared/DomainEvent';
 import { DispatchNotification } from '../../../../../application/engagement/use-cases/DispatchNotification';
 import { DispatchNotificationResponse } from '../../../../../application/engagement/dtos/DispatchNotificationDto';
-import { IReviewEligibilityRepository } from '../../../../../domain/engagement/repositories/IReviewEligibilityRepository';
+import {
+  IFulfillmentGateway,
+  ReviewSubject,
+} from '../../../../../domain/engagement/services/IFulfillmentGateway';
 import { INotificationPreferenceRepository } from '../../../../../domain/engagement/repositories/INotificationPreferenceRepository';
 
 /** A DispatchNotification test double whose execute() returns a DISPATCHED result by default. */
@@ -24,15 +27,26 @@ export function asDispatch(stub: jest.Mocked<Pick<DispatchNotification, 'execute
   return stub as unknown as DispatchNotification;
 }
 
-export function makeEligibilityRepo(
-  overrides: Partial<IReviewEligibilityRepository> = {}
-): jest.Mocked<IReviewEligibilityRepository> {
+/**
+ * Engagement's read window onto Fulfillment. Resolves a delivered fulfillment for
+ * `cust-1` by default; pass `null` to simulate one that does not exist.
+ */
+export function makeFulfillmentGateway(
+  subject: Partial<ReviewSubject> | null = {}
+): jest.Mocked<IFulfillmentGateway> {
   return {
-    findByFulfillmentId: jest.fn().mockResolvedValue(null),
-    upsert: jest.fn().mockResolvedValue(undefined),
-    markReviewed: jest.fn().mockResolvedValue(undefined),
-    ...overrides,
-  } as jest.Mocked<IReviewEligibilityRepository>;
+    getForReview: jest.fn().mockResolvedValue(
+      subject === null
+        ? null
+        : {
+            fulfillmentId: 'ful-1',
+            customerId: 'cust-1',
+            restaurantId: 'rest-1',
+            deliveredAt: new Date('2026-01-01T00:00:00Z'),
+            ...subject,
+          }
+    ),
+  } as jest.Mocked<IFulfillmentGateway>;
 }
 
 export function makePreferenceRepo(

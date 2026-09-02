@@ -4,7 +4,7 @@ import { CancelFulfillment } from '../../../../application/fulfillment/use-cases
 import { Result } from '../../../../domain/shared/Result';
 import { Fulfillment } from '../../../../domain/fulfillment/entities/Fulfillment';
 import { CANCELLED_BY } from '../../../../domain/fulfillment/enums/cancelled-by.enum';
-import { buildReadyFulfillment, makeRepo, makeUnitOfWork, makeOutbox, makeEventBus } from './assignment-uc-fixtures';
+import { buildReadyFulfillment, makeRepo, makeUnitOfWork, makeEventBus } from './assignment-uc-fixtures';
 
 const RIDER_1 = 'rider-1';
 const T0 = new Date('2026-01-01T00:00:00Z');
@@ -36,7 +36,7 @@ describe('HandleAssignmentTimeout', () => {
     const repo = makeRepo({ findById: jest.fn().mockResolvedValue(f) });
     const offer = mockOffer();
     const cancel = mockCancel();
-    const uc = new HandleAssignmentTimeout(repo, makeUnitOfWork(), makeOutbox(), makeEventBus(), offer, cancel, 3);
+    const uc = new HandleAssignmentTimeout(repo, makeUnitOfWork(), makeEventBus(), offer, cancel, 3);
 
     const result = await uc.execute({ fulfillmentId: f.id.toString(), attempt: 1 });
 
@@ -51,7 +51,7 @@ describe('HandleAssignmentTimeout', () => {
     const repo = makeRepo({ findById: jest.fn().mockResolvedValue(f) });
     const offer = mockOffer();
     const cancel = mockCancel();
-    const uc = new HandleAssignmentTimeout(repo, makeUnitOfWork(), makeOutbox(), makeEventBus(), offer, cancel, 1);
+    const uc = new HandleAssignmentTimeout(repo, makeUnitOfWork(), makeEventBus(), offer, cancel, 1);
 
     const result = await uc.execute({ fulfillmentId: f.id.toString(), attempt: 1 });
 
@@ -67,7 +67,7 @@ describe('HandleAssignmentTimeout', () => {
     const repo = makeRepo({ findById: jest.fn().mockResolvedValue(f) });
     const offer = mockOffer();
     const cancel = mockCancel();
-    const uc = new HandleAssignmentTimeout(repo, makeUnitOfWork(), makeOutbox(), makeEventBus(), offer, cancel, 3);
+    const uc = new HandleAssignmentTimeout(repo, makeUnitOfWork(), makeEventBus(), offer, cancel, 3);
 
     const result = await uc.execute({ fulfillmentId: f.id.toString(), attempt: 99 });
 
@@ -79,7 +79,7 @@ describe('HandleAssignmentTimeout', () => {
 
   it('is a no-op for a missing fulfillment', async () => {
     const repo = makeRepo({ findById: jest.fn().mockResolvedValue(null) });
-    const uc = new HandleAssignmentTimeout(repo, makeUnitOfWork(), makeOutbox(), makeEventBus(), mockOffer(), mockCancel(), 3);
+    const uc = new HandleAssignmentTimeout(repo, makeUnitOfWork(), makeEventBus(), mockOffer(), mockCancel(), 3);
     const result = await uc.execute({ fulfillmentId: 'nope', attempt: 1 });
     expect(result.isSuccess).toBe(true);
   });

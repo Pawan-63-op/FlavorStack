@@ -30,13 +30,9 @@ interface ConsumedOrderRequested extends DomainEvent {
 }
 
 export class OnOrderRequested {
-  private readonly processedEventIds = new Set<string>();
-
   constructor(private readonly createFulfillment: CreateFulfillment) {}
 
   async handle(event: DomainEvent): Promise<void> {
-    if (this.processedEventIds.has(event.eventId)) return;
-
     const e = event as ConsumedOrderRequested;
     const dto: CreateFulfillmentDto = {
       orderRequestId: e.aggregateId,
@@ -59,13 +55,17 @@ export class OnOrderRequested {
 
     const result = await this.createFulfillment.execute(dto);
     if (result.isFailure) {
+      const error = result.getError();
+      // Throw, don't swallow: this handler runs in the outbox relay, so rejecting
+      // is what buys the retry with backoff and, eventually, a FAILED row. A
+      // logged-and-returned failure here is an order that silently never reaches
+      // the restaurant. Retrying is safe — CreateFulfillment short-circuits on
+      // findByOrderRequestId and the unique index closes the race.
       logger.error(
-        { eventId: event.eventId, orderRequestId: dto.orderRequestId, err: String(result.getError()) },
+        { eventId: event.eventId, orderRequestId: dto.orderRequestId, err: String(error) },
         '[OnOrderRequested] CreateFulfillment failed'
       );
-      return;
+      throw error instanceof Error ? error : new Error(String(error));
     }
-
-    this.processedEventIds.add(event.eventId);
   }
 }

@@ -4,7 +4,7 @@ import { NOTIFICATION_CHANNEL } from '../../../../../domain/engagement/enums/not
 import { DispatchNotificationDto } from '../../../../../application/engagement/dtos/DispatchNotificationDto';
 import { Result } from '../../../../../domain/shared/Result';
 import { logger } from '../../../../../infrastructure/observability/logger';
-import { makeDispatch, asDispatch, makeEligibilityRepo, busEvent } from './_handler-helpers';
+import { makeDispatch, asDispatch, busEvent } from './_handler-helpers';
 
 function fulfillmentCreated(overrides: Record<string, unknown> = {}) {
   return busEvent({
@@ -19,26 +19,9 @@ function fulfillmentCreated(overrides: Record<string, unknown> = {}) {
 }
 
 describe('OnFulfillmentCreated', () => {
-  it('seeds ReviewEligibility (customer + restaurant, not delivered, not reviewed)', async () => {
-    const dispatch = makeDispatch();
-    const eligibilityRepo = makeEligibilityRepo();
-    const handler = new OnFulfillmentCreated(asDispatch(dispatch), eligibilityRepo);
-
-    await handler.handle(fulfillmentCreated());
-
-    expect(eligibilityRepo.upsert).toHaveBeenCalledTimes(1);
-    expect(eligibilityRepo.upsert).toHaveBeenCalledWith({
-      fulfillmentId: 'ful-1',
-      customerId: 'cust-1',
-      restaurantId: 'rest-1',
-      deliveredAt: null,
-      reviewed: false,
-    });
-  });
-
   it('dispatches the order_confirmed notification to the customer', async () => {
     const dispatch = makeDispatch();
-    const handler = new OnFulfillmentCreated(asDispatch(dispatch), makeEligibilityRepo());
+    const handler = new OnFulfillmentCreated(asDispatch(dispatch));
 
     await handler.handle(fulfillmentCreated());
 
@@ -47,63 +30,49 @@ describe('OnFulfillmentCreated', () => {
     expect(dto.recipientUserId).toBe('cust-1');
     expect(dto.templateKey).toBe('order_confirmed');
     expect(dto.category).toBe(NOTIFICATION_CATEGORY.ORDER_UPDATES);
-    expect(dto.channel).toBe(NOTIFICATION_CHANNEL.PUSH);
+    expect(dto.channel).toBe(NOTIFICATION_CHANNEL.INBOX);
     expect(dto.sourceEventId).toBe('evt-1');
   });
 
-  it('does not overwrite an existing eligibility row (preserves deliveredAt on redelivery)', async () => {
+  it('takes the recipient straight off the event — no read of any other collection', async () => {
+    // FulfillmentCreated is the one lifecycle event that carries customerId, which is why
+    // this handler needs no gateway at all (the other five resolve it via IFulfillmentGateway).
     const dispatch = makeDispatch();
-    const eligibilityRepo = makeEligibilityRepo({
-      findByFulfillmentId: jest.fn().mockResolvedValue({
-        fulfillmentId: 'ful-1',
-        customerId: 'cust-1',
-        restaurantId: 'rest-1',
-        deliveredAt: new Date(),
-        reviewed: false,
-      }),
-    });
-    const handler = new OnFulfillmentCreated(asDispatch(dispatch), eligibilityRepo);
+    const handler = new OnFulfillmentCreated(asDispatch(dispatch));
 
-    await handler.handle(fulfillmentCreated());
+    await handler.handle(fulfillmentCreated({ customerId: 'cust-9' }));
 
-    expect(eligibilityRepo.upsert).not.toHaveBeenCalled();
+    const dto = dispatch.execute.mock.calls[0][0] as DispatchNotificationDto;
+    expect(dto.recipientUserId).toBe('cust-9');
   });
 
-  it('is idempotent across redelivery of the same eventId', async () => {
+  // Phase 6 removed the per-handler in-memory `processedEventIds` set. The durable guard is
+  // `DispatchNotification`'s dedupe key (a unique index on `notifications`), which turns a
+  // redelivery into a SKIPPED/duplicate outcome instead of a second inbox row.
+  it('delegates every redelivery — de-duplication belongs to DispatchNotification', async () => {
     const dispatch = makeDispatch();
-    const eligibilityRepo = makeEligibilityRepo();
-    const handler = new OnFulfillmentCreated(asDispatch(dispatch), eligibilityRepo);
+    const handler = new OnFulfillmentCreated(asDispatch(dispatch));
 
     const event = fulfillmentCreated();
     await handler.handle(event);
     await handler.handle(event);
 
-    expect(eligibilityRepo.upsert).toHaveBeenCalledTimes(1);
-    expect(dispatch.execute).toHaveBeenCalledTimes(1);
+    expect(dispatch.execute).toHaveBeenCalledTimes(2);
   });
 
-  it('does not dedupe a failed dispatch — a redelivery re-attempts (eligibility seed stays insert-if-absent)', async () => {
+  it('does not dedupe a failed dispatch — a redelivery re-attempts', async () => {
     const dispatch = makeDispatch();
     dispatch.execute
       .mockResolvedValueOnce(Result.fail('boom'))
       .mockResolvedValueOnce(Result.ok({ outcome: 'DISPATCHED', dedupeKey: 'k' }));
     const errorSpy = jest.spyOn(logger, 'error').mockImplementation(() => logger);
-    const seeded = { fulfillmentId: 'ful-1', customerId: 'cust-1', restaurantId: 'rest-1', deliveredAt: null, reviewed: false };
-    let row: typeof seeded | null = null;
-    const eligibilityRepo = makeEligibilityRepo({
-      findByFulfillmentId: jest.fn().mockImplementation(async () => row),
-      upsert: jest.fn().mockImplementation(async () => {
-        row = seeded;
-      }),
-    });
-    const handler = new OnFulfillmentCreated(asDispatch(dispatch), eligibilityRepo);
+    const handler = new OnFulfillmentCreated(asDispatch(dispatch));
 
     const event = fulfillmentCreated();
     await handler.handle(event);
     await handler.handle(event);
 
     expect(dispatch.execute).toHaveBeenCalledTimes(2); // failed dispatch not marked processed
-    expect(eligibilityRepo.upsert).toHaveBeenCalledTimes(1); // seed already present on retry → not re-inserted
     expect(errorSpy).toHaveBeenCalled();
     errorSpy.mockRestore();
   });

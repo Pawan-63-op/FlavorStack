@@ -4,8 +4,8 @@ import { GetRestaurantRating } from '../../../../application/engagement/use-case
 import { ListPendingReviews } from '../../../../application/engagement/use-cases/ListPendingReviews';
 import { MODERATION_STATUS } from '../../../../domain/engagement/enums/moderation-status.enum';
 import { Review } from '../../../../domain/engagement/entities/Review';
-import { RestaurantRatingView } from '../../../../domain/engagement/repositories/IRestaurantRatingViewRepository';
-import { makeReviewRepo, makeRatingViewRepo } from './_helpers';
+import { RestaurantRatingAggregate } from '../../../../domain/engagement/repositories/IReviewRepository';
+import { makeReviewRepo, zeroRating } from './_helpers';
 
 function review(fulfillmentId: string, customerId = 'cust-1'): Review {
   const r = Review.submit({
@@ -45,31 +45,35 @@ describe('GetMyReviews', () => {
 });
 
 describe('GetRestaurantRating', () => {
-  it('returns the rating view when present', async () => {
-    const view: RestaurantRatingView = {
+  it('returns the aggregation over APPROVED reviews', async () => {
+    const aggregate: RestaurantRatingAggregate = {
       restaurantId: 'rest-1',
       avgRating: 4.5,
       reviewCount: 10,
       distribution: { 1: 0, 2: 0, 3: 1, 4: 3, 5: 6 },
-      updatedAt: new Date(),
     };
-    const repo = makeRatingViewRepo({ findByRestaurantId: jest.fn().mockResolvedValue(view) });
+    const repo = makeReviewRepo({ aggregateRating: jest.fn().mockResolvedValue(aggregate) });
     const uc = new GetRestaurantRating(repo);
 
     const result = await uc.execute({ restaurantId: 'rest-1' });
 
+    expect(repo.aggregateRating).toHaveBeenCalledWith('rest-1');
     expect(result.isSuccess).toBe(true);
     expect(result.getValue().avgRating).toBe(4.5);
     expect(result.getValue().reviewCount).toBe(10);
+    expect(result.getValue().distribution).toEqual({ 1: 0, 2: 0, 3: 1, 4: 3, 5: 6 });
   });
 
-  it('returns a zeroed rating when no view exists yet', async () => {
-    const repo = makeRatingViewRepo({ findByRestaurantId: jest.fn().mockResolvedValue(null) });
+  it('returns a zeroed rating for a restaurant with no approved reviews', async () => {
+    const repo = makeReviewRepo({
+      aggregateRating: jest.fn().mockResolvedValue(zeroRating('rest-unknown')),
+    });
     const uc = new GetRestaurantRating(repo);
 
     const result = await uc.execute({ restaurantId: 'rest-unknown' });
 
     expect(result.isSuccess).toBe(true);
+    expect(result.getValue().restaurantId).toBe('rest-unknown');
     expect(result.getValue().avgRating).toBe(0);
     expect(result.getValue().reviewCount).toBe(0);
     expect(result.getValue().distribution).toEqual({ 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 });

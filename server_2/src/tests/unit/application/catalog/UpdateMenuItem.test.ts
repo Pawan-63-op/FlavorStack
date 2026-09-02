@@ -1,6 +1,6 @@
 import { UpdateMenuItem } from '../../../../application/catalog/use-cases/UpdateMenuItem';
 import { InMemoryRestaurantRepository, InMemoryMenuItemRepository } from '../../../mocks/catalog.mocks';
-import { InMemoryUnitOfWork, InMemoryOutboxStore } from '../../../mocks/identity.mocks';
+import { InMemoryUnitOfWork } from '../../../mocks/identity.mocks';
 import { createEventBusSpy, EventBusSpy } from '../../../mocks/shared.mocks';
 import { buildRestaurant, buildMenuItem } from './helpers';
 import { NotFoundError } from '../../../../domain/shared/errors/NotFoundError';
@@ -11,7 +11,6 @@ describe('UpdateMenuItem use-case', () => {
   let restaurantRepo: InMemoryRestaurantRepository;
   let menuItemRepo: InMemoryMenuItemRepository;
   let unitOfWork: InMemoryUnitOfWork;
-  let outboxStore: InMemoryOutboxStore;
   let eventBus: EventBusSpy;
   let useCase: UpdateMenuItem;
 
@@ -19,9 +18,8 @@ describe('UpdateMenuItem use-case', () => {
     restaurantRepo = new InMemoryRestaurantRepository();
     menuItemRepo = new InMemoryMenuItemRepository();
     unitOfWork = new InMemoryUnitOfWork();
-    outboxStore = new InMemoryOutboxStore();
     eventBus = createEventBusSpy();
-    useCase = new UpdateMenuItem(restaurantRepo, menuItemRepo, unitOfWork, outboxStore, eventBus);
+    useCase = new UpdateMenuItem(restaurantRepo, menuItemRepo, unitOfWork, eventBus);
   });
 
   async function seed() {
@@ -50,7 +48,7 @@ describe('UpdateMenuItem use-case', () => {
     const updated = await menuItemRepo.findById(menuItem.id.toString());
     expect(updated!.name).toBe('Paneer Tikka Masala');
 
-    expect(outboxStore.appended.length).toBeGreaterThan(0);
+    expect(eventBus.publishedEvents.length).toBeGreaterThan(0);
     expect(eventBus.publishedEvents.length).toBeGreaterThan(0);
   });
 
@@ -114,7 +112,7 @@ describe('UpdateMenuItem use-case', () => {
 
     expect(result.isFailure).toBe(true);
     expect(result.getError()).toBeInstanceOf(ValidationError);
-    expect(outboxStore.appended).toHaveLength(0);
+    expect(eventBus.publishedEvents).toHaveLength(0);
     expect(eventBus.publishedEvents).toHaveLength(0);
   });
 });

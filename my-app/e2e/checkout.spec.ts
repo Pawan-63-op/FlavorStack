@@ -1,6 +1,10 @@
 import { test, expect, type Page } from "@playwright/test";
 import { login, flushRateLimits } from "./fixtures/seed";
 import { seedServiceableRestaurant, SEED_LAT, SEED_LNG } from "./fixtures/seed";
+// Use the shared, idempotent helper. This spec used to carry its own `saveLocalAddress` that
+// added the address unconditionally, so a second run — or any other spec that had already added
+// it — left duplicates and the closing strict-mode assertion failed.
+import { ensureLocalAddress } from "./fixtures/checkout";
 
 
 async function clearServerCart(page: Page): Promise<void> {
@@ -11,24 +15,6 @@ async function addMargheritaToCart(page: Page, restaurantId: string): Promise<vo
   await page.goto(`/restaurants/${restaurantId}`);
   await expect(page.getByText("Margherita Pizza")).toBeVisible({ timeout: 15_000 });
   await page.getByRole("button", { name: /Add to Cart/i }).first().click();
-}
-
-async function saveLocalAddress(page: Page): Promise<void> {
-  await page.goto("/profile/addresses");
-  await page.getByRole("button", { name: "Add Address" }).click();
-
-  await page.getByPlaceholder("John Doe").fill("E2E Customer");
-  await page.getByPlaceholder("+1 (555) 123-4567").fill("+919876543210");
-  await page.getByPlaceholder("123 Main Street, Apt 4B").fill("123 MG Road");
-  await page.getByPlaceholder("City").fill("Bengaluru");
-  await page.getByPlaceholder("State").fill("Karnataka");
-  await page.getByPlaceholder("000000").fill("560001");
-
-  await page.getByRole("button", { name: /Use my location/i }).click();
-  await page.getByRole("button", { name: /Apply captured location/i }).click();
-
-  await page.getByRole("button", { name: /Save Address/i }).click();
-  await expect(page.getByText("123 MG Road, Bengaluru, Karnataka 560001")).toBeVisible();
 }
 
 test.describe("checkout (Phase 6) @smoke @regression", () => {
@@ -47,7 +33,7 @@ test.describe("checkout (Phase 6) @smoke @regression", () => {
 
     await clearServerCart(page);
     await addMargheritaToCart(page, restaurant.id);
-    await saveLocalAddress(page);
+    await ensureLocalAddress(page);
 
     await page.goto("/checkout");
 

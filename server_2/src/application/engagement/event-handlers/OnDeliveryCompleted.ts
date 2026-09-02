@@ -1,44 +1,32 @@
 import { DomainEvent } from '../../../domain/shared/DomainEvent';
-import { IReviewEligibilityRepository } from '../../../domain/engagement/repositories/IReviewEligibilityRepository';
+import { IFulfillmentGateway } from '../../../domain/engagement/services/IFulfillmentGateway';
 import { NOTIFICATION_CATEGORY } from '../../../domain/engagement/enums/notification-category.enum';
 import { NOTIFICATION_CHANNEL } from '../../../domain/engagement/enums/notification-channel.enum';
 import { DispatchNotification } from '../use-cases/DispatchNotification';
 import { logger } from '../../../infrastructure/observability/logger';
 
-interface ConsumedDeliveryCompleted extends DomainEvent {
-  deliveredAt?: string | Date;
-}
-
 export class OnDeliveryCompleted {
-  private readonly processedEventIds = new Set<string>();
-
   constructor(
     private readonly dispatch: DispatchNotification,
-    private readonly eligibilityRepo: IReviewEligibilityRepository
+    private readonly fulfillmentGateway: IFulfillmentGateway
   ) {}
 
   async handle(event: DomainEvent): Promise<void> {
-    if (this.processedEventIds.has(event.eventId)) return;
-    const e = event as ConsumedDeliveryCompleted;
-
-    const eligibility = await this.eligibilityRepo.findByFulfillmentId(event.aggregateId);
-    if (!eligibility) {
+    // No longer stamps `deliveredAt` anywhere: review eligibility is now derived from the
+    // fulfillment's own status, so this handler only resolves who to notify.
+    const subject = await this.fulfillmentGateway.getForReview(event.aggregateId);
+    if (!subject) {
       logger.warn(
         { eventId: event.eventId, fulfillmentId: event.aggregateId },
-        '[OnDeliveryCompleted] no eligibility seeded yet — skipping (allow retry)'
+        '[OnDeliveryCompleted] fulfillment not found — skipping'
       );
       return;
     }
 
-    await this.eligibilityRepo.upsert({
-      ...eligibility,
-      deliveredAt: e.deliveredAt ? new Date(e.deliveredAt) : new Date(),
-    });
-
     const result = await this.dispatch.execute({
-      recipientUserId: eligibility.customerId,
+      recipientUserId: subject.customerId,
       category: NOTIFICATION_CATEGORY.DELIVERY,
-      channel: NOTIFICATION_CHANNEL.PUSH,
+      channel: NOTIFICATION_CHANNEL.INBOX,
       templateKey: 'delivered',
       vars: { fulfillmentId: event.aggregateId },
       sourceEventId: event.eventId,
@@ -50,7 +38,5 @@ export class OnDeliveryCompleted {
       );
       return;
     }
-
-    this.processedEventIds.add(event.eventId);
   }
 }

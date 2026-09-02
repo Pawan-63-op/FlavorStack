@@ -7,7 +7,6 @@ import { RIDER_ASSIGNMENT_STATUS } from '../../../../domain/fulfillment/enums/ri
 import { FAILURE_REASON } from '../../../../domain/fulfillment/enums/failure-reason.enum';
 import { DeliveryFailed } from '../../../../domain/fulfillment/events/DeliveryFailed';
 import { RiderReassigned } from '../../../../domain/fulfillment/events/RiderReassigned';
-import { RiderAssignmentExpired } from '../../../../domain/fulfillment/events/RiderAssignmentExpired';
 import { ForbiddenError } from '../../../../domain/shared/errors/ForbiddenError';
 import { ValidationError } from '../../../../domain/shared/errors/ValidationError';
 import { ConflictError } from '../../../../domain/shared/errors/ConflictError';
@@ -190,7 +189,8 @@ describe('Fulfillment.reassign (Phase 5B)', () => {
 describe('Fulfillment.expireCurrentOffer (Phase 5B)', () => {
   afterEach(() => jest.useRealTimers());
 
-  it('expires a lapsed OFFERED assignment to history and raises RiderAssignmentExpired', () => {
+  // Phase 6: expiry raises no domain event — it had no subscriber. `assignmentHistory` is the record.
+  it('expires a lapsed OFFERED assignment to history, raising no domain event', () => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date('2026-01-01T00:00:00Z'));
 
@@ -207,10 +207,7 @@ describe('Fulfillment.expireCurrentOffer (Phase 5B)', () => {
     expect(f.currentAssignment).toBeNull();
     expect(f.assignmentHistory).toHaveLength(1);
     expect(f.assignmentHistory[0].status.value).toBe(RIDER_ASSIGNMENT_STATUS.EXPIRED);
-
-    const events = f.pullDomainEvents();
-    expect(events).toHaveLength(1);
-    expect(events[0]).toBeInstanceOf(RiderAssignmentExpired);
+    expect(f.pullDomainEvents()).toEqual([]);
   });
 
   it('is a no-op failure when the offer has not yet expired', () => {

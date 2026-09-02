@@ -110,7 +110,7 @@ describe('NotificationPreferenceMapper', () => {
     expect(back.userId).toBe('user-7');
     expect(back.updatedAt.getTime()).toBe(pref.updatedAt.getTime());
     expect(back.isEnabled(NOTIFICATION_CATEGORY.ORDER_UPDATES, NOTIFICATION_CHANNEL.EMAIL)).toBe(true);
-    expect(back.isEnabled(NOTIFICATION_CATEGORY.PROMOTIONS, NOTIFICATION_CHANNEL.PUSH)).toBe(true);
+    expect(back.isEnabled(NOTIFICATION_CATEGORY.PROMOTIONS, NOTIFICATION_CHANNEL.INBOX)).toBe(true);
     expect(back.isEnabled(NOTIFICATION_CATEGORY.PROMOTIONS, NOTIFICATION_CHANNEL.EMAIL)).toBe(false);
   });
 
@@ -120,7 +120,7 @@ describe('NotificationPreferenceMapper', () => {
     const back = NotificationPreferenceMapper.toDomain(NotificationPreferenceMapper.toPersistence(pref));
 
     expect(back.isEnabled(NOTIFICATION_CATEGORY.ORDER_UPDATES, NOTIFICATION_CHANNEL.EMAIL)).toBe(false);
-    expect(back.isEnabled(NOTIFICATION_CATEGORY.ORDER_UPDATES, NOTIFICATION_CHANNEL.PUSH)).toBe(true);
+    expect(back.isEnabled(NOTIFICATION_CATEGORY.ORDER_UPDATES, NOTIFICATION_CHANNEL.INBOX)).toBe(true);
   });
 });
 
@@ -128,7 +128,7 @@ describe('NotificationTemplateMapper', () => {
   it('round-trips a template and the rehydrated copy still renders', () => {
     const template = NotificationTemplate.create({
       key: 'order_confirmed',
-      channel: NOTIFICATION_CHANNEL.PUSH,
+      channel: NOTIFICATION_CHANNEL.INBOX,
       locale: 'en',
       titleTemplate: 'Order {{orderId}}',
       bodyTemplate: 'Hi {{name}}',
@@ -137,7 +137,7 @@ describe('NotificationTemplateMapper', () => {
 
     expect(back.id.toString()).toBe(template.id.toString());
     expect(back.key).toBe('order_confirmed');
-    expect(back.channel).toBe(NOTIFICATION_CHANNEL.PUSH);
+    expect(back.channel).toBe(NOTIFICATION_CHANNEL.INBOX);
     expect(back.locale).toBe('en');
     expect(back.titleTemplate).toBe('Order {{orderId}}');
     expect(back.bodyTemplate).toBe('Hi {{name}}');

@@ -1,13 +1,13 @@
 import { Result } from '../../../domain/shared/Result';
-import { IFulfillmentProjectionRepository } from '../../../domain/fulfillment/repositories/IFulfillmentProjectionRepository';
+import { ICustomerTrackingRepository } from '../../../domain/fulfillment/repositories/ICustomerTrackingRepository';
 import { ListCustomerOrdersDto } from '../dtos/ListCustomerOrdersDto';
 import { CustomerOrderResponse, toCustomerOrderResponse } from '../responses/CustomerOrderResponse';
 
 export class ListCustomerOrders {
-  constructor(private readonly projectionRepo: IFulfillmentProjectionRepository) {}
+  constructor(private readonly trackingRepo: ICustomerTrackingRepository) {}
 
   async execute(dto: ListCustomerOrdersDto): Promise<Result<CustomerOrderResponse[]>> {
-    const views = await this.projectionRepo.findByCustomer(dto.customerId, {
+    const views = await this.trackingRepo.findByCustomer(dto.customerId, {
       limit: dto.limit,
       offset: dto.offset,
     });

@@ -8,7 +8,6 @@ import {
   InMemoryCustomerRepository,
   FakePasswordHasher,
   InMemoryUnitOfWork,
-  InMemoryOutboxStore,
 } from '../../../mocks/identity.mocks';
 import { createEventBusSpy } from '../../../mocks/shared.mocks';
 import { ValidationError } from '../../../../domain/shared/errors/ValidationError';
@@ -19,7 +18,6 @@ describe('RegisterUser use-case (thin dispatcher)', () => {
   let customerRepo: InMemoryCustomerRepository;
   let passwordHasher: FakePasswordHasher;
   let unitOfWork: InMemoryUnitOfWork;
-  let outboxStore: InMemoryOutboxStore;
   let useCase: RegisterUser;
 
   beforeEach(() => {
@@ -27,7 +25,6 @@ describe('RegisterUser use-case (thin dispatcher)', () => {
     customerRepo = new InMemoryCustomerRepository(userRepo);
     passwordHasher = new FakePasswordHasher();
     unitOfWork = new InMemoryUnitOfWork();
-    outboxStore = new InMemoryOutboxStore();
     const eventBus = createEventBusSpy();
 
     const registerCustomer = new RegisterCustomer(
@@ -35,14 +32,12 @@ describe('RegisterUser use-case (thin dispatcher)', () => {
       customerRepo,
       passwordHasher,
       unitOfWork,
-      outboxStore,
       eventBus,
     );
     const registerDriver = new RegisterDriver(
       userRepo,
       passwordHasher,
       unitOfWork,
-      outboxStore,
       eventBus,
     );
     useCase = new RegisterUser(registerCustomer, registerDriver);

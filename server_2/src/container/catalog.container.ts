@@ -1,16 +1,16 @@
 import { IEventBus } from '../application/shared/events/IEventBus';
 import { TransactionContext } from '../infrastructure/database/TransactionContext';
 import { ICatalogReadRepository } from '../domain/catalog/repositories/ICatalogReadRepository';
+import { ICatalogQueryRepository } from '../domain/catalog/repositories/ICatalogQueryRepository';
 
 import { MongoRestaurantRepository } from '../infrastructure/repositories/RestaurantRepository';
 import { MongoMenuItemRepository } from '../infrastructure/repositories/MenuItemRepository';
 import { MongoDeliveryZoneRepository } from '../infrastructure/repositories/DeliveryZoneRepository';
 import { MongoCatalogReadRepository } from '../infrastructure/repositories/CatalogReadRepository';
-import { CachedCatalogReadRepository } from '../infrastructure/repositories/CachedCatalogReadRepository';
+import { MongoCatalogQueryRepository } from '../infrastructure/repositories/CatalogQueryRepository';
 import { CatalogProjectionWriter } from '../infrastructure/database/projections/CatalogProjectionWriter';
 import { MongoOpeningHoursService } from '../infrastructure/services/OpeningHoursService';
 import { MongoSearchService } from '../infrastructure/search/MongoSearchService';
-import { CatalogCache } from '../infrastructure/redis/catalog/CatalogCache';
 
 import { CatalogProjector } from '../application/catalog/handlers/CatalogProjector';
 import { registerCatalogProjector } from '../application/catalog/handlers/CatalogProjectionRegistry';
@@ -26,6 +26,7 @@ import { GetNearbyRestaurants } from '../application/catalog/use-cases/GetNearby
 
 export interface CatalogReadContainer {
   readRepository: ICatalogReadRepository;
+  queryRepository: ICatalogQueryRepository;
   openingHoursService: MongoOpeningHoursService;
   searchService: MongoSearchService;
   projector: CatalogProjector;
@@ -44,26 +45,26 @@ export interface CatalogReadContainer {
 
 export function createCatalogReadContainer(
   eventBus: IEventBus,
-  txContext: TransactionContext,
-  cache?: CatalogCache
+  txContext: TransactionContext
 ): CatalogReadContainer {
   const restaurantRepo = new MongoRestaurantRepository(txContext);
   const menuItemRepo = new MongoMenuItemRepository(txContext);
   const deliveryZoneRepo = new MongoDeliveryZoneRepository(txContext);
 
-  const mongoReadRepository = new MongoCatalogReadRepository();
-  const readRepository: ICatalogReadRepository = cache
-    ? new CachedCatalogReadRepository(mongoReadRepository, cache)
-    : mongoReadRepository;
+  // Source-of-truth reads (`restaurants` + `menu_items`); deliberately uncached and
+  // outside the projection stack.
+  const queryRepository = new MongoCatalogQueryRepository();
+  const readRepository: ICatalogReadRepository = new MongoCatalogReadRepository(queryRepository);
   const projectionWriter = new CatalogProjectionWriter();
   const openingHoursService = new MongoOpeningHoursService();
   const searchService = new MongoSearchService();
 
-  const projector = new CatalogProjector(restaurantRepo, menuItemRepo, projectionWriter, cache);
+  const projector = new CatalogProjector(restaurantRepo, menuItemRepo, projectionWriter);
   registerCatalogProjector(eventBus, projector);
 
   return {
     readRepository,
+    queryRepository,
     openingHoursService,
     searchService,
     projector,
@@ -73,7 +74,7 @@ export function createCatalogReadContainer(
       getRestaurantMenu: new GetRestaurantMenu(readRepository),
       getMenuItem: new GetMenuItem(readRepository),
       getItemsSnapshot: new GetItemsSnapshot(readRepository),
-      checkServiceability: new CheckServiceability(deliveryZoneRepo, readRepository, cache),
+      checkServiceability: new CheckServiceability(deliveryZoneRepo, queryRepository),
       searchRestaurants: new SearchRestaurants(searchService),
       searchMenuItems: new SearchMenuItems(searchService),
       getNearbyRestaurants: new GetNearbyRestaurants(searchService),

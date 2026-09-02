@@ -8,7 +8,6 @@ import { IOtpStore } from '../../../domain/identity/services/IOtpStore';
 import { IPasswordHasher } from '../../../domain/identity/services/IPasswordHasher';
 import { ISessionStore } from '../../../domain/identity/services/ISessionStore';
 import { IUnitOfWork } from '../../shared/ports/IUnitOfWork';
-import { IOutboxStore } from '../../shared/outbox/IOutboxStore';
 import { IEventBus } from '../../shared/events/IEventBus';
 import { ResetPasswordDto } from '../dtos/ResetPasswordDto';
 import { passwordResetOtpKey } from '../otp-keys';
@@ -20,7 +19,6 @@ export class ResetPassword {
     private passwordHasher: IPasswordHasher,
     private sessionStore: ISessionStore,
     private unitOfWork: IUnitOfWork,
-    private outboxStore: IOutboxStore,
     private eventBus: IEventBus,
   ) {}
 
@@ -47,9 +45,8 @@ export class ResetPassword {
 
     const events = user.pullDomainEvents();
 
-    await this.unitOfWork.runInTransaction(async (ctx) => {
+    await this.unitOfWork.runInTransaction(async () => {
       await this.userRepo.update(user);
-      await this.outboxStore.append(events, ctx);
     });
 
     await this.eventBus.publishAll(events);

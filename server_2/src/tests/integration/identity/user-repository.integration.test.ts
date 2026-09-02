@@ -76,7 +76,6 @@ function buildCustomer(overrides: Record<string, unknown> = {}): Customer {
     savedRestaurants: ['rest-1'],
     dietaryPreferences: ['VEGAN'],
     defaultPaymentMethod: 'CARD',
-    fcmTokens: ['token-1'],
     notificationsEnabled: false,
   });
 }
@@ -106,7 +105,6 @@ function buildDriver(overrides: Record<string, unknown> = {}): Driver {
     averageRating: 4.5,
     totalDeliveries: 10,
     totalRatings: 8,
-    fcmTokens: ['token-a'],
   });
 }
 

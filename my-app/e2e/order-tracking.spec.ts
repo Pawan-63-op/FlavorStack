@@ -8,11 +8,10 @@ import {
   SEED_LNG,
 } from "./fixtures/seed";
 import { flushRateLimits } from "./fixtures/seed";
+import { isEnabled } from "./fixtures/flags";
 
 
-const TRACKING_ON =
-  process.env.NEXT_PUBLIC_FEATURE_TRACKING === "true" ||
-  process.env.NEXT_PUBLIC_FEATURE_TRACKING === "1";
+const TRACKING_ON = isEnabled("tracking");
 
 function orderRequestIdFromUrl(url: string): string {
   const id = new URL(url).searchParams.get("orderRequestId");

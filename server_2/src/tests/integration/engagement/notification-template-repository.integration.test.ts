@@ -7,7 +7,7 @@ import { NotificationTemplateModel } from '../../../infrastructure/database/mode
 function buildTemplate(key = 'welcome'): NotificationTemplate {
   return NotificationTemplate.create({
     key,
-    channel: NOTIFICATION_CHANNEL.PUSH,
+    channel: NOTIFICATION_CHANNEL.INBOX,
     locale: 'en',
     titleTemplate: 'Hi {{name}}',
     bodyTemplate: 'Welcome to FlavorStack, {{name}}!',
@@ -31,7 +31,7 @@ describe('MongoNotificationTemplateRepository', () => {
     const template = buildTemplate();
     await repo.save(template);
 
-    const found = await repo.findByKeyChannelLocale('welcome', NOTIFICATION_CHANNEL.PUSH, 'en');
+    const found = await repo.findByKeyChannelLocale('welcome', NOTIFICATION_CHANNEL.INBOX, 'en');
     expect(found).toBeInstanceOf(NotificationTemplate);
     expect(found!.render({ name: 'Asha' })).toEqual({
       title: 'Hi Asha',

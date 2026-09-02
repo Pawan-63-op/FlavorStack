@@ -1,25 +1,14 @@
 import { GetLiveTracking } from '../../../../application/fulfillment/use-cases/GetLiveTracking';
 import { GetAdminDashboard } from '../../../../application/fulfillment/use-cases/GetAdminDashboard';
-import { IFulfillmentProjectionRepository } from '../../../../domain/fulfillment/repositories/IFulfillmentProjectionRepository';
+import { ICustomerTrackingRepository } from '../../../../domain/fulfillment/repositories/ICustomerTrackingRepository';
 import { IFulfillmentReadCache } from '../../../../domain/fulfillment/services/IFulfillmentCache';
+import { makeQueryRepo } from '../../../mocks/fulfillment.mocks';
 
-function makeRepo(): jest.Mocked<IFulfillmentProjectionRepository> {
+function makeRepo(): jest.Mocked<ICustomerTrackingRepository> {
   return {
     upsertCustomerTracking: jest.fn().mockResolvedValue(undefined),
     findCustomerTracking: jest.fn().mockResolvedValue(null),
     findByCustomer: jest.fn().mockResolvedValue([]),
-    upsertRestaurantView: jest.fn().mockResolvedValue(undefined),
-    removeRestaurantView: jest.fn().mockResolvedValue(undefined),
-    findRestaurantQueue: jest.fn().mockResolvedValue([]),
-    upsertRiderQueueItem: jest.fn().mockResolvedValue(undefined),
-    removeRiderQueueItem: jest.fn().mockResolvedValue(undefined),
-    removeAllRiderQueueItemsForFulfillment: jest.fn().mockResolvedValue(undefined),
-    findRiderQueue: jest.fn().mockResolvedValue([]),
-    findRiderCompletedDeliveries: jest.fn().mockResolvedValue([]),
-    upsertAdminView: jest.fn().mockResolvedValue(undefined),
-    patchAdminView: jest.fn().mockResolvedValue(undefined),
-    findAdminDashboard: jest.fn().mockResolvedValue([]),
-    aggregateAnalytics: jest.fn(),
   };
 }
 
@@ -96,7 +85,7 @@ describe('GetLiveTracking caching', () => {
 
 describe('GetAdminDashboard caching', () => {
   it('routes the read through the cache with a deterministic filter discriminator', async () => {
-    const repo = makeRepo();
+    const repo = makeQueryRepo();
     const cache = makePassThroughCache();
     const uc = new GetAdminDashboard(repo, cache);
 
@@ -108,8 +97,8 @@ describe('GetAdminDashboard caching', () => {
     );
   });
 
-  it('falls back to a direct projection read when no cache is wired', async () => {
-    const repo = makeRepo();
+  it('falls back to a direct read when no cache is wired', async () => {
+    const repo = makeQueryRepo();
     const uc = new GetAdminDashboard(repo);
 
     await uc.execute({ status: 'PREPARING' });

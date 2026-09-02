@@ -4,7 +4,6 @@ import { IFulfillmentRepository } from '../../../../domain/fulfillment/repositor
 import { Fulfillment } from '../../../../domain/fulfillment/entities/Fulfillment';
 import { ConflictError } from '../../../../domain/shared/errors/ConflictError';
 import { IUnitOfWork } from '../../../../application/shared/ports/IUnitOfWork';
-import { IOutboxStore } from '../../../../application/shared/outbox/IOutboxStore';
 import { IEventBus } from '../../../../application/shared/events/IEventBus';
 
 function validDto(overrides: Partial<CreateFulfillmentDto> = {}): CreateFulfillmentDto {
@@ -49,10 +48,6 @@ function makeUnitOfWork(): IUnitOfWork {
   };
 }
 
-function makeOutbox(): jest.Mocked<IOutboxStore> {
-  return { append: jest.fn().mockResolvedValue(undefined) } as jest.Mocked<IOutboxStore>;
-}
-
 function makeEventBus(): jest.Mocked<IEventBus> {
   return {
     subscribe: jest.fn(),
@@ -65,9 +60,8 @@ describe('CreateFulfillment', () => {
   it('persists the fulfillment, appends its events, and publishes them', async () => {
     const repo = makeRepo();
     const uow = makeUnitOfWork();
-    const outbox = makeOutbox();
     const bus = makeEventBus();
-    const uc = new CreateFulfillment(repo, uow, outbox, bus);
+    const uc = new CreateFulfillment(repo, uow, bus);
 
     const result = await uc.execute(validDto());
 
@@ -79,8 +73,8 @@ describe('CreateFulfillment', () => {
     const saved = repo.save.mock.calls[0][0] as Fulfillment;
     expect(saved.orderRequestId).toBe('order-req-1');
 
-    expect(outbox.append).toHaveBeenCalledTimes(1);
-    const appendedEvents = outbox.append.mock.calls[0][0];
+    expect(bus.publishAll).toHaveBeenCalledTimes(1);
+    const appendedEvents = bus.publishAll.mock.calls[0][0];
     expect(appendedEvents).toHaveLength(1);
     expect(appendedEvents[0].eventName).toBe('FulfillmentCreated');
 
@@ -91,16 +85,15 @@ describe('CreateFulfillment', () => {
     const repo = makeRepo({
       findByOrderRequestId: jest.fn().mockResolvedValue(buildExisting()),
     });
-    const outbox = makeOutbox();
     const bus = makeEventBus();
-    const uc = new CreateFulfillment(repo, makeUnitOfWork(), outbox, bus);
+    const uc = new CreateFulfillment(repo, makeUnitOfWork(), bus);
 
     const result = await uc.execute(validDto());
 
     expect(result.isSuccess).toBe(true);
     expect(result.getValue().orderRequestId).toBe('order-req-1');
     expect(repo.save).not.toHaveBeenCalled();
-    expect(outbox.append).not.toHaveBeenCalled();
+    expect(bus.publishAll).not.toHaveBeenCalled();
     expect(bus.publishAll).not.toHaveBeenCalled();
   });
 
@@ -116,7 +109,7 @@ describe('CreateFulfillment', () => {
     });
     const uow = makeUnitOfWork();
     const bus = makeEventBus();
-    const uc = new CreateFulfillment(repo, uow, makeOutbox(), bus);
+    const uc = new CreateFulfillment(repo, uow, bus);
 
     const result = await uc.execute(validDto());
 
@@ -127,7 +120,7 @@ describe('CreateFulfillment', () => {
 
   it('fails validation on a malformed line without persisting', async () => {
     const repo = makeRepo();
-    const uc = new CreateFulfillment(repo, makeUnitOfWork(), makeOutbox(), makeEventBus());
+    const uc = new CreateFulfillment(repo, makeUnitOfWork(), makeEventBus());
 
     const result = await uc.execute(
       validDto({

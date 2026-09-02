@@ -7,16 +7,16 @@ import { DELIVERY_STATUS } from '../../../domain/fulfillment/enums/delivery-stat
 import { getConnection } from '../../../infrastructure/database/connection';
 import { TransactionContext } from '../../../infrastructure/database/TransactionContext';
 import { MongoUnitOfWork } from '../../../infrastructure/database/MongoUnitOfWork';
-import { MongoOutboxStore } from '../../../infrastructure/database/MongoOutboxStore';
 import { MongoFulfillmentRepository } from '../../../infrastructure/repositories/FulfillmentRepository';
 import { SimpleDeliveryAssignmentService } from '../../../infrastructure/services/SimpleDeliveryAssignmentService';
 import { FulfillmentModel } from '../../../infrastructure/database/models/FulfillmentModel';
 import { OutboxEventModel } from '../../../infrastructure/database/models/OutboxEventModel';
-import { InMemoryEventBus } from '../../../application/shared/events/InMemoryEventBus';
+import { createEventBusSpy, EventBusSpy, countPublished } from '../../mocks/shared.mocks';
 
 import { CreateFulfillment } from '../../../application/fulfillment/use-cases/CreateFulfillment';
 import { MarkPreparing } from '../../../application/fulfillment/use-cases/MarkPreparing';
 import { MarkReadyForPickup } from '../../../application/fulfillment/use-cases/MarkReadyForPickup';
+import { makeStubRestaurantDirectory } from '../../mocks/fulfillment.mocks';
 import { OfferRiderAssignment } from '../../../application/fulfillment/use-cases/OfferRiderAssignment';
 import { AcceptDelivery } from '../../../application/fulfillment/use-cases/AcceptDelivery';
 import { ConfirmPickup } from '../../../application/fulfillment/use-cases/ConfirmPickup';
@@ -26,6 +26,7 @@ import { OnOrderRequested } from '../../../application/fulfillment/event-handler
 import { OnReadyForPickup } from '../../../application/fulfillment/event-handlers/OnReadyForPickup';
 
 const RESTAURANT_ID = 'rest-1';
+const OWNER_ID = 'owner-1';
 const RIDER_ID = 'rider-1';
 
 /** A published-shape OrderRequested as it arrives on the in-process bus (aggregateId = orderRequestId). */
@@ -55,8 +56,7 @@ describe('Fulfillment delivery lifecycle e2e (Phase 4): OrderRequested → Deliv
   let txContext: TransactionContext;
   let repo: MongoFulfillmentRepository;
   let uow: MongoUnitOfWork;
-  let outbox: MongoOutboxStore;
-  let bus: InMemoryEventBus;
+  let bus: EventBusSpy;
 
   let createFulfillment: CreateFulfillment;
   let markPreparing: MarkPreparing;
@@ -71,19 +71,19 @@ describe('Fulfillment delivery lifecycle e2e (Phase 4): OrderRequested → Deliv
     txContext = new TransactionContext();
     repo = new MongoFulfillmentRepository(txContext);
     uow = new MongoUnitOfWork(getConnection(), txContext);
-    outbox = new MongoOutboxStore(txContext);
-    bus = new InMemoryEventBus();
+    bus = createEventBusSpy();
 
     const service = new SimpleDeliveryAssignmentService(async () => [RIDER_ID]);
 
-    createFulfillment = new CreateFulfillment(repo, uow, outbox, bus);
-    markPreparing = new MarkPreparing(repo, uow, outbox, bus);
-    markReady = new MarkReadyForPickup(repo, uow, outbox, bus);
-    const offer = new OfferRiderAssignment(repo, service, uow, outbox, bus, 60);
-    accept = new AcceptDelivery(repo, uow, outbox, bus);
-    confirmPickup = new ConfirmPickup(repo, uow, outbox, bus);
-    startDelivery = new StartDelivery(repo, uow, outbox, bus);
-    completeDelivery = new CompleteDelivery(repo, uow, outbox, bus);
+    createFulfillment = new CreateFulfillment(repo, uow, bus);
+    const restaurantDirectory = makeStubRestaurantDirectory(RESTAURANT_ID, OWNER_ID);
+    markPreparing = new MarkPreparing(repo, restaurantDirectory, uow, bus);
+    markReady = new MarkReadyForPickup(repo, restaurantDirectory, uow, bus);
+    const offer = new OfferRiderAssignment(repo, service, uow, bus, 60);
+    accept = new AcceptDelivery(repo, uow, bus);
+    confirmPickup = new ConfirmPickup(repo, uow, bus);
+    startDelivery = new StartDelivery(repo, uow, bus);
+    completeDelivery = new CompleteDelivery(repo, uow, bus);
 
     onOrderRequested = new OnOrderRequested(createFulfillment);
     const onReady = new OnReadyForPickup(offer);
@@ -106,9 +106,9 @@ describe('Fulfillment delivery lifecycle e2e (Phase 4): OrderRequested → Deliv
     expect(created.fulfillmentStatus.value).toBe(FULFILLMENT_STATUS.CREATED);
     const id = created.id.toString();
 
-    expect((await markPreparing.execute({ fulfillmentId: id, restaurantId: RESTAURANT_ID })).isSuccess).toBe(true);
+    expect((await markPreparing.execute({ fulfillmentId: id, actorUserId: OWNER_ID })).isSuccess).toBe(true);
 
-    expect((await markReady.execute({ fulfillmentId: id, restaurantId: RESTAURANT_ID })).isSuccess).toBe(true);
+    expect((await markReady.execute({ fulfillmentId: id, actorUserId: OWNER_ID })).isSuccess).toBe(true);
 
     const accepted = await accept.execute({ fulfillmentId: id, riderId: RIDER_ID });
     expect(accepted.isSuccess).toBe(true);
@@ -143,7 +143,7 @@ describe('Fulfillment delivery lifecycle e2e (Phase 4): OrderRequested → Deliv
       'OutForDelivery',
       'DeliveryCompleted',
     ]) {
-      expect(await OutboxEventModel.countDocuments({ eventName })).toBe(1);
+      expect(countPublished(bus, eventName)).toBe(1);
     }
   });
 
@@ -154,8 +154,8 @@ describe('Fulfillment delivery lifecycle e2e (Phase 4): OrderRequested → Deliv
 
     expect((await confirmPickup.execute({ fulfillmentId: id, riderId: RIDER_ID })).isFailure).toBe(true);
 
-    await markPreparing.execute({ fulfillmentId: id, restaurantId: RESTAURANT_ID });
-    await markReady.execute({ fulfillmentId: id, restaurantId: RESTAURANT_ID });
+    await markPreparing.execute({ fulfillmentId: id, actorUserId: OWNER_ID });
+    await markReady.execute({ fulfillmentId: id, actorUserId: OWNER_ID });
 
     expect((await confirmPickup.execute({ fulfillmentId: id, riderId: RIDER_ID })).isFailure).toBe(true);
 

@@ -4,7 +4,6 @@ import { ConflictError } from '../../../domain/shared/errors/ConflictError';
 import { IFulfillmentRepository } from '../../../domain/fulfillment/repositories/IFulfillmentRepository';
 import { IDeliveryAssignmentService } from '../../../domain/fulfillment/services/IDeliveryAssignmentService';
 import { IUnitOfWork } from '../../shared/ports/IUnitOfWork';
-import { IOutboxStore } from '../../shared/outbox/IOutboxStore';
 import { IEventBus } from '../../shared/events/IEventBus';
 import { OfferRiderAssignmentDto } from '../dtos/OfferRiderAssignmentDto';
 import { FulfillmentResponse, toFulfillmentResponse } from '../responses/FulfillmentResponse';
@@ -15,7 +14,6 @@ export class OfferRiderAssignment {
     private readonly fulfillmentRepo: IFulfillmentRepository,
     private readonly assignmentService: IDeliveryAssignmentService,
     private readonly unitOfWork: IUnitOfWork,
-    private readonly outboxStore: IOutboxStore,
     private readonly eventBus: IEventBus,
     private readonly offerTtlSeconds: number
   ) {}
@@ -36,9 +34,8 @@ export class OfferRiderAssignment {
 
     const events = fulfillment.pullDomainEvents();
 
-    await this.unitOfWork.runInTransaction(async (ctx) => {
+    await this.unitOfWork.runInTransaction(async () => {
       await this.fulfillmentRepo.update(fulfillment);
-      if (events.length > 0) await this.outboxStore.append(events, ctx);
     });
 
     await this.eventBus.publishAll(events);

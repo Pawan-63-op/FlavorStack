@@ -7,37 +7,29 @@ import { NOTIFICATION_CHANNEL } from '../../../../../domain/engagement/enums/not
 import { DispatchNotificationDto } from '../../../../../application/engagement/dtos/DispatchNotificationDto';
 import { Result } from '../../../../../domain/shared/Result';
 import { logger } from '../../../../../infrastructure/observability/logger';
-import { makeDispatch, asDispatch, makeEligibilityRepo, busEvent } from './_handler-helpers';
-
-const eligibility = {
-  fulfillmentId: 'ful-1',
-  customerId: 'cust-1',
-  restaurantId: 'rest-1',
-  deliveredAt: null,
-  reviewed: false,
-};
+import { makeDispatch, asDispatch, makeFulfillmentGateway, busEvent } from './_handler-helpers';
 
 describe('OnReadyForPickup', () => {
-  it('resolves the customer from eligibility and dispatches ready_for_pickup (ORDER_UPDATES/PUSH)', async () => {
+  it('resolves the customer via the fulfillment gateway and dispatches ready_for_pickup (ORDER_UPDATES/PUSH)', async () => {
     const dispatch = makeDispatch();
-    const repo = makeEligibilityRepo({ findByFulfillmentId: jest.fn().mockResolvedValue(eligibility) });
-    const handler = new OnReadyForPickup(asDispatch(dispatch), repo);
+    const gateway = makeFulfillmentGateway();
+    const handler = new OnReadyForPickup(asDispatch(dispatch), gateway);
 
     await handler.handle(busEvent({ eventName: 'ReadyForPickup', aggregateId: 'ful-1', readyAt: new Date() }));
 
-    expect(repo.findByFulfillmentId).toHaveBeenCalledWith('ful-1');
+    expect(gateway.getForReview).toHaveBeenCalledWith('ful-1');
     const dto = dispatch.execute.mock.calls[0][0] as DispatchNotificationDto;
     expect(dto.recipientUserId).toBe('cust-1');
     expect(dto.templateKey).toBe('ready_for_pickup');
     expect(dto.category).toBe(NOTIFICATION_CATEGORY.ORDER_UPDATES);
-    expect(dto.channel).toBe(NOTIFICATION_CHANNEL.PUSH);
+    expect(dto.channel).toBe(NOTIFICATION_CHANNEL.INBOX);
   });
 
-  it('skips and logs (does not dedupe) when eligibility is not yet seeded', async () => {
+  it('skips and logs (does not dedupe) when the fulfillment cannot be found', async () => {
     const dispatch = makeDispatch();
     const warnSpy = jest.spyOn(logger, 'warn').mockImplementation(() => logger);
-    const repo = makeEligibilityRepo({ findByFulfillmentId: jest.fn().mockResolvedValue(null) });
-    const handler = new OnReadyForPickup(asDispatch(dispatch), repo);
+    const gateway = makeFulfillmentGateway(null);
+    const handler = new OnReadyForPickup(asDispatch(dispatch), gateway);
 
     const event = busEvent({ eventName: 'ReadyForPickup', aggregateId: 'ful-1', readyAt: new Date() });
     await handler.handle(event);
@@ -45,7 +37,7 @@ describe('OnReadyForPickup', () => {
 
     expect(dispatch.execute).not.toHaveBeenCalled();
     expect(warnSpy).toHaveBeenCalled();
-    expect(repo.findByFulfillmentId).toHaveBeenCalledTimes(2); // retried, not deduped
+    expect(gateway.getForReview).toHaveBeenCalledTimes(2); // retried, not deduped
     warnSpy.mockRestore();
   });
 
@@ -55,8 +47,8 @@ describe('OnReadyForPickup', () => {
       .mockResolvedValueOnce(Result.fail('boom'))
       .mockResolvedValueOnce(Result.ok({ outcome: 'DISPATCHED', dedupeKey: 'k' }));
     const errorSpy = jest.spyOn(logger, 'error').mockImplementation(() => logger);
-    const repo = makeEligibilityRepo({ findByFulfillmentId: jest.fn().mockResolvedValue(eligibility) });
-    const handler = new OnReadyForPickup(asDispatch(dispatch), repo);
+    const gateway = makeFulfillmentGateway();
+    const handler = new OnReadyForPickup(asDispatch(dispatch), gateway);
 
     const event = busEvent({ eventName: 'ReadyForPickup', aggregateId: 'ful-1', readyAt: new Date() });
     await handler.handle(event);
@@ -67,24 +59,27 @@ describe('OnReadyForPickup', () => {
     errorSpy.mockRestore();
   });
 
-  it('is idempotent across redelivery once dispatched', async () => {
+  // Phase 6 removed the per-handler in-memory `processedEventIds` set. The durable guard is
+  // `DispatchNotification`'s dedupe key (a unique index on `notifications`), which turns a
+  // redelivery into a SKIPPED/duplicate outcome instead of a second inbox row.
+  it('delegates every redelivery — de-duplication belongs to DispatchNotification', async () => {
     const dispatch = makeDispatch();
-    const repo = makeEligibilityRepo({ findByFulfillmentId: jest.fn().mockResolvedValue(eligibility) });
-    const handler = new OnReadyForPickup(asDispatch(dispatch), repo);
+    const gateway = makeFulfillmentGateway();
+    const handler = new OnReadyForPickup(asDispatch(dispatch), gateway);
 
     const event = busEvent({ eventName: 'ReadyForPickup', aggregateId: 'ful-1', readyAt: new Date() });
     await handler.handle(event);
     await handler.handle(event);
 
-    expect(dispatch.execute).toHaveBeenCalledTimes(1);
+    expect(dispatch.execute).toHaveBeenCalledTimes(2);
   });
 });
 
 describe('OnRiderAssigned', () => {
   it('dispatches rider_assigned to the resolved customer (DELIVERY/PUSH)', async () => {
     const dispatch = makeDispatch();
-    const repo = makeEligibilityRepo({ findByFulfillmentId: jest.fn().mockResolvedValue(eligibility) });
-    const handler = new OnRiderAssigned(asDispatch(dispatch), repo);
+    const gateway = makeFulfillmentGateway();
+    const handler = new OnRiderAssigned(asDispatch(dispatch), gateway);
 
     await handler.handle(
       busEvent({ eventName: 'RiderAssigned', aggregateId: 'ful-1', riderId: 'rider-1', assignedAt: new Date() })
@@ -94,21 +89,21 @@ describe('OnRiderAssigned', () => {
     expect(dto.recipientUserId).toBe('cust-1');
     expect(dto.templateKey).toBe('rider_assigned');
     expect(dto.category).toBe(NOTIFICATION_CATEGORY.DELIVERY);
-    expect(dto.channel).toBe(NOTIFICATION_CHANNEL.PUSH);
+    expect(dto.channel).toBe(NOTIFICATION_CHANNEL.INBOX);
   });
 
-  it('skips and logs (does not dedupe) when eligibility is not yet seeded', async () => {
+  it('skips and logs (does not dedupe) when the fulfillment cannot be found', async () => {
     const dispatch = makeDispatch();
     const warnSpy = jest.spyOn(logger, 'warn').mockImplementation(() => logger);
-    const repo = makeEligibilityRepo({ findByFulfillmentId: jest.fn().mockResolvedValue(null) });
-    const handler = new OnRiderAssigned(asDispatch(dispatch), repo);
+    const gateway = makeFulfillmentGateway(null);
+    const handler = new OnRiderAssigned(asDispatch(dispatch), gateway);
 
     const event = busEvent({ eventName: 'RiderAssigned', aggregateId: 'ful-1', riderId: 'rider-1' });
     await handler.handle(event);
     await handler.handle(event);
 
     expect(dispatch.execute).not.toHaveBeenCalled();
-    expect(repo.findByFulfillmentId).toHaveBeenCalledTimes(2); // retried, not deduped
+    expect(gateway.getForReview).toHaveBeenCalledTimes(2); // retried, not deduped
     expect(warnSpy).toHaveBeenCalled();
     warnSpy.mockRestore();
   });
@@ -119,8 +114,8 @@ describe('OnRiderAssigned', () => {
       .mockResolvedValueOnce(Result.fail('boom'))
       .mockResolvedValueOnce(Result.ok({ outcome: 'DISPATCHED', dedupeKey: 'k' }));
     const errorSpy = jest.spyOn(logger, 'error').mockImplementation(() => logger);
-    const repo = makeEligibilityRepo({ findByFulfillmentId: jest.fn().mockResolvedValue(eligibility) });
-    const handler = new OnRiderAssigned(asDispatch(dispatch), repo);
+    const gateway = makeFulfillmentGateway();
+    const handler = new OnRiderAssigned(asDispatch(dispatch), gateway);
 
     const event = busEvent({ eventName: 'RiderAssigned', aggregateId: 'ful-1', riderId: 'rider-1' });
     await handler.handle(event);
@@ -131,24 +126,24 @@ describe('OnRiderAssigned', () => {
     errorSpy.mockRestore();
   });
 
-  it('is idempotent across redelivery once dispatched', async () => {
+  it('delegates every redelivery — de-duplication belongs to DispatchNotification', async () => {
     const dispatch = makeDispatch();
-    const repo = makeEligibilityRepo({ findByFulfillmentId: jest.fn().mockResolvedValue(eligibility) });
-    const handler = new OnRiderAssigned(asDispatch(dispatch), repo);
+    const gateway = makeFulfillmentGateway();
+    const handler = new OnRiderAssigned(asDispatch(dispatch), gateway);
 
     const event = busEvent({ eventName: 'RiderAssigned', aggregateId: 'ful-1', riderId: 'rider-1' });
     await handler.handle(event);
     await handler.handle(event);
 
-    expect(dispatch.execute).toHaveBeenCalledTimes(1);
+    expect(dispatch.execute).toHaveBeenCalledTimes(2);
   });
 });
 
 describe('OnOutForDelivery', () => {
   it('dispatches out_for_delivery to the resolved customer (DELIVERY/PUSH)', async () => {
     const dispatch = makeDispatch();
-    const repo = makeEligibilityRepo({ findByFulfillmentId: jest.fn().mockResolvedValue(eligibility) });
-    const handler = new OnOutForDelivery(asDispatch(dispatch), repo);
+    const gateway = makeFulfillmentGateway();
+    const handler = new OnOutForDelivery(asDispatch(dispatch), gateway);
 
     await handler.handle(busEvent({ eventName: 'OutForDelivery', aggregateId: 'ful-1', riderId: 'rider-1' }));
 
@@ -156,21 +151,21 @@ describe('OnOutForDelivery', () => {
     expect(dto.recipientUserId).toBe('cust-1');
     expect(dto.templateKey).toBe('out_for_delivery');
     expect(dto.category).toBe(NOTIFICATION_CATEGORY.DELIVERY);
-    expect(dto.channel).toBe(NOTIFICATION_CHANNEL.PUSH);
+    expect(dto.channel).toBe(NOTIFICATION_CHANNEL.INBOX);
   });
 
-  it('skips and logs (does not dedupe) when eligibility is not yet seeded', async () => {
+  it('skips and logs (does not dedupe) when the fulfillment cannot be found', async () => {
     const dispatch = makeDispatch();
     const warnSpy = jest.spyOn(logger, 'warn').mockImplementation(() => logger);
-    const repo = makeEligibilityRepo({ findByFulfillmentId: jest.fn().mockResolvedValue(null) });
-    const handler = new OnOutForDelivery(asDispatch(dispatch), repo);
+    const gateway = makeFulfillmentGateway(null);
+    const handler = new OnOutForDelivery(asDispatch(dispatch), gateway);
 
     const event = busEvent({ eventName: 'OutForDelivery', aggregateId: 'ful-1', riderId: 'rider-1' });
     await handler.handle(event);
     await handler.handle(event);
 
     expect(dispatch.execute).not.toHaveBeenCalled();
-    expect(repo.findByFulfillmentId).toHaveBeenCalledTimes(2); // retried, not deduped
+    expect(gateway.getForReview).toHaveBeenCalledTimes(2); // retried, not deduped
     expect(warnSpy).toHaveBeenCalled();
     warnSpy.mockRestore();
   });
@@ -181,8 +176,8 @@ describe('OnOutForDelivery', () => {
       .mockResolvedValueOnce(Result.fail('boom'))
       .mockResolvedValueOnce(Result.ok({ outcome: 'DISPATCHED', dedupeKey: 'k' }));
     const errorSpy = jest.spyOn(logger, 'error').mockImplementation(() => logger);
-    const repo = makeEligibilityRepo({ findByFulfillmentId: jest.fn().mockResolvedValue(eligibility) });
-    const handler = new OnOutForDelivery(asDispatch(dispatch), repo);
+    const gateway = makeFulfillmentGateway();
+    const handler = new OnOutForDelivery(asDispatch(dispatch), gateway);
 
     const event = busEvent({ eventName: 'OutForDelivery', aggregateId: 'ful-1', riderId: 'rider-1' });
     await handler.handle(event);
@@ -193,24 +188,24 @@ describe('OnOutForDelivery', () => {
     errorSpy.mockRestore();
   });
 
-  it('is idempotent across redelivery once dispatched', async () => {
+  it('delegates every redelivery — de-duplication belongs to DispatchNotification', async () => {
     const dispatch = makeDispatch();
-    const repo = makeEligibilityRepo({ findByFulfillmentId: jest.fn().mockResolvedValue(eligibility) });
-    const handler = new OnOutForDelivery(asDispatch(dispatch), repo);
+    const gateway = makeFulfillmentGateway();
+    const handler = new OnOutForDelivery(asDispatch(dispatch), gateway);
 
     const event = busEvent({ eventName: 'OutForDelivery', aggregateId: 'ful-1', riderId: 'rider-1' });
     await handler.handle(event);
     await handler.handle(event);
 
-    expect(dispatch.execute).toHaveBeenCalledTimes(1);
+    expect(dispatch.execute).toHaveBeenCalledTimes(2);
   });
 });
 
 describe('OnFulfillmentCancelled', () => {
   it('dispatches order_cancelled with the reason var to the resolved customer (ORDER_UPDATES/PUSH)', async () => {
     const dispatch = makeDispatch();
-    const repo = makeEligibilityRepo({ findByFulfillmentId: jest.fn().mockResolvedValue(eligibility) });
-    const handler = new OnFulfillmentCancelled(asDispatch(dispatch), repo);
+    const gateway = makeFulfillmentGateway();
+    const handler = new OnFulfillmentCancelled(asDispatch(dispatch), gateway);
 
     await handler.handle(
       busEvent({ eventName: 'FulfillmentCancelled', aggregateId: 'ful-1', reason: 'restaurant_closed' })
@@ -220,22 +215,22 @@ describe('OnFulfillmentCancelled', () => {
     expect(dto.recipientUserId).toBe('cust-1');
     expect(dto.templateKey).toBe('order_cancelled');
     expect(dto.category).toBe(NOTIFICATION_CATEGORY.ORDER_UPDATES);
-    expect(dto.channel).toBe(NOTIFICATION_CHANNEL.PUSH);
+    expect(dto.channel).toBe(NOTIFICATION_CHANNEL.INBOX);
     expect(dto.vars).toMatchObject({ reason: 'restaurant_closed' });
   });
 
-  it('skips and logs (does not dedupe) when eligibility is not yet seeded', async () => {
+  it('skips and logs (does not dedupe) when the fulfillment cannot be found', async () => {
     const dispatch = makeDispatch();
     const warnSpy = jest.spyOn(logger, 'warn').mockImplementation(() => logger);
-    const repo = makeEligibilityRepo({ findByFulfillmentId: jest.fn().mockResolvedValue(null) });
-    const handler = new OnFulfillmentCancelled(asDispatch(dispatch), repo);
+    const gateway = makeFulfillmentGateway(null);
+    const handler = new OnFulfillmentCancelled(asDispatch(dispatch), gateway);
 
     const event = busEvent({ eventName: 'FulfillmentCancelled', aggregateId: 'ful-1', reason: 'x' });
     await handler.handle(event);
     await handler.handle(event);
 
     expect(dispatch.execute).not.toHaveBeenCalled();
-    expect(repo.findByFulfillmentId).toHaveBeenCalledTimes(2); // retried, not deduped
+    expect(gateway.getForReview).toHaveBeenCalledTimes(2); // retried, not deduped
     expect(warnSpy).toHaveBeenCalled();
     warnSpy.mockRestore();
   });
@@ -246,8 +241,8 @@ describe('OnFulfillmentCancelled', () => {
       .mockResolvedValueOnce(Result.fail('boom'))
       .mockResolvedValueOnce(Result.ok({ outcome: 'DISPATCHED', dedupeKey: 'k' }));
     const errorSpy = jest.spyOn(logger, 'error').mockImplementation(() => logger);
-    const repo = makeEligibilityRepo({ findByFulfillmentId: jest.fn().mockResolvedValue(eligibility) });
-    const handler = new OnFulfillmentCancelled(asDispatch(dispatch), repo);
+    const gateway = makeFulfillmentGateway();
+    const handler = new OnFulfillmentCancelled(asDispatch(dispatch), gateway);
 
     const event = busEvent({ eventName: 'FulfillmentCancelled', aggregateId: 'ful-1', reason: 'x' });
     await handler.handle(event);
@@ -258,15 +253,15 @@ describe('OnFulfillmentCancelled', () => {
     errorSpy.mockRestore();
   });
 
-  it('is idempotent across redelivery', async () => {
+  it('delegates every redelivery — de-duplication belongs to DispatchNotification', async () => {
     const dispatch = makeDispatch();
-    const repo = makeEligibilityRepo({ findByFulfillmentId: jest.fn().mockResolvedValue(eligibility) });
-    const handler = new OnFulfillmentCancelled(asDispatch(dispatch), repo);
+    const gateway = makeFulfillmentGateway();
+    const handler = new OnFulfillmentCancelled(asDispatch(dispatch), gateway);
 
     const event = busEvent({ eventName: 'FulfillmentCancelled', aggregateId: 'ful-1', reason: 'x' });
     await handler.handle(event);
     await handler.handle(event);
 
-    expect(dispatch.execute).toHaveBeenCalledTimes(1);
+    expect(dispatch.execute).toHaveBeenCalledTimes(2);
   });
 });

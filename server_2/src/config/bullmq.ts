@@ -1,15 +1,14 @@
 import type { ConnectionOptions, JobsOptions } from 'bullmq';
 import { getRedisConfig } from './redis';
 
+/**
+ * Two queues, one reason each: outbound HTTP that must retry with backoff (`email`), and
+ * delayed execution with no alternative mechanism (`fulfillment` — rider-offer expiry and
+ * SLA timeouts). Phase 8 removed `dead-letter-queue`; see `getDefaultJobOptions()`.
+ */
 export const QUEUE = {
   email: 'email-queue',
-  notification: 'notification-queue',
-  dlq: 'dead-letter-queue',
-  commerce: 'commerce-queue',
   fulfillment: 'fulfillment-queue',
-  searchReindex: 'search-reindex-queue',
-  ordering: 'ordering-queue',
-  payments: 'payments-queue',
 } as const;
 
 export type QueueName = (typeof QUEUE)[keyof typeof QUEUE];
@@ -34,6 +33,12 @@ export function getBullConnection(): ConnectionOptions {
   };
 }
 
+/**
+ * `removeOnFail: false` is what replaced the dead-letter queue in Phase 8. An exhausted job
+ * stays in `bull:<queue>:failed` with its payload, `failedReason` and `attemptsMade` — the
+ * whole of what `DeadLetterPayload` used to copy — and is readable via `queue.getFailed()`
+ * or the `f=` column in `ops/monitor.sh`. The old DLQ had three producers and no consumer.
+ */
 export function getDefaultJobOptions(): JobsOptions {
   return {
     attempts: 3,

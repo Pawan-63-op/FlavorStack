@@ -1,10 +1,9 @@
 import { test, expect } from "@playwright/test";
 import { login, flushRateLimits } from "./fixtures/seed";
 import { seedRestaurant } from "./fixtures/seed";
+import { isEnabled } from "./fixtures/flags";
 
-const NEARBY_ON =
-  process.env.NEXT_PUBLIC_FEATURE_NEARBY === "true" ||
-  process.env.NEXT_PUBLIC_FEATURE_NEARBY === "1";
+const NEARBY_ON = isEnabled("nearby");
 
 const SEED_LAT = 12.9716;
 const SEED_LNG = 77.5946;

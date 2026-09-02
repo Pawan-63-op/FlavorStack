@@ -3,15 +3,17 @@ import { ForgotPasswordDto } from '../../../../application/identity/dtos/ForgotP
 import { passwordResetOtpKey } from '../../../../application/identity/otp-keys';
 import {
   InMemoryUserRepository,
-  InMemoryOutboxStore,
   InMemoryUnitOfWork,
   InMemoryOtpStore,
   FakeOtpGenerator,
+  FakeEmailComposer,
+  FakeEmailQueue,
 } from '../../../mocks/identity.mocks';
 import { createEventBusSpy, EventBusSpy } from '../../../mocks/shared.mocks';
 import { Customer } from '../../../../domain/identity/entities/Customer';
 
 const FIXED_OTP = '999999';
+const APP_BASE_URL = 'https://app.flavorstack.test';
 
 function makeCustomer(): Customer {
   const customer = Customer.create({
@@ -30,8 +32,9 @@ describe('ForgotPassword use-case', () => {
   let otpGenerator: FakeOtpGenerator;
   let otpStore: InMemoryOtpStore;
   let unitOfWork: InMemoryUnitOfWork;
-  let outboxStore: InMemoryOutboxStore;
   let eventBus: EventBusSpy;
+  let emailQueue: FakeEmailQueue;
+  let emailComposer: FakeEmailComposer;
   let useCase: ForgotPassword;
 
   beforeEach(() => {
@@ -39,9 +42,19 @@ describe('ForgotPassword use-case', () => {
     otpGenerator = new FakeOtpGenerator(FIXED_OTP);
     otpStore = new InMemoryOtpStore();
     unitOfWork = new InMemoryUnitOfWork();
-    outboxStore = new InMemoryOutboxStore();
     eventBus = createEventBusSpy();
-    useCase = new ForgotPassword(userRepo, otpGenerator, otpStore, unitOfWork, outboxStore, eventBus);
+    emailQueue = new FakeEmailQueue();
+    emailComposer = new FakeEmailComposer();
+    useCase = new ForgotPassword(
+      userRepo,
+      otpGenerator,
+      otpStore,
+      unitOfWork,
+      eventBus,
+      emailQueue,
+      emailComposer,
+      APP_BASE_URL,
+    );
   });
 
   describe('success — known account', () => {
@@ -58,18 +71,69 @@ describe('ForgotPassword use-case', () => {
       expect(otpResult.isSuccess).toBe(true);
     });
 
-    it('appends PasswordResetRequested to the outbox and publishes it post-commit', async () => {
+    it('raises no domain event, so nothing is published', async () => {
       const customer = makeCustomer();
       await userRepo.save(customer);
 
       await useCase.execute({ email: customer.email });
 
-      expect(outboxStore.appended).toHaveLength(1);
-      expect(outboxStore.appended[0].eventName).toBe('PasswordResetRequested');
-      expect(outboxStore.appended[0].aggregateId).toBe(customer._id);
+      // Phase 6: this state change raises no domain event — it had no subscriber.
+      expect(eventBus.publishedEvents).toHaveLength(0);
+      expect(eventBus.publishedEvents).toHaveLength(0);
+    });
+  });
 
-      expect(eventBus.publishedEvents).toHaveLength(1);
-      expect(eventBus.publishedEvents[0].eventName).toBe('PasswordResetRequested');
+  describe('reset email', () => {
+    it('enqueues exactly one email carrying the issued code and the reset link', async () => {
+      const customer = makeCustomer();
+      await userRepo.save(customer);
+
+      await useCase.execute({ email: customer.email });
+
+      expect(emailComposer.calls).toEqual([
+        {
+          templateKey: 'password_reset',
+          vars: {
+            code: FIXED_OTP,
+            email: customer.email,
+            resetUrl: `${APP_BASE_URL}/reset-password?email=${encodeURIComponent(customer.email)}`,
+          },
+        },
+      ]);
+
+      expect(emailQueue.enqueued).toHaveLength(1);
+      const { job, opts } = emailQueue.enqueued[0];
+      expect(job.type).toBe('notification');
+      expect(job.to).toBe(customer.email);
+      expect(job.body).toContain(FIXED_OTP);
+      expect(job.body).toContain(`${APP_BASE_URL}/reset-password?email=`);
+      expect(opts?.jobId).toMatch(new RegExp(`^pwreset-${customer._id}-\\d+$`));
+    });
+
+    it('does not leak the code onto the domain event', async () => {
+      const customer = makeCustomer();
+      await userRepo.save(customer);
+
+      await useCase.execute({ email: customer.email });
+
+      expect(JSON.stringify(eventBus.publishedEvents)).not.toContain(FIXED_OTP);
+      expect(JSON.stringify(eventBus.publishedEvents)).not.toContain(FIXED_OTP);
+    });
+
+    it('enqueues nothing when the password_reset template is missing or inactive', async () => {
+      emailComposer.missingKeys.add('password_reset');
+      const customer = makeCustomer();
+      await userRepo.save(customer);
+
+      await useCase.execute({ email: customer.email });
+
+      expect(emailQueue.enqueued).toHaveLength(0);
+    });
+
+    it('sends no email for an unknown account', async () => {
+      await useCase.execute({ email: 'nobody@example.com' });
+
+      expect(emailQueue.enqueued).toHaveLength(0);
     });
   });
 
@@ -78,7 +142,7 @@ describe('ForgotPassword use-case', () => {
       const result = await useCase.execute({ email: 'nobody@example.com' });
 
       expect(result.isSuccess).toBe(true);
-      expect(outboxStore.appended).toHaveLength(0);
+      expect(eventBus.publishedEvents).toHaveLength(0);
       expect(eventBus.publishedEvents).toHaveLength(0);
     });
   });

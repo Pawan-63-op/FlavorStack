@@ -1,6 +1,6 @@
 import { PublishRestaurant } from '../../../../application/catalog/use-cases/PublishRestaurant';
 import { InMemoryRestaurantRepository } from '../../../mocks/catalog.mocks';
-import { InMemoryUnitOfWork, InMemoryOutboxStore } from '../../../mocks/identity.mocks';
+import { InMemoryUnitOfWork } from '../../../mocks/identity.mocks';
 import { createEventBusSpy, EventBusSpy } from '../../../mocks/shared.mocks';
 import { buildRestaurant, buildAddress } from './helpers';
 import { Restaurant } from '../../../../domain/catalog/entities/Restaurant';
@@ -28,16 +28,14 @@ function buildCategorylessRestaurant(): Restaurant {
 describe('PublishRestaurant use-case', () => {
   let restaurantRepo: InMemoryRestaurantRepository;
   let unitOfWork: InMemoryUnitOfWork;
-  let outboxStore: InMemoryOutboxStore;
   let eventBus: EventBusSpy;
   let useCase: PublishRestaurant;
 
   beforeEach(() => {
     restaurantRepo = new InMemoryRestaurantRepository();
     unitOfWork = new InMemoryUnitOfWork();
-    outboxStore = new InMemoryOutboxStore();
     eventBus = createEventBusSpy();
-    useCase = new PublishRestaurant(restaurantRepo, unitOfWork, outboxStore, eventBus);
+    useCase = new PublishRestaurant(restaurantRepo, unitOfWork, eventBus);
   });
 
   it('publishes a DRAFT restaurant with an active category and emits RestaurantStatusChanged', async () => {
@@ -48,8 +46,8 @@ describe('PublishRestaurant use-case', () => {
 
     expect(result.isSuccess).toBe(true);
     expect(result.getValue().status).toBe(RESTAURANT_STATUS.ACTIVE);
-    expect(outboxStore.appended).toHaveLength(1);
-    expect(outboxStore.appended[0].eventName).toBe('RestaurantStatusChanged');
+    expect(eventBus.publishedEvents).toHaveLength(1);
+    expect(eventBus.publishedEvents[0].eventName).toBe('RestaurantStatusChanged');
     expect(eventBus.publishedEvents).toHaveLength(1);
   });
 
@@ -64,7 +62,7 @@ describe('PublishRestaurant use-case', () => {
 
     const result = await useCase.execute({ restaurantId: restaurant.id.toString(), actorId: 'intruder' });
     expect(result.getError()).toBeInstanceOf(ForbiddenError);
-    expect(outboxStore.appended).toHaveLength(0);
+    expect(eventBus.publishedEvents).toHaveLength(0);
   });
 
   it('fails with ValidationError when there is no active category (publish invariant)', async () => {
@@ -75,7 +73,7 @@ describe('PublishRestaurant use-case', () => {
 
     expect(result.isFailure).toBe(true);
     expect(result.getError()).toBeInstanceOf(ValidationError);
-    expect(outboxStore.appended).toHaveLength(0);
+    expect(eventBus.publishedEvents).toHaveLength(0);
     expect(eventBus.publishedEvents).toHaveLength(0);
   });
 });

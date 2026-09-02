@@ -8,17 +8,18 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "test": "jest --runInBand src/tests/unit/domain/shared/ src/tests/unit/domain/identity/ src/tests/unit/domain/catalog/ src/tests/unit/application/identity/ src/tests/unit/application/catalog/ src/tests/unit/application/shared/ src/tests/unit/infrastructure/ src/tests/unit/config/ src/tests/unit/container/ src/tests/unit/api/ src/tests/unit/workers/ src/tests/unit/server.test.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.test.json",
+    "test": "jest --runInBand src/tests/unit/",
     "test:engagement": "jest --runInBand src/tests/unit/domain/engagement/ src/tests/unit/application/engagement/",
+    "test:fulfillment": "jest --runInBand src/tests/unit/domain/fulfillment/ src/tests/unit/application/fulfillment/",
     "test:integration": "jest --config jest.integration.config.ts --runInBand",
     "test:integration:redis": "jest --config jest.integration.redis.config.ts --runInBand",
     "test:e2e": "jest --config jest.e2e.config.ts --runInBand",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:coverage:catalog": "jest --config jest.coverage.catalog.config.ts --runInBand",
-    "worker:outbox": "WORKER_TYPE=outbox node dist/workers/index.js",
-    "worker:email": "WORKER_TYPE=email node dist/workers/index.js",
-    "worker:notification": "WORKER_TYPE=notification node dist/workers/index.js"
+    "worker:relay": "WORKER_TYPE=relay node dist/workers/index.js",
+    "worker:jobs": "WORKER_TYPE=jobs node dist/workers/index.js"
   },
   "keywords": [],
   "author": "",

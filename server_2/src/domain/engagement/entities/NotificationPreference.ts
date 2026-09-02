@@ -30,7 +30,7 @@ export class NotificationPreference extends AggregateRoot<NotificationPreference
     return this.props.updatedAt;
   }
 
-  /** All categories enabled on both channels; PROMOTIONS is push-only. */
+  /** All categories enabled on both channels; PROMOTIONS is inbox-only. */
   public static createDefault(userId: string, id?: UniqueEntityId): NotificationPreference {
     return new NotificationPreference(
       {
@@ -39,7 +39,7 @@ export class NotificationPreference extends AggregateRoot<NotificationPreference
           [NOTIFICATION_CATEGORY.ORDER_UPDATES]: ChannelToggle.allEnabled(),
           [NOTIFICATION_CATEGORY.DELIVERY]: ChannelToggle.allEnabled(),
           [NOTIFICATION_CATEGORY.SECURITY]: ChannelToggle.allEnabled(),
-          [NOTIFICATION_CATEGORY.PROMOTIONS]: ChannelToggle.pushOnly(),
+          [NOTIFICATION_CATEGORY.PROMOTIONS]: ChannelToggle.inboxOnly(),
         },
         updatedAt: new Date(),
       },

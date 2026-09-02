@@ -14,12 +14,11 @@ import { GeoPoint } from '../../../domain/identity/value-objects/GeoPoint.vo';
 import { getConnection } from '../../../infrastructure/database/connection';
 import { TransactionContext } from '../../../infrastructure/database/TransactionContext';
 import { MongoUnitOfWork } from '../../../infrastructure/database/MongoUnitOfWork';
-import { MongoOutboxStore } from '../../../infrastructure/database/MongoOutboxStore';
 import { MongoFulfillmentRepository } from '../../../infrastructure/repositories/FulfillmentRepository';
 import { SimpleDeliveryAssignmentService } from '../../../infrastructure/services/SimpleDeliveryAssignmentService';
 import { FulfillmentModel } from '../../../infrastructure/database/models/FulfillmentModel';
 import { OutboxEventModel } from '../../../infrastructure/database/models/OutboxEventModel';
-import { InMemoryEventBus } from '../../../application/shared/events/InMemoryEventBus';
+import { createEventBusSpy, EventBusSpy, countPublished } from '../../mocks/shared.mocks';
 
 import { AcceptDelivery } from '../../../application/fulfillment/use-cases/AcceptDelivery';
 import { OfferRiderAssignment } from '../../../application/fulfillment/use-cases/OfferRiderAssignment';
@@ -72,15 +71,13 @@ describe('Fulfillment concurrency hardening (Phase 9.3)', () => {
   let txContext: TransactionContext;
   let repo: MongoFulfillmentRepository;
   let uow: MongoUnitOfWork;
-  let outbox: MongoOutboxStore;
-  let bus: InMemoryEventBus;
+  let bus: EventBusSpy;
 
   beforeEach(() => {
     txContext = new TransactionContext();
     repo = new MongoFulfillmentRepository(txContext);
     uow = new MongoUnitOfWork(getConnection(), txContext);
-    outbox = new MongoOutboxStore(txContext);
-    bus = new InMemoryEventBus();
+    bus = createEventBusSpy();
   });
 
   afterEach(async () => {
@@ -230,7 +227,7 @@ describe('Fulfillment concurrency hardening (Phase 9.3)', () => {
       ]);
       const baseVersion = await storedVersion(id);
 
-      const accept = new AcceptDelivery(repo, uow, outbox, bus);
+      const accept = new AcceptDelivery(repo, uow, bus);
       const settled = await Promise.allSettled([
         accept.execute({ fulfillmentId: id, riderId: RIDER_1 }),
         accept.execute({ fulfillmentId: id, riderId: RIDER_1 }),
@@ -249,7 +246,7 @@ describe('Fulfillment concurrency hardening (Phase 9.3)', () => {
       const reloaded = (await repo.findById(id)) as Fulfillment;
       expect(reloaded.currentAssignment!.status.value).toBe(RIDER_ASSIGNMENT_STATUS.ACCEPTED);
       expect(await storedVersion(id)).toBe(baseVersion + 1); // single commit
-      expect(await OutboxEventModel.countDocuments({ eventName: 'RiderAssigned' })).toBe(1);
+      expect(countPublished(bus, 'RiderAssigned')).toBe(1);
     });
   });
 
@@ -294,9 +291,9 @@ describe('Fulfillment concurrency hardening (Phase 9.3)', () => {
   describe('replay safety — assignment-timeout job (HandleAssignmentTimeout)', () => {
     function buildTimeoutHandler(): HandleAssignmentTimeout {
       const service = new SimpleDeliveryAssignmentService(async () => []);
-      const offer = new OfferRiderAssignment(repo, service, uow, outbox, bus, 60);
-      const cancel = new CancelFulfillment(repo, uow, outbox, bus);
-      return new HandleAssignmentTimeout(repo, uow, outbox, bus, offer, cancel, 1);
+      const offer = new OfferRiderAssignment(repo, service, uow, bus, 60);
+      const cancel = new CancelFulfillment(repo, uow, bus);
+      return new HandleAssignmentTimeout(repo, uow, bus, offer, cancel, 1);
     }
 
     it('first run expires the offer (and exhausts → cancels); a replay is a guarded no-op', async () => {
@@ -314,12 +311,15 @@ describe('Fulfillment concurrency hardening (Phase 9.3)', () => {
       const afterFirst = (await repo.findById(id)) as Fulfillment;
       expect(afterFirst.fulfillmentStatus.value).toBe(FULFILLMENT_STATUS.CANCELLED); // exhausted → cancelled
       const versionAfterFirst = await storedVersion(id);
-      expect(await OutboxEventModel.countDocuments({ eventName: 'RiderAssignmentExpired' })).toBe(1);
+      // Phase 6 deleted `RiderAssignmentExpired` (zero subscribers); `assignmentHistory` is now the
+      // observable proof that the expiry ran, and ran exactly once.
+      expect(afterFirst.assignmentHistory.map((a) => a.status.value)).toEqual([RIDER_ASSIGNMENT_STATUS.EXPIRED]);
 
       const replay = await handler.execute({ fulfillmentId: id, attempt: 1 });
       expect(replay.isSuccess).toBe(true);
       expect(await storedVersion(id)).toBe(versionAfterFirst); // no further version bump
-      expect(await OutboxEventModel.countDocuments({ eventName: 'RiderAssignmentExpired' })).toBe(1);
+      const afterReplay = (await repo.findById(id)) as Fulfillment;
+      expect(afterReplay.assignmentHistory.map((a) => a.status.value)).toEqual([RIDER_ASSIGNMENT_STATUS.EXPIRED]);
     });
 
     it('a stale-attempt timeout job on an already-accepted offer is a no-op', async () => {
@@ -338,14 +338,14 @@ describe('Fulfillment concurrency hardening (Phase 9.3)', () => {
       const reloaded = (await repo.findById(id)) as Fulfillment;
       expect(reloaded.currentAssignment!.status.value).toBe(RIDER_ASSIGNMENT_STATUS.ACCEPTED);
       expect(await storedVersion(id)).toBe(baseVersion); // untouched
-      expect(await OutboxEventModel.countDocuments({ eventName: 'RiderAssignmentExpired' })).toBe(0);
+      expect(reloaded.assignmentHistory).toHaveLength(0); // nothing was swept to history
     });
   });
 
   describe('replay safety — SLA-timeout job (HandleSlaTimeout)', () => {
     it('first run auto-cancels at the armed stage; a replay is a guarded no-op', async () => {
       const id = await seed([(f) => f.startPreparation(RESTAURANT_ID)]);
-      const cancel = new CancelFulfillment(repo, uow, outbox, bus);
+      const cancel = new CancelFulfillment(repo, uow, bus);
       const handler = new HandleSlaTimeout(repo, cancel);
 
       const first = await handler.execute({ fulfillmentId: id, stage: FULFILLMENT_STATUS.PREPARING });
@@ -354,12 +354,12 @@ describe('Fulfillment concurrency hardening (Phase 9.3)', () => {
       const afterFirst = (await repo.findById(id)) as Fulfillment;
       expect(afterFirst.fulfillmentStatus.value).toBe(FULFILLMENT_STATUS.CANCELLED);
       const versionAfterFirst = await storedVersion(id);
-      expect(await OutboxEventModel.countDocuments({ eventName: 'FulfillmentCancelled' })).toBe(1);
+      expect(countPublished(bus, 'FulfillmentCancelled')).toBe(1);
 
       const replay = await handler.execute({ fulfillmentId: id, stage: FULFILLMENT_STATUS.PREPARING });
       expect(replay.isSuccess).toBe(true);
       expect(await storedVersion(id)).toBe(versionAfterFirst);
-      expect(await OutboxEventModel.countDocuments({ eventName: 'FulfillmentCancelled' })).toBe(1);
+      expect(countPublished(bus, 'FulfillmentCancelled')).toBe(1);
     });
 
     it('SLA job whose stage was already advanced past is a no-op (SLA met)', async () => {
@@ -368,7 +368,7 @@ describe('Fulfillment concurrency hardening (Phase 9.3)', () => {
         (f) => f.markReadyForPickup(RESTAURANT_ID),
       ]);
       const baseVersion = await storedVersion(id);
-      const cancel = new CancelFulfillment(repo, uow, outbox, bus);
+      const cancel = new CancelFulfillment(repo, uow, bus);
       const handler = new HandleSlaTimeout(repo, cancel);
 
       const result = await handler.execute({ fulfillmentId: id, stage: FULFILLMENT_STATUS.PREPARING });
@@ -377,7 +377,7 @@ describe('Fulfillment concurrency hardening (Phase 9.3)', () => {
       const reloaded = (await repo.findById(id)) as Fulfillment;
       expect(reloaded.fulfillmentStatus.value).toBe(FULFILLMENT_STATUS.READY_FOR_PICKUP);
       expect(await storedVersion(id)).toBe(baseVersion);
-      expect(await OutboxEventModel.countDocuments({ eventName: 'FulfillmentCancelled' })).toBe(0);
+      expect(countPublished(bus, 'FulfillmentCancelled')).toBe(0);
     });
   });
 

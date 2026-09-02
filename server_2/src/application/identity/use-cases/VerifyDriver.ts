@@ -6,7 +6,6 @@ import { IUserRepository } from '../../../domain/identity/repositories/IUserRepo
 import { Driver } from '../../../domain/identity/entities/Driver';
 import { DRIVER_STATUS } from '../../../domain/identity/enums/driver-status.enum';
 import { IUnitOfWork } from '../../shared/ports/IUnitOfWork';
-import { IOutboxStore } from '../../shared/outbox/IOutboxStore';
 import { IEventBus } from '../../shared/events/IEventBus';
 
 export interface VerifyDriverDto {
@@ -23,7 +22,6 @@ export class VerifyDriver {
   constructor(
     private readonly userRepo: IUserRepository,
     private readonly unitOfWork: IUnitOfWork,
-    private readonly outboxStore: IOutboxStore,
     private readonly eventBus: IEventBus,
   ) {}
 
@@ -37,12 +35,11 @@ export class VerifyDriver {
       user.driverStatus === DRIVER_STATUS.SUSPENDED;
     if (!isVerifiable) return Result.fail(new ConflictError('driver_already_verified'));
 
-    user.verifyDriver(); // raises DriverVerified
+    user.verifyDriver();
     const events = user.pullDomainEvents();
 
-    await this.unitOfWork.runInTransaction(async (ctx) => {
+    await this.unitOfWork.runInTransaction(async () => {
       await this.userRepo.update(user);
-      await this.outboxStore.append(events, ctx);
     });
 
     await this.eventBus.publishAll(events);

@@ -104,6 +104,46 @@ function buildFakeApp() {
     },
   };
 
+  const fulfillment = {
+    acceptDelivery: mockUseCase(),
+    cancelFulfillment: mockUseCase(),
+    completeDelivery: mockUseCase(),
+    confirmPickup: mockUseCase(),
+    failDelivery: mockUseCase(),
+    getAdminDashboard: mockUseCase(),
+    getDashboardAnalytics: mockUseCase(),
+    getLiveTracking: mockUseCase(),
+    getRestaurantFulfillments: mockUseCase(),
+    getRiderDeliveryHistory: mockUseCase(),
+    getRiderQueue: mockUseCase(),
+    listCustomerOrders: mockUseCase(),
+    markPreparing: mockUseCase(),
+    markReadyForPickup: mockUseCase(),
+    reassignRider: mockUseCase(),
+    recordRiderLocation: mockUseCase(),
+    rejectDelivery: mockUseCase(),
+    startDelivery: mockUseCase(),
+  };
+
+  const engagement = {
+    getMyReviews: mockUseCase(),
+    getNotificationHistory: mockUseCase(),
+    getNotificationPreferences: mockUseCase(),
+    getRestaurantRating: mockUseCase(),
+    getRestaurantReviews: mockUseCase(),
+    getUnreadCount: mockUseCase(),
+    listPendingReviews: mockUseCase(),
+    markNotificationRead: mockUseCase(),
+    moderateReview: mockUseCase(),
+    submitReview: mockUseCase(),
+    updateNotificationPreferences: mockUseCase(),
+  };
+
+  // `/health` probes these two directly off the container — see health.routes.ts.
+  const command = jest.fn().mockResolvedValue({ ok: 1 });
+  const connection = { db: { admin: () => ({ command }) } };
+  const redisClient = { ping: jest.fn().mockResolvedValue(true) };
+
   const app = {
     identity: { userRepository },
     auth: { tokenService, rateLimiter, rbacService },
@@ -111,9 +151,13 @@ function buildFakeApp() {
     catalogWrite,
     catalogRead,
     commerce,
+    fulfillment,
+    engagement,
+    connection,
+    redisClient,
   } as unknown as AppContainer;
 
-  return { app, useCases, tokenService, rateLimiter, userRepository };
+  return { app, useCases, tokenService, rateLimiter, userRepository, command, redisClient };
 }
 
 const AUTH_RESPONSE: AuthResponse = {
@@ -166,13 +210,45 @@ describe('createApp', () => {
     expect(res.body.error.requestId).toBeTruthy();
   });
 
-  it('returns 404 for unmounted /api/v1/health (controller not yet wired)', async () => {
+  it('does not mount health under the versioned API — it lives at the root', async () => {
     const { app } = buildFakeApp();
     const expressApp = createApp(app);
 
     const res = await request(expressApp).get('/api/v1/health');
 
     expect(res.status).toBe(404);
+  });
+
+  it('serves GET /health with both dependency checks ok', async () => {
+    const { app } = buildFakeApp();
+    const expressApp = createApp(app);
+
+    const res = await request(expressApp).get('/health');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ status: 'ok', checks: { mongo: true, redis: true } });
+    expect(typeof res.body.uptimeSeconds).toBe('number');
+  });
+
+  it('returns 503 from /health with the same body shape when a dependency is down', async () => {
+    const { app, redisClient } = buildFakeApp();
+    redisClient.ping.mockResolvedValue(false);
+    const expressApp = createApp(app);
+
+    const res = await request(expressApp).get('/health');
+
+    expect(res.status).toBe(503);
+    expect(res.body.checks).toEqual({ mongo: true, redis: false });
+  });
+
+  it('serves GET /metrics as Prometheus text', async () => {
+    const { app } = buildFakeApp();
+    const expressApp = createApp(app);
+
+    const res = await request(expressApp).get('/metrics');
+
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('text/plain');
   });
 
   it('rejects an invalid login body with 422 VALIDATION_ERROR', async () => {

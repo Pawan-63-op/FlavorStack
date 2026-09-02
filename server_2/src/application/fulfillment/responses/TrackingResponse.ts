@@ -1,4 +1,4 @@
-import { CustomerTrackingView } from '../../../domain/fulfillment/repositories/IFulfillmentProjectionRepository';
+import { CustomerTrackingView } from '../../../domain/fulfillment/repositories/ICustomerTrackingRepository';
 
 export interface TrackingTimelineEntryResponse {
   status: string;

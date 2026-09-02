@@ -11,10 +11,44 @@ import { Admin } from '../../../domain/identity/entities/Admin';
 import { Notification } from '../../../domain/engagement/entities/Notification';
 import { NOTIFICATION_CATEGORY } from '../../../domain/engagement/enums/notification-category.enum';
 import { NOTIFICATION_CHANNEL } from '../../../domain/engagement/enums/notification-channel.enum';
+import { FulfillmentModel } from '../../../infrastructure/database/models/FulfillmentModel';
+import { FULFILLMENT_STATUS } from '../../../domain/fulfillment/enums/fulfillment-status.enum';
 
 jest.setTimeout(180000);
 
 const ORIGINAL_ENV = { ...process.env };
+
+/**
+ * Review eligibility is read off the `fulfillments` aggregate (Phase 4), so a reviewable
+ * order is a DELIVERED fulfillment row rather than a `review_eligibility` seed.
+ */
+async function seedDeliveredFulfillment(args: {
+  fulfillmentId: string;
+  customerId: string;
+  restaurantId: string;
+}): Promise<void> {
+  const now = new Date();
+  await FulfillmentModel.create({
+    _id: args.fulfillmentId,
+    orderRequestId: `ord-${randomUUID().slice(0, 8)}`,
+    customerId: args.customerId,
+    restaurantId: args.restaurantId,
+    lines: [],
+    deliveryAddress: {
+      street: '1 Test St',
+      city: 'Pune',
+      state: 'MH',
+      pinCode: '411001',
+      coordinates: { lat: 18.52, lng: 73.85 },
+    },
+    pricingTotal: { amount: 2599, currency: 'INR' },
+    fulfillmentStatus: FULFILLMENT_STATUS.DELIVERED,
+    deliveryStatus: 'UNASSIGNED',
+    createdAt: now,
+    updatedAt: now,
+    deliveredAt: now,
+  });
+}
 
 function extractCookie(res: request.Response, name: string): string {
   const setCookie = (res.headers['set-cookie'] ?? []) as unknown as string[];
@@ -56,7 +90,6 @@ describe('Engagement API e2e (Phase 5)', () => {
 
     app = await bootstrap();
     app.auth.emailProvider.sendVerification = jest.fn().mockResolvedValue(undefined);
-    app.auth.emailProvider.sendPasswordReset = jest.fn().mockResolvedValue(undefined);
     app.auth.emailProvider.sendNotification = jest.fn().mockResolvedValue(undefined);
 
     server = createApp(app);
@@ -128,7 +161,7 @@ describe('Engagement API e2e (Phase 5)', () => {
     const notification = Notification.queue({
       recipientUserId: customerId,
       category: NOTIFICATION_CATEGORY.ORDER_UPDATES,
-      channel: NOTIFICATION_CHANNEL.PUSH,
+      channel: NOTIFICATION_CHANNEL.INBOX,
       templateKey: 'order_confirmed',
       renderedTitle: 'Order confirmed',
       renderedBody: 'Your order has been confirmed.',
@@ -176,14 +209,8 @@ describe('Engagement API e2e (Phase 5)', () => {
   let approvedReviewId: string;
   const approvedFulfillmentId = `ful-${randomUUID().slice(0, 8)}`;
 
-  it('submits a review once eligibility is seeded as delivered', async () => {
-    await app.engagement.eligibilityRepository.upsert({
-      fulfillmentId: approvedFulfillmentId,
-      customerId,
-      restaurantId,
-      deliveredAt: new Date(),
-      reviewed: false,
-    });
+  it('submits a review once the fulfillment is delivered', async () => {
+    await seedDeliveredFulfillment({ fulfillmentId: approvedFulfillmentId, customerId, restaurantId });
 
     const res = await agent
       .post(`/api/v1/restaurants/${restaurantId}/reviews`)
@@ -221,13 +248,7 @@ describe('Engagement API e2e (Phase 5)', () => {
   let rejectedReviewId: string;
 
   it('admin rejects a second review and the rating is unaffected', async () => {
-    await app.engagement.eligibilityRepository.upsert({
-      fulfillmentId: rejectedFulfillmentId,
-      customerId,
-      restaurantId,
-      deliveredAt: new Date(),
-      reviewed: false,
-    });
+    await seedDeliveredFulfillment({ fulfillmentId: rejectedFulfillmentId, customerId, restaurantId });
 
     const submit = await agent
       .post(`/api/v1/restaurants/${restaurantId}/reviews`)
@@ -250,13 +271,7 @@ describe('Engagement API e2e (Phase 5)', () => {
 
   it('lists pending/auto-flagged reviews for the admin moderation queue', async () => {
     const flaggedFulfillmentId = `ful-${randomUUID().slice(0, 8)}`;
-    await app.engagement.eligibilityRepository.upsert({
-      fulfillmentId: flaggedFulfillmentId,
-      customerId,
-      restaurantId,
-      deliveredAt: new Date(),
-      reviewed: false,
-    });
+    await seedDeliveredFulfillment({ fulfillmentId: flaggedFulfillmentId, customerId, restaurantId });
     const submit = await agent
       .post(`/api/v1/restaurants/${restaurantId}/reviews`)
       .set('Cookie', customerCookie)

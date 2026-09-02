@@ -4,13 +4,11 @@ import { ICustomerRepository } from '../domain/identity/repositories/ICustomerRe
 import { IDriverRepository } from '../domain/identity/repositories/IDriverRepository';
 import { IAdminRepository } from '../domain/identity/repositories/IAdminRepository';
 import { IUnitOfWork } from '../application/shared/ports/IUnitOfWork';
-import { IOutboxStore } from '../application/shared/outbox/IOutboxStore';
 import { MongoUserRepository } from '../infrastructure/repositories/UserRepository';
 import { MongoCustomerRepository } from '../infrastructure/repositories/CustomerRepository';
 import { MongoDriverRepository } from '../infrastructure/repositories/DriverRepository';
 import { MongoAdminRepository } from '../infrastructure/repositories/AdminRepository';
 import { MongoUnitOfWork } from '../infrastructure/database/MongoUnitOfWork';
-import { MongoOutboxStore } from '../infrastructure/database/MongoOutboxStore';
 import { MongoOutboxRepository } from '../infrastructure/repositories/OutboxRepository';
 import { TransactionContext } from '../infrastructure/database/TransactionContext';
 
@@ -20,7 +18,6 @@ export interface IdentityContainer {
   driverRepository: IDriverRepository;
   adminRepository: IAdminRepository;
   unitOfWork: IUnitOfWork;
-  outboxStore: IOutboxStore;
   outboxRepository: MongoOutboxRepository;
 }
 
@@ -28,7 +25,7 @@ export interface IdentityContainer {
  * Wires every Identity repository interface and persistence port to its Mongo
  * implementation. All seven components share a single `TransactionContext` so
  * `unitOfWork.runInTransaction(...)` transparently propagates its session to
- * the repositories and the outbox store/repository constructed here.
+ * the repositories and the outbox repository (the relay read side) constructed here.
  */
 export function createIdentityContainer(connection: Connection): IdentityContainer {
   const txContext = new TransactionContext();
@@ -39,7 +36,6 @@ export function createIdentityContainer(connection: Connection): IdentityContain
     driverRepository: new MongoDriverRepository(txContext),
     adminRepository: new MongoAdminRepository(txContext),
     unitOfWork: new MongoUnitOfWork(connection, txContext),
-    outboxStore: new MongoOutboxStore(txContext),
     outboxRepository: new MongoOutboxRepository(txContext),
   };
 }

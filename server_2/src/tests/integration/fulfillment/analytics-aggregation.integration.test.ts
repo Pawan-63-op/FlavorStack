@@ -1,6 +1,6 @@
-import { MongoFulfillmentProjectionRepository } from '../../../infrastructure/repositories/FulfillmentProjectionRepository';
-import { AnalyticsQuery } from '../../../domain/fulfillment/repositories/IFulfillmentProjectionRepository';
-import { AdminDashboardViewModel } from '../../../infrastructure/database/models/AdminDashboardViewModel';
+import { MongoFulfillmentQueryRepository } from '../../../infrastructure/repositories/FulfillmentQueryRepository';
+import { AnalyticsQuery } from '../../../domain/fulfillment/repositories/IFulfillmentQueryRepository';
+import { FulfillmentModel } from '../../../infrastructure/database/models/FulfillmentModel';
 
 const R1 = 'an-rest-1';
 const R2 = 'an-rest-2';
@@ -17,22 +17,31 @@ interface SeedView {
   createdAt: string;
 }
 
+/** A `fulfillments` document — the analytics aggregation reads source of truth now. */
 function seedDoc(v: SeedView): Record<string, unknown> {
   return {
     _id: v.id,
     orderRequestId: `or-${v.id}`,
     customerId: 'cust-1',
     restaurantId: v.restaurantId,
-    status: v.status,
-    deliveryStatus: 'NONE',
-    riderId: null,
-    createdAt: new Date(v.createdAt),
-    updatedAt: new Date(v.createdAt),
-    slaBreached: false,
-    exceptionFlag: false,
+    lines: [],
+    deliveryAddress: {
+      street: 's',
+      city: 'c',
+      state: 'st',
+      pinCode: '1',
+      coordinates: { lat: 0, lng: 0 },
+    },
+    pricingTotal: { amount: v.amount, currency: 'INR' },
+    fulfillmentStatus: v.status,
+    deliveryStatus: 'UNASSIGNED',
+    currentAssignment: null,
+    assignmentHistory: [],
     cancellation: null,
     failureReason: null,
-    total: { amount: v.amount, currency: 'INR' },
+    createdAt: new Date(v.createdAt),
+    updatedAt: new Date(v.createdAt),
+    version: 0,
   };
 }
 
@@ -53,16 +62,16 @@ function statusMap(buckets: Array<{ status: string; count: number }>): Record<st
   return Object.fromEntries(buckets.map((b) => [b.status, b.count]));
 }
 
-describe('MongoFulfillmentProjectionRepository.aggregateAnalytics (G13)', () => {
-  const repo = new MongoFulfillmentProjectionRepository();
+describe('MongoFulfillmentQueryRepository.aggregateAnalytics (G13)', () => {
+  const repo = new MongoFulfillmentQueryRepository();
 
   beforeAll(async () => {
-    await AdminDashboardViewModel.deleteMany({});
-    await AdminDashboardViewModel.insertMany(SEED.map(seedDoc));
+    await FulfillmentModel.deleteMany({});
+    await FulfillmentModel.insertMany(SEED.map(seedDoc));
   });
 
   afterAll(async () => {
-    await AdminDashboardViewModel.deleteMany({});
+    await FulfillmentModel.deleteMany({});
   });
 
   it('aggregates platform-wide (no restaurant filter)', async () => {

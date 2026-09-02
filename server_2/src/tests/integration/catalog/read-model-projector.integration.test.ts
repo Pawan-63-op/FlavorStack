@@ -12,8 +12,9 @@ import { CatalogProjectionWriter } from '../../../infrastructure/database/projec
 import { RestaurantModel } from '../../../infrastructure/database/models/RestaurantModel';
 import { MenuItemModel } from '../../../infrastructure/database/models/MenuItemModel';
 import { RestaurantSummaryModel } from '../../../infrastructure/database/models/RestaurantSummaryModel';
-import { RestaurantMenuViewModel } from '../../../infrastructure/database/models/RestaurantMenuViewModel';
 import { MenuItemSearchModel } from '../../../infrastructure/database/models/MenuItemSearchModel';
+import { MongoCatalogReadRepository } from '../../../infrastructure/repositories/CatalogReadRepository';
+import { MongoCatalogQueryRepository } from '../../../infrastructure/repositories/CatalogQueryRepository';
 import { InMemoryEventBus } from '../../../application/shared/events/InMemoryEventBus';
 import { CatalogProjector } from '../../../application/catalog/handlers/CatalogProjector';
 import { registerCatalogProjector } from '../../../application/catalog/handlers/CatalogProjectionRegistry';
@@ -36,6 +37,9 @@ describe('CatalogProjector (read-model projections)', () => {
   let menuItemRepo: MongoMenuItemRepository;
   let projector: CatalogProjector;
   let bus: InMemoryEventBus;
+  // The menu is no longer projected — it is assembled from `restaurants` + `menu_items`
+  // on read, so these cases assert through the read repository instead of a collection.
+  const readRepo = new MongoCatalogReadRepository(new MongoCatalogQueryRepository());
 
   beforeEach(() => {
     txContext = new TransactionContext();
@@ -51,7 +55,6 @@ describe('CatalogProjector (read-model projections)', () => {
       RestaurantModel.deleteMany({}),
       MenuItemModel.deleteMany({}),
       RestaurantSummaryModel.deleteMany({}),
-      RestaurantMenuViewModel.deleteMany({}),
       MenuItemSearchModel.deleteMany({}),
     ]);
   });
@@ -66,7 +69,7 @@ describe('CatalogProjector (read-model projections)', () => {
     await bus.publishAll(item.pullDomainEvents());
   }
 
-  it('builds restaurant_summary and restaurant_menu_view from restaurant events', async () => {
+  it('builds restaurant_summary from restaurant events and serves an empty menu', async () => {
     const restaurant = makeActivePublic(uniqueSlug());
     const id = restaurant.id.toString();
     await persistAndProject(restaurant);
@@ -77,14 +80,14 @@ describe('CatalogProjector (read-model projections)', () => {
     expect(summary?.visibility).toBe(CATALOG_VISIBILITY.PUBLIC);
     expect(summary?.slug).toBe(restaurant.slug);
 
-    const menuView = await RestaurantMenuViewModel.findById(id).lean();
-    expect(menuView).not.toBeNull();
-    expect(menuView?.categories).toHaveLength(1);
-    expect(menuView?.categories[0].label).toBe('Starters');
-    expect(menuView?.categories[0].items).toHaveLength(0);
+    const menu = await readRepo.getRestaurantMenu(id);
+    expect(menu).not.toBeNull();
+    expect(menu?.categories).toHaveLength(1);
+    expect(menu?.categories[0].label).toBe('Starters');
+    expect(menu?.categories[0].items).toHaveLength(0);
   });
 
-  it('projects a created menu item into menu_view and menu_item_search', async () => {
+  it('serves a created menu item on the menu and projects it into menu_item_search', async () => {
     const restaurant = makeActivePublic(uniqueSlug());
     const id = restaurant.id.toString();
     const categoryId = restaurant.categories[0].id.toString();
@@ -93,9 +96,9 @@ describe('CatalogProjector (read-model projections)', () => {
     const item = buildMenuItem({ restaurantId: id, categoryId });
     await persistAndProjectItem(item);
 
-    const menuView = await RestaurantMenuViewModel.findById(id).lean();
-    expect(menuView?.categories[0].items).toHaveLength(1);
-    expect(menuView?.categories[0].items[0].name).toBe('Paneer Tikka');
+    const menu = await readRepo.getRestaurantMenu(id);
+    expect(menu?.categories[0].items).toHaveLength(1);
+    expect(menu?.categories[0].items[0].name).toBe('Paneer Tikka');
 
     const search = await MenuItemSearchModel.findById(item.id.toString()).lean();
     expect(search).not.toBeNull();
@@ -121,8 +124,8 @@ describe('CatalogProjector (read-model projections)', () => {
 
     const search = await MenuItemSearchModel.findById(item.id.toString()).lean();
     expect(search?.isAvailable).toBe(false);
-    const menuView = await RestaurantMenuViewModel.findById(id).lean();
-    expect(menuView?.categories[0].items[0].isAvailable).toBe(false);
+    const menu = await readRepo.getRestaurantMenu(id);
+    expect(menu?.categories[0].items[0].isAvailable).toBe(false);
   });
 
   it('drops removed items from menu_item_search on rebuild', async () => {
@@ -140,8 +143,8 @@ describe('CatalogProjector (read-model projections)', () => {
     await projector.rebuild(id);
 
     expect(await MenuItemSearchModel.countDocuments({ restaurantId: id })).toBe(0);
-    const menuView = await RestaurantMenuViewModel.findById(id).lean();
-    expect(menuView?.categories[0].items).toHaveLength(0);
+    const menu = await readRepo.getRestaurantMenu(id);
+    expect(menu?.categories[0].items).toHaveLength(0);
   });
 
   it('tombstones projections when the restaurant is soft-deleted', async () => {
@@ -156,7 +159,6 @@ describe('CatalogProjector (read-model projections)', () => {
 
     const summary = await RestaurantSummaryModel.findById(id).lean();
     expect(summary?.deletedAt).not.toBeNull();
-    const menuView = await RestaurantMenuViewModel.findById(id).lean();
-    expect(menuView?.deletedAt).not.toBeNull();
+    expect(await readRepo.getRestaurantMenu(id)).toBeNull();
   });
 });

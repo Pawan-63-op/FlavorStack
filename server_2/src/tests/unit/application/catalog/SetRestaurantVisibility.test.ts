@@ -1,6 +1,6 @@
 import { SetRestaurantVisibility } from '../../../../application/catalog/use-cases/SetRestaurantVisibility';
 import { InMemoryRestaurantRepository } from '../../../mocks/catalog.mocks';
-import { InMemoryUnitOfWork, InMemoryOutboxStore } from '../../../mocks/identity.mocks';
+import { InMemoryUnitOfWork } from '../../../mocks/identity.mocks';
 import { createEventBusSpy, EventBusSpy } from '../../../mocks/shared.mocks';
 import { buildRestaurant } from './helpers';
 import { CATALOG_VISIBILITY } from '../../../../domain/catalog/enums/catalog-visibility.enum';
@@ -11,16 +11,14 @@ import { ValidationError } from '../../../../domain/shared/errors/ValidationErro
 describe('SetRestaurantVisibility use-case', () => {
   let restaurantRepo: InMemoryRestaurantRepository;
   let unitOfWork: InMemoryUnitOfWork;
-  let outboxStore: InMemoryOutboxStore;
   let eventBus: EventBusSpy;
   let useCase: SetRestaurantVisibility;
 
   beforeEach(() => {
     restaurantRepo = new InMemoryRestaurantRepository();
     unitOfWork = new InMemoryUnitOfWork();
-    outboxStore = new InMemoryOutboxStore();
     eventBus = createEventBusSpy();
-    useCase = new SetRestaurantVisibility(restaurantRepo, unitOfWork, outboxStore, eventBus);
+    useCase = new SetRestaurantVisibility(restaurantRepo, unitOfWork, eventBus);
   });
 
   it('sets restaurant visibility to PUBLIC', async () => {
@@ -39,8 +37,8 @@ describe('SetRestaurantVisibility use-case', () => {
     const updated = await restaurantRepo.findById(restaurant.id.toString());
     expect(updated!.visibility.value).toBe(CATALOG_VISIBILITY.PUBLIC);
 
-    expect(outboxStore.appended).toHaveLength(1);
-    expect(outboxStore.appended[0].eventName).toBe('RestaurantUpdated');
+    expect(eventBus.publishedEvents).toHaveLength(1);
+    expect(eventBus.publishedEvents[0].eventName).toBe('RestaurantUpdated');
     expect(eventBus.publishedEvents).toHaveLength(1);
   });
 
@@ -81,7 +79,7 @@ describe('SetRestaurantVisibility use-case', () => {
 
     expect(result.isFailure).toBe(true);
     expect(result.getError()).toBeInstanceOf(ValidationError);
-    expect(outboxStore.appended).toHaveLength(0);
+    expect(eventBus.publishedEvents).toHaveLength(0);
     expect(eventBus.publishedEvents).toHaveLength(0);
   });
 });

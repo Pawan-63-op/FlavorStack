@@ -2,7 +2,6 @@ import { BanUser } from '../../../../application/identity/use-cases/BanUser';
 import { BanUserDto } from '../../../../application/identity/dtos/BanUserDto';
 import {
   InMemoryUserRepository,
-  InMemoryOutboxStore,
   InMemoryUnitOfWork,
   InMemorySessionStore,
 } from '../../../mocks/identity.mocks';
@@ -48,7 +47,6 @@ describe('BanUser use-case', () => {
   let userRepo: InMemoryUserRepository;
   let sessionStore: InMemorySessionStore;
   let unitOfWork: InMemoryUnitOfWork;
-  let outboxStore: InMemoryOutboxStore;
   let eventBus: EventBusSpy;
   let useCase: BanUser;
 
@@ -56,9 +54,8 @@ describe('BanUser use-case', () => {
     userRepo = new InMemoryUserRepository();
     sessionStore = new InMemorySessionStore();
     unitOfWork = new InMemoryUnitOfWork();
-    outboxStore = new InMemoryOutboxStore();
     eventBus = createEventBusSpy();
-    useCase = new BanUser(userRepo, sessionStore, unitOfWork, outboxStore, eventBus);
+    useCase = new BanUser(userRepo, sessionStore, unitOfWork, eventBus);
   });
 
   describe('success', () => {
@@ -94,7 +91,7 @@ describe('BanUser use-case', () => {
       expect(sessions).toHaveLength(0);
     });
 
-    it('appends UserBanned to the outbox and publishes it post-commit', async () => {
+    it('raises no domain event, so nothing is published', async () => {
       const admin = makeSuperAdmin();
       const target = makeCustomer();
       await userRepo.save(admin);
@@ -102,12 +99,9 @@ describe('BanUser use-case', () => {
 
       await useCase.execute({ actorId: admin._id, targetUserId: target._id, reason: 'fraud' });
 
-      expect(outboxStore.appended).toHaveLength(1);
-      expect(outboxStore.appended[0].eventName).toBe('UserBanned');
-      expect(outboxStore.appended[0].aggregateId).toBe(target._id);
-
-      expect(eventBus.publishedEvents).toHaveLength(1);
-      expect(eventBus.publishedEvents[0].eventName).toBe('UserBanned');
+      // Phase 6: this state change raises no domain event — it had no subscriber.
+      expect(eventBus.publishedEvents).toHaveLength(0);
+      expect(eventBus.publishedEvents).toHaveLength(0);
     });
 
     it('allows a super admin to ban another admin', async () => {
@@ -190,7 +184,7 @@ describe('BanUser use-case', () => {
 
       const updated = await userRepo.findById(targetAdmin._id);
       expect(updated!.isBanned).toBeFalsy();
-      expect(outboxStore.appended).toHaveLength(0);
+      expect(eventBus.publishedEvents).toHaveLength(0);
       expect(eventBus.publishedEvents).toHaveLength(0);
     });
   });

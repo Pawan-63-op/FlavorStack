@@ -70,20 +70,12 @@ export const OrderRequestedSchema = eventEnvelope.extend({
   schemaVersion: z.number().int().positive(),
 });
 
-export const CheckoutReadyForPaymentSchema = eventEnvelope.extend({
-  eventName: z.literal('CheckoutReadyForPayment'),
-  customerId: z.string().min(1),
-  amount: moneyJSON,
-  paymentMethod,
-});
-
 /**
  * Registry of every published commerce event → its payload schema. The single source of
  * truth the contract tests iterate over and downstream consumers can import to validate jobs.
  */
 export const COMMERCE_EVENT_SCHEMAS = {
   OrderRequested: OrderRequestedSchema,
-  CheckoutReadyForPayment: CheckoutReadyForPaymentSchema,
 } as const;
 
 export type CommerceEventName = keyof typeof COMMERCE_EVENT_SCHEMAS;

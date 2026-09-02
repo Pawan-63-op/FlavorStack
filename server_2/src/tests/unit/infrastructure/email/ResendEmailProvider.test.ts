@@ -42,22 +42,6 @@ describe('ResendEmailProvider', () => {
     });
   });
 
-  describe('sendPasswordReset', () => {
-    it('sends from/to/subject and a password reset link containing the token', async () => {
-      const provider = new ResendEmailProvider(config);
-
-      await provider.sendPasswordReset(to, 'reset-token-456');
-
-      expect(mockSend).toHaveBeenCalledTimes(1);
-      const payload = mockSend.mock.calls[0][0];
-      expect(payload.from).toBe(config.from);
-      expect(payload.to).toBe('user@example.com');
-      expect(payload.subject).toBe('Reset your password');
-      expect(payload.html).toContain(`${config.appBaseUrl}/reset-password?token=reset-token-456`);
-      expect(payload.text).toContain(`${config.appBaseUrl}/reset-password?token=reset-token-456`);
-    });
-  });
-
   describe('sendNotification', () => {
     it('sends the given subject and body as-is', async () => {
       const provider = new ResendEmailProvider(config);

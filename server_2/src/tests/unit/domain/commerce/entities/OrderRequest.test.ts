@@ -9,7 +9,6 @@ import { MenuItemSnapshot } from '../../../../../domain/commerce/value-objects/s
 import { VariantSnapshot } from '../../../../../domain/commerce/value-objects/snapshots/VariantSnapshot';
 import { RestaurantSnapshot } from '../../../../../domain/commerce/value-objects/snapshots/RestaurantSnapshot';
 import { OrderRequested } from '../../../../../domain/commerce/events/OrderRequested';
-import { CheckoutReadyForPayment } from '../../../../../domain/commerce/events/CheckoutReadyForPayment';
 import { PAYMENT_METHOD } from '../../../../../domain/commerce/enums/payment-method.enum';
 import { FEE_TYPE } from '../../../../../domain/commerce/enums/fee-type.enum';
 import { ORDER_REQUEST_STATUS } from '../../../../../domain/commerce/enums/order-request-status.enum';
@@ -127,15 +126,15 @@ describe('OrderRequest aggregate', () => {
   });
 
   describe('events', () => {
-    it('raises OrderRequested and CheckoutReadyForPayment on creation', () => {
+    // Phase 6: `OrderRequested` is the sole event checkout raises — it is the one message the
+    // fulfillment context must not lose. `CheckoutReadyForPayment` had no subscriber and is gone.
+    it('raises exactly OrderRequested on creation', () => {
       const order = OrderRequest.createFromCheckout(validInput()).getValue();
       const events = order.pullDomainEvents();
 
-      expect(events).toHaveLength(2);
-      const requested = events.find((e) => e.eventName === 'OrderRequested') as OrderRequested;
-      const ready = events.find((e) => e.eventName === 'CheckoutReadyForPayment') as CheckoutReadyForPayment;
+      expect(events).toHaveLength(1);
+      const requested = events[0] as OrderRequested;
       expect(requested).toBeInstanceOf(OrderRequested);
-      expect(ready).toBeInstanceOf(CheckoutReadyForPayment);
 
       expect(requested.aggregateId).toBe(order.id.toString());
       expect(requested.customerId).toBe('cust-1');
@@ -144,10 +143,6 @@ describe('OrderRequest aggregate', () => {
       expect(requested.pricing.total).toEqual({ amount: 3000, currency: 'INR' });
       expect(requested.paymentIntent).toEqual({ method: 'UPI' });
       expect(requested.deliveryAddress.pinCode).toBe('560001');
-
-      expect(ready.aggregateId).toBe(order.id.toString());
-      expect(ready.amount).toEqual({ amount: 3000, currency: 'INR' });
-      expect(ready.paymentMethod).toBe('UPI');
     });
 
     it('produces a fully JSON-serializable OrderRequested payload (outbox-safe)', () => {

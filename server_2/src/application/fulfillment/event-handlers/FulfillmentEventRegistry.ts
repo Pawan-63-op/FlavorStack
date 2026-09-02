@@ -1,23 +1,22 @@
 import { IEventBus } from '../../shared/events/IEventBus';
-import { OnOrderRequested } from './OnOrderRequested';
 import { OnReadyForPickup } from './OnReadyForPickup';
 import { FulfillmentTimeoutScheduler } from './FulfillmentTimeoutScheduler';
 import { TrackingStatusBridge, TRACKING_STATUS_EVENTS } from './TrackingStatusBridge';
-import { FulfillmentNotificationDispatcher } from './FulfillmentNotificationDispatcher';
-import { FULFILLMENT_NOTIFICATION_EVENTS } from './FulfillmentNotificationMapper';
 import { FulfillmentProjector } from '../projector/FulfillmentProjector';
 import { registerFulfillmentProjector } from '../projector/FulfillmentProjectionRegistry';
 
+/**
+ * Phase 7.3: `OrderRequested` is deliberately absent. Its only delivery path is the outbox relay
+ * (OutboxProcessor → OutboxDispatcher → OnOrderRequested), so subscribing here would restore the
+ * double delivery the phase removed.
+ */
 export function registerFulfillmentEventHandlers(
   eventBus: IEventBus,
-  onOrderRequested: OnOrderRequested,
   onReadyForPickup: OnReadyForPickup,
   timeoutScheduler?: FulfillmentTimeoutScheduler,
   projector?: FulfillmentProjector,
-  trackingStatusBridge?: TrackingStatusBridge,
-  notificationDispatcher?: FulfillmentNotificationDispatcher
+  trackingStatusBridge?: TrackingStatusBridge
 ): void {
-  eventBus.subscribe('OrderRequested', (event) => onOrderRequested.handle(event));
   eventBus.subscribe('ReadyForPickup', (event) => onReadyForPickup.handle(event));
 
   if (timeoutScheduler) {
@@ -33,12 +32,6 @@ export function registerFulfillmentEventHandlers(
   if (trackingStatusBridge) {
     for (const eventName of TRACKING_STATUS_EVENTS) {
       eventBus.subscribe(eventName, (event) => trackingStatusBridge.handle(event));
-    }
-  }
-
-  if (notificationDispatcher) {
-    for (const eventName of FULFILLMENT_NOTIFICATION_EVENTS) {
-      eventBus.subscribe(eventName, (event) => notificationDispatcher.handle(event));
     }
   }
 }

@@ -3,6 +3,8 @@ import { Result } from '../../shared/Result';
 import { Money } from '../../shared/Money';
 import { GeoPoint } from '../../identity/value-objects/GeoPoint.vo';
 import {
+  CartMenuItemView,
+  CartRestaurantView,
   CheckoutRestaurant,
   CheckoutMenuItem,
   CheckoutServiceability,
@@ -30,4 +32,15 @@ export interface ICatalogGateway {
 
   /** Fresh open/closed state for a restaurant at `at` (defaults to now). */
   isRestaurantOpen(restaurantId: string, at?: Date): Promise<Result<boolean>>;
+
+  /** Cart-time restaurant read: raw status/visibility/opening-hours/min-order, for the
+   *  validator to turn into issues. Unlike `getRestaurantForCheckout` this does *not* fail
+   *  on an unpublished restaurant — it resolves to `null` only when no such restaurant
+   *  exists (or it was soft-deleted), so a paused or unlisted restaurant still renders. */
+  getRestaurantForCart(restaurantId: string): Promise<Result<CartRestaurantView | null>>;
+
+  /** Cart-time menu-item read carrying variant option groups, used both for cart validation
+   *  and for resolving selected options at checkout. Order is not guaranteed and items that
+   *  no longer exist are simply absent; callers match by `menuItemId`. */
+  getItemsForCart(menuItemIds: string[]): Promise<Result<CartMenuItemView[]>>;
 }

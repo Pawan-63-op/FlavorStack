@@ -35,8 +35,8 @@ describe('ClearCart use-case', () => {
     expect(view.restaurantId).toBeNull();
     expect(view.currency).toBeNull();
     expect(unitOfWork.committed).toBe(true);
-    expect(eventBus.publishedEvents).toHaveLength(1);
-    expect(eventBus.publishedEvents[0].eventName).toBe('CartCleared');
+    // Phase 6: cart mutations raise no domain event — nothing subscribed to them.
+    expect(eventBus.publishedEvents).toHaveLength(0);
   });
 
   it('fails with NotFoundError when the customer has no cart', async () => {

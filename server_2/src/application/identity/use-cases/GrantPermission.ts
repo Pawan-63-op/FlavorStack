@@ -8,7 +8,6 @@ import { Permission } from '../../../domain/identity/value-objects/Permission.vo
 import { PERMISSION_RESOURCE } from '../../../domain/identity/enums/permission-resource.enum';
 import { PERMISSION_ACTION } from '../../../domain/identity/enums/permission-action.enum';
 import { IUnitOfWork } from '../../shared/ports/IUnitOfWork';
-import { IOutboxStore } from '../../shared/outbox/IOutboxStore';
 import { IEventBus } from '../../shared/events/IEventBus';
 import { GrantPermissionDto } from '../dtos/GrantPermissionDto';
 
@@ -16,7 +15,6 @@ export class GrantPermission {
   constructor(
     private userRepo: IUserRepository,
     private unitOfWork: IUnitOfWork,
-    private outboxStore: IOutboxStore,
     private eventBus: IEventBus,
   ) {}
 
@@ -47,11 +45,8 @@ export class GrantPermission {
 
     const events = target.pullDomainEvents();
 
-    await this.unitOfWork.runInTransaction(async (ctx) => {
+    await this.unitOfWork.runInTransaction(async () => {
       await this.userRepo.update(target);
-      if (events.length > 0) {
-        await this.outboxStore.append(events, ctx);
-      }
     });
 
     if (events.length > 0) {

@@ -4,21 +4,18 @@ import { DomainEvent } from '../../../domain/shared/DomainEvent';
 import { getConnection } from '../../../infrastructure/database/connection';
 import { TransactionContext } from '../../../infrastructure/database/TransactionContext';
 import { MongoUnitOfWork } from '../../../infrastructure/database/MongoUnitOfWork';
-import { MongoOutboxStore } from '../../../infrastructure/database/MongoOutboxStore';
 import { MongoFulfillmentRepository } from '../../../infrastructure/repositories/FulfillmentRepository';
-import { MongoFulfillmentProjectionRepository } from '../../../infrastructure/repositories/FulfillmentProjectionRepository';
+import { MongoCustomerTrackingRepository } from '../../../infrastructure/repositories/CustomerTrackingRepository';
 import { SimpleDeliveryAssignmentService } from '../../../infrastructure/services/SimpleDeliveryAssignmentService';
 import { FulfillmentModel } from '../../../infrastructure/database/models/FulfillmentModel';
 import { OutboxEventModel } from '../../../infrastructure/database/models/OutboxEventModel';
 import { CustomerTrackingViewModel } from '../../../infrastructure/database/models/CustomerTrackingViewModel';
-import { RestaurantFulfillmentViewModel } from '../../../infrastructure/database/models/RestaurantFulfillmentViewModel';
-import { RiderQueueViewModel } from '../../../infrastructure/database/models/RiderQueueViewModel';
-import { AdminDashboardViewModel } from '../../../infrastructure/database/models/AdminDashboardViewModel';
 import { InMemoryEventBus } from '../../../application/shared/events/InMemoryEventBus';
 
 import { CreateFulfillment } from '../../../application/fulfillment/use-cases/CreateFulfillment';
 import { MarkPreparing } from '../../../application/fulfillment/use-cases/MarkPreparing';
 import { MarkReadyForPickup } from '../../../application/fulfillment/use-cases/MarkReadyForPickup';
+import { makeStubRestaurantDirectory } from '../../mocks/fulfillment.mocks';
 import { OfferRiderAssignment } from '../../../application/fulfillment/use-cases/OfferRiderAssignment';
 import { AcceptDelivery } from '../../../application/fulfillment/use-cases/AcceptDelivery';
 import { ConfirmPickup } from '../../../application/fulfillment/use-cases/ConfirmPickup';
@@ -32,6 +29,7 @@ import { registerFulfillmentProjector } from '../../../application/fulfillment/p
 import { CANCELLED_BY } from '../../../domain/fulfillment/enums/cancelled-by.enum';
 
 const RESTAURANT_ID = 'proj-rest-1';
+const OWNER_ID = 'owner-1';
 const RIDER_ID = 'proj-rider-1';
 const CUSTOMER_ID = 'proj-cust-1';
 const OFFER_TTL = 60;
@@ -69,18 +67,19 @@ async function cleanup(): Promise<void> {
     FulfillmentModel.deleteMany({}),
     OutboxEventModel.deleteMany({}),
     CustomerTrackingViewModel.deleteMany({}),
-    RestaurantFulfillmentViewModel.deleteMany({}),
-    RiderQueueViewModel.deleteMany({}),
-    AdminDashboardViewModel.deleteMany({}),
   ]);
 }
 
+/**
+ * Phase 3 / Batch 5: the projector maintains `customer_tracking_views` and nothing else, so these
+ * assertions are tracking-only. The rider queue and admin dashboard now read the `fulfillments`
+ * aggregate — covered by `rider-reads` / `admin-dashboard` integration suites.
+ */
 describe('FulfillmentProjector integration (Phase 6)', () => {
   let txContext: TransactionContext;
   let repo: MongoFulfillmentRepository;
-  let projectionRepo: MongoFulfillmentProjectionRepository;
+  let trackingRepo: MongoCustomerTrackingRepository;
   let uow: MongoUnitOfWork;
-  let outbox: MongoOutboxStore;
   let bus: InMemoryEventBus;
 
   let createFulfillment: CreateFulfillment;
@@ -97,29 +96,29 @@ describe('FulfillmentProjector integration (Phase 6)', () => {
     const connection = getConnection();
     txContext = new TransactionContext();
     repo = new MongoFulfillmentRepository(txContext);
-    projectionRepo = new MongoFulfillmentProjectionRepository();
+    trackingRepo = new MongoCustomerTrackingRepository();
     uow = new MongoUnitOfWork(connection, txContext);
-    outbox = new MongoOutboxStore(txContext);
     bus = new InMemoryEventBus();
 
     const assignmentService = new SimpleDeliveryAssignmentService(async () => [RIDER_ID]);
 
-    createFulfillment = new CreateFulfillment(repo, uow, outbox, bus);
-    markPreparing = new MarkPreparing(repo, uow, outbox, bus);
-    markReadyForPickup = new MarkReadyForPickup(repo, uow, outbox, bus);
-    offerRiderAssignment = new OfferRiderAssignment(repo, assignmentService, uow, outbox, bus, OFFER_TTL);
-    acceptDelivery = new AcceptDelivery(repo, uow, outbox, bus);
-    confirmPickup = new ConfirmPickup(repo, uow, outbox, bus);
-    startDelivery = new StartDelivery(repo, uow, outbox, bus);
-    completeDelivery = new CompleteDelivery(repo, uow, outbox, bus);
-    cancelFulfillment = new CancelFulfillment(repo, uow, outbox, bus);
+    createFulfillment = new CreateFulfillment(repo, uow, bus);
+    const restaurantDirectory = makeStubRestaurantDirectory(RESTAURANT_ID, OWNER_ID);
+    markPreparing = new MarkPreparing(repo, restaurantDirectory, uow, bus);
+    markReadyForPickup = new MarkReadyForPickup(repo, restaurantDirectory, uow, bus);
+    offerRiderAssignment = new OfferRiderAssignment(repo, assignmentService, uow, bus, OFFER_TTL);
+    acceptDelivery = new AcceptDelivery(repo, uow, bus);
+    confirmPickup = new ConfirmPickup(repo, uow, bus);
+    startDelivery = new StartDelivery(repo, uow, bus);
+    completeDelivery = new CompleteDelivery(repo, uow, bus);
+    cancelFulfillment = new CancelFulfillment(repo, uow, bus);
 
     const onOrderRequested = new OnOrderRequested(createFulfillment);
     const onReadyForPickup = new OnReadyForPickup(offerRiderAssignment);
     bus.subscribe('OrderRequested', (e) => onOrderRequested.handle(e));
     bus.subscribe('ReadyForPickup', (e) => onReadyForPickup.handle(e));
 
-    const projector = new FulfillmentProjector(projectionRepo);
+    const projector = new FulfillmentProjector(trackingRepo);
     registerFulfillmentProjector(bus, projector);
   });
 
@@ -139,68 +138,54 @@ describe('FulfillmentProjector integration (Phase 6)', () => {
     expect(fulfillment).not.toBeNull();
     const fid = fulfillment!.id.toString();
 
-    let tracking = await projectionRepo.findCustomerTracking(fid);
+    let tracking = await trackingRepo.findCustomerTracking(fid);
     expect(tracking).not.toBeNull();
     expect(tracking!.currentStatus).toBe('CREATED');
     expect(tracking!.timeline).toHaveLength(1);
     expect(tracking!.timeline[0].status).toBe('CREATED');
 
-    let restRows = await projectionRepo.findRestaurantQueue(RESTAURANT_ID);
-    expect(restRows).toHaveLength(1);
-    expect(restRows[0].status).toBe('CREATED');
-
-    let adminRows = await projectionRepo.findAdminDashboard({});
-    expect(adminRows.some((r) => r.fulfillmentId === fid)).toBe(true);
-
-    await markPreparing.execute({ fulfillmentId: fid, restaurantId: RESTAURANT_ID, prepEstimateMinutes: 15 });
-    tracking = await projectionRepo.findCustomerTracking(fid);
+    await markPreparing.execute({ fulfillmentId: fid, actorUserId: OWNER_ID, prepEstimateMinutes: 15 });
+    tracking = await trackingRepo.findCustomerTracking(fid);
     expect(tracking!.currentStatus).toBe('PREPARING');
     expect(tracking!.timeline).toHaveLength(2);
 
-    restRows = await projectionRepo.findRestaurantQueue(RESTAURANT_ID);
-    expect(restRows[0].status).toBe('PREPARING');
-    expect(restRows[0].prepEstimateMinutes).toBe(15);
+    // prepEstimateMinutes lives on the aggregate now that restaurant_fulfillment_views is gone.
+    const preparing = await repo.findById(fid);
+    expect(preparing!.prepEstimateMinutes).toBe(15);
 
-    await markReadyForPickup.execute({ fulfillmentId: fid, restaurantId: RESTAURANT_ID });
-    tracking = await projectionRepo.findCustomerTracking(fid);
+    await markReadyForPickup.execute({ fulfillmentId: fid, actorUserId: OWNER_ID });
+    tracking = await trackingRepo.findCustomerTracking(fid);
     expect(tracking!.currentStatus).toBe('READY_FOR_PICKUP');
 
-    let riderQueue = await projectionRepo.findRiderQueue(RIDER_ID);
-    expect(riderQueue).toHaveLength(1);
-    expect(riderQueue[0].assignmentStatus).toBe('OFFERED');
-
     await acceptDelivery.execute({ fulfillmentId: fid, riderId: RIDER_ID });
-    riderQueue = await projectionRepo.findRiderQueue(RIDER_ID);
-    expect(riderQueue[0].assignmentStatus).toBe('ACCEPTED');
-    tracking = await projectionRepo.findCustomerTracking(fid);
+    tracking = await trackingRepo.findCustomerTracking(fid);
     expect(tracking!.riderId).toBe(RIDER_ID);
     expect(tracking!.deliveryStatus).toBe('ASSIGNED');
 
     await confirmPickup.execute({ fulfillmentId: fid, riderId: RIDER_ID });
-    tracking = await projectionRepo.findCustomerTracking(fid);
+    tracking = await trackingRepo.findCustomerTracking(fid);
     expect(tracking!.currentStatus).toBe('PICKED_UP');
 
     await startDelivery.execute({ fulfillmentId: fid, riderId: RIDER_ID });
-    tracking = await projectionRepo.findCustomerTracking(fid);
+    tracking = await trackingRepo.findCustomerTracking(fid);
     expect(tracking!.currentStatus).toBe('OUT_FOR_DELIVERY');
 
     await completeDelivery.execute({ fulfillmentId: fid, riderId: RIDER_ID });
-    tracking = await projectionRepo.findCustomerTracking(fid);
+    tracking = await trackingRepo.findCustomerTracking(fid);
     expect(tracking!.currentStatus).toBe('DELIVERED');
     expect(tracking!.timeline.length).toBeGreaterThanOrEqual(5);
-
-    restRows = await projectionRepo.findRestaurantQueue(RESTAURANT_ID);
-    expect(restRows.filter((r) => r.fulfillmentId === fid)).toHaveLength(0);
-
-    riderQueue = await projectionRepo.findRiderQueue(RIDER_ID);
-    expect(riderQueue.filter((r) => r.fulfillmentId === fid)).toHaveLength(0);
-
-    adminRows = await projectionRepo.findAdminDashboard({});
-    const adminRow = adminRows.find((r) => r.fulfillmentId === fid);
-    expect(adminRow?.status).toBe('DELIVERED');
+    expect(tracking!.timeline.map((t) => t.status)).toEqual([
+      'CREATED',
+      'PREPARING',
+      'READY_FOR_PICKUP',
+      'ASSIGNED',
+      'PICKED_UP',
+      'OUT_FOR_DELIVERY',
+      'DELIVERED',
+    ]);
   });
 
-  it('removes restaurant and admin views, marks tracking as CANCELLED on cancellation', async () => {
+  it('marks tracking as CANCELLED on cancellation', async () => {
     const orderRequestId = randomUUID();
     await bus.publishAll([orderRequestedEvent(orderRequestId)]);
     const fulfillment = await repo.findByOrderRequestId(orderRequestId);
@@ -213,17 +198,11 @@ describe('FulfillmentProjector integration (Phase 6)', () => {
       actorId: CUSTOMER_ID,
     });
 
-    const tracking = await projectionRepo.findCustomerTracking(fid);
+    const tracking = await trackingRepo.findCustomerTracking(fid);
     expect(tracking!.currentStatus).toBe('CANCELLED');
     expect(tracking!.cancellation?.cancelledBy).toBe('CUSTOMER');
-
-    const restRows = await projectionRepo.findRestaurantQueue(RESTAURANT_ID);
-    expect(restRows.filter((r) => r.fulfillmentId === fid)).toHaveLength(0);
-
-    const adminRows = await projectionRepo.findAdminDashboard({});
-    const adminRow = adminRows.find((r) => r.fulfillmentId === fid);
-    expect(adminRow?.status).toBe('CANCELLED');
-    expect(adminRow?.exceptionFlag).toBe(true);
+    expect(tracking!.cancellation?.reason).toBe('Test cancellation');
+    expect(tracking!.timeline.map((t) => t.status)).toContain('CANCELLED');
   });
 
   it('does not duplicate timeline entries when the same event is replayed', async () => {
@@ -233,7 +212,7 @@ describe('FulfillmentProjector integration (Phase 6)', () => {
     const fid = fulfillment!.id.toString();
 
     const { FulfillmentProjector } = require('../../../application/fulfillment/projector/FulfillmentProjector');
-    const testProjector = new FulfillmentProjector(projectionRepo);
+    const testProjector = new FulfillmentProjector(trackingRepo);
     const fakeEvent = {
       eventId: 'idempotency-test-eventId',
       occurredOn: new Date(),
@@ -246,7 +225,7 @@ describe('FulfillmentProjector integration (Phase 6)', () => {
     await testProjector.onPreparationStarted(fakeEvent);
     await testProjector.onPreparationStarted(fakeEvent); // replay
 
-    const tracking = await projectionRepo.findCustomerTracking(fid);
+    const tracking = await trackingRepo.findCustomerTracking(fid);
     const preparingEntries = tracking!.timeline.filter((t) => t.status === 'PREPARING');
     expect(preparingEntries).toHaveLength(1);
   });

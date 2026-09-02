@@ -1,4 +1,4 @@
-import { RiderQueueView } from '../../../domain/fulfillment/repositories/IFulfillmentProjectionRepository';
+import { RiderQueueView } from '../../../domain/fulfillment/repositories/IFulfillmentQueryRepository';
 
 export interface RiderQueueItemResponse {
   fulfillmentId: string;

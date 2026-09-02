@@ -1,9 +1,10 @@
 import { GetDashboardAnalytics } from '../../../../application/fulfillment/use-cases/GetDashboardAnalytics';
 import {
   AnalyticsAggregate,
-  IFulfillmentProjectionRepository,
-} from '../../../../domain/fulfillment/repositories/IFulfillmentProjectionRepository';
+  IFulfillmentQueryRepository,
+} from '../../../../domain/fulfillment/repositories/IFulfillmentQueryRepository';
 import { IRestaurantDirectory } from '../../../../application/fulfillment/ports/IRestaurantDirectory';
+import { makeQueryRepo } from '../../../mocks/fulfillment.mocks';
 
 function aggFixture(overrides: Partial<AnalyticsAggregate> = {}): AnalyticsAggregate {
   return {
@@ -31,11 +32,12 @@ function aggFixture(overrides: Partial<AnalyticsAggregate> = {}): AnalyticsAggre
 }
 
 function makeRepo(agg: AnalyticsAggregate = aggFixture()): {
-  repo: IFulfillmentProjectionRepository;
+  repo: jest.Mocked<IFulfillmentQueryRepository>;
   aggregateAnalytics: jest.Mock;
 } {
-  const aggregateAnalytics = jest.fn().mockResolvedValue(agg);
-  return { repo: { aggregateAnalytics } as unknown as IFulfillmentProjectionRepository, aggregateAnalytics };
+  const repo = makeQueryRepo();
+  repo.aggregateAnalytics.mockResolvedValue(agg);
+  return { repo, aggregateAnalytics: repo.aggregateAnalytics as unknown as jest.Mock };
 }
 
 function makeDirectory(overrides: Partial<jest.Mocked<IRestaurantDirectory>> = {}): jest.Mocked<IRestaurantDirectory> {

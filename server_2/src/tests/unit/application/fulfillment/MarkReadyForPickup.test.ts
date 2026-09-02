@@ -5,7 +5,6 @@ import { Fulfillment } from '../../../../domain/fulfillment/entities/Fulfillment
 import { NotFoundError } from '../../../../domain/shared/errors/NotFoundError';
 import { ForbiddenError } from '../../../../domain/shared/errors/ForbiddenError';
 import { IUnitOfWork } from '../../../../application/shared/ports/IUnitOfWork';
-import { IOutboxStore } from '../../../../application/shared/outbox/IOutboxStore';
 import { IEventBus } from '../../../../application/shared/events/IEventBus';
 import { FULFILLMENT_STATUS } from '../../../../domain/fulfillment/enums/fulfillment-status.enum';
 import { Money } from '../../../../domain/shared/Money';
@@ -57,10 +56,6 @@ function makeUnitOfWork(): IUnitOfWork {
   return { runInTransaction: jest.fn(<T>(work: (ctx: unknown) => Promise<T>) => work({})) };
 }
 
-function makeOutbox(): jest.Mocked<IOutboxStore> {
-  return { append: jest.fn().mockResolvedValue(undefined) } as jest.Mocked<IOutboxStore>;
-}
-
 function makeEventBus(): jest.Mocked<IEventBus> {
   return {
     subscribe: jest.fn(),
@@ -73,9 +68,8 @@ describe('MarkReadyForPickup', () => {
   it('updates status to READY_FOR_PICKUP, appends ReadyForPickup event, publishes', async () => {
     const fulfillment = buildPreparingFulfillment();
     const repo = makeRepo({ findById: jest.fn().mockResolvedValue(fulfillment) });
-    const outbox = makeOutbox();
     const bus = makeEventBus();
-    const uc = new MarkReadyForPickup(repo, makeDirectory(), makeUnitOfWork(), outbox, bus);
+    const uc = new MarkReadyForPickup(repo, makeDirectory(), makeUnitOfWork(), bus);
 
     const result = await uc.execute({
       fulfillmentId: fulfillment.id.toString(),
@@ -86,8 +80,8 @@ describe('MarkReadyForPickup', () => {
     expect(result.getValue().status).toBe(FULFILLMENT_STATUS.READY_FOR_PICKUP);
 
     expect(repo.update).toHaveBeenCalledTimes(1);
-    expect(outbox.append).toHaveBeenCalledTimes(1);
-    const events = outbox.append.mock.calls[0][0];
+    expect(bus.publishAll).toHaveBeenCalledTimes(1);
+    const events = bus.publishAll.mock.calls[0][0];
     expect(events).toHaveLength(1);
     expect(events[0].eventName).toBe('ReadyForPickup');
 
@@ -96,7 +90,7 @@ describe('MarkReadyForPickup', () => {
 
   it('returns NotFoundError when fulfillment does not exist', async () => {
     const repo = makeRepo({ findById: jest.fn().mockResolvedValue(null) });
-    const uc = new MarkReadyForPickup(repo, makeDirectory(), makeUnitOfWork(), makeOutbox(), makeEventBus());
+    const uc = new MarkReadyForPickup(repo, makeDirectory(), makeUnitOfWork(), makeEventBus());
 
     const result = await uc.execute({ fulfillmentId: 'nonexistent', actorUserId: OWNER_ID });
 
@@ -109,7 +103,7 @@ describe('MarkReadyForPickup', () => {
     const fulfillment = buildPreparingFulfillment();
     const repo = makeRepo({ findById: jest.fn().mockResolvedValue(fulfillment) });
     const directory = makeDirectory(OWNER_ID);
-    const uc = new MarkReadyForPickup(repo, directory, makeUnitOfWork(), makeOutbox(), makeEventBus());
+    const uc = new MarkReadyForPickup(repo, directory, makeUnitOfWork(), makeEventBus());
 
     const result = await uc.execute({ fulfillmentId: fulfillment.id.toString(), actorUserId: 'someone-else' });
 
@@ -130,13 +124,13 @@ describe('MarkReadyForPickup', () => {
     }).getValue();
     f.pullDomainEvents();
     const repo = makeRepo({ findById: jest.fn().mockResolvedValue(f) });
-    const outbox = makeOutbox();
-    const uc = new MarkReadyForPickup(repo, makeDirectory(), makeUnitOfWork(), outbox, makeEventBus());
+    const bus = makeEventBus();
+    const uc = new MarkReadyForPickup(repo, makeDirectory(), makeUnitOfWork(), bus);
 
     const result = await uc.execute({ fulfillmentId: f.id.toString(), actorUserId: OWNER_ID });
 
     expect(result.isFailure).toBe(true);
     expect(repo.update).not.toHaveBeenCalled();
-    expect(outbox.append).not.toHaveBeenCalled();
+    expect(bus.publishAll).not.toHaveBeenCalled();
   });
 });

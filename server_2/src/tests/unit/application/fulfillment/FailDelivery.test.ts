@@ -3,7 +3,7 @@ import { NotFoundError } from '../../../../domain/shared/errors/NotFoundError';
 import { FULFILLMENT_STATUS } from '../../../../domain/fulfillment/enums/fulfillment-status.enum';
 import { FAILURE_REASON } from '../../../../domain/fulfillment/enums/failure-reason.enum';
 import { Fulfillment } from '../../../../domain/fulfillment/entities/Fulfillment';
-import { buildReadyFulfillment, makeRepo, makeUnitOfWork, makeOutbox, makeEventBus } from './assignment-uc-fixtures';
+import { buildReadyFulfillment, makeRepo, makeUnitOfWork, makeEventBus } from './assignment-uc-fixtures';
 
 const RIDER_ID = 'rider-1';
 
@@ -21,9 +21,8 @@ describe('FailDelivery', () => {
   it('fails a PICKED_UP delivery, appends DeliveryFailed, publishes', async () => {
     const f = buildPickedUp();
     const repo = makeRepo({ findById: jest.fn().mockResolvedValue(f) });
-    const outbox = makeOutbox();
     const bus = makeEventBus();
-    const uc = new FailDelivery(repo, makeUnitOfWork(), outbox, bus);
+    const uc = new FailDelivery(repo, makeUnitOfWork(), bus);
 
     const result = await uc.execute({
       fulfillmentId: f.id.toString(),
@@ -35,7 +34,7 @@ describe('FailDelivery', () => {
     expect(result.getValue().status).toBe(FULFILLMENT_STATUS.FAILED);
     expect(result.getValue().failureReason).toBe(FAILURE_REASON.CUSTOMER_UNAVAILABLE);
     expect(repo.update).toHaveBeenCalledTimes(1);
-    const events = outbox.append.mock.calls[0][0];
+    const events = bus.publishAll.mock.calls[0][0];
     expect(events).toHaveLength(1);
     expect(events[0].eventName).toBe('DeliveryFailed');
     expect(bus.publishAll).toHaveBeenCalledTimes(1);
@@ -47,8 +46,8 @@ describe('FailDelivery', () => {
     f.acceptByRider(RIDER_ID);
     f.pullDomainEvents();
     const repo = makeRepo({ findById: jest.fn().mockResolvedValue(f) });
-    const outbox = makeOutbox();
-    const uc = new FailDelivery(repo, makeUnitOfWork(), outbox, makeEventBus());
+    const bus = makeEventBus();
+    const uc = new FailDelivery(repo, makeUnitOfWork(), bus);
 
     const result = await uc.execute({
       fulfillmentId: f.id.toString(),
@@ -58,12 +57,12 @@ describe('FailDelivery', () => {
 
     expect(result.isFailure).toBe(true);
     expect(repo.update).not.toHaveBeenCalled();
-    expect(outbox.append).not.toHaveBeenCalled();
+    expect(bus.publishAll).not.toHaveBeenCalled();
   });
 
   it('returns NotFoundError for an unknown fulfillment', async () => {
     const repo = makeRepo({ findById: jest.fn().mockResolvedValue(null) });
-    const uc = new FailDelivery(repo, makeUnitOfWork(), makeOutbox(), makeEventBus());
+    const uc = new FailDelivery(repo, makeUnitOfWork(), makeEventBus());
     const result = await uc.execute({
       fulfillmentId: 'nope',
       riderId: RIDER_ID,

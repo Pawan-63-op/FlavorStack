@@ -1,9 +1,13 @@
 # Full stack (identity + catalog + commerce + fulfillment + engagement):
-# API + outbox/email/notification/fulfillment workers + Mongo (replica set,
-# required for outbox/cross-context transactions) + Redis (sessions/OTP/BullMQ).
+# API + two workers + Mongo (replica set, required for outbox/cross-context
+# transactions) + Redis (sessions/OTP/BullMQ).
 #
-# Worker Mongo needs: outbox/notification/fulfillment call bootstrap() → require MONGO_URI +
-# the initialized replica set (mongo-init). email is Resend+Redis only (no Mongo).
+# Phase 8: three worker services collapsed to two, matching the two queues.
+#   worker-relay — drains the outbox (`OrderRequested` → CreateFulfillment), no BullMQ consumer.
+#   worker-jobs  — one BullMQ Worker per queue (email-queue, fulfillment-queue) in one process.
+# Both call bootstrapWorker() → both need MONGO_URI and the initialized replica set (mongo-init).
+# (worker-jobs needs Mongo where the old worker-email did not: it now also runs the fulfillment
+# timeout jobs, whose use cases read and write the fulfillment aggregate.)
 
 services:
   mongo:
@@ -54,15 +58,24 @@ services:
         condition: service_completed_successfully
       redis:
         condition: service_started
+    healthcheck:
+      # `/health` is 503 unless both Mongo and Redis answer, and wget fails on a 5xx —
+      # so this probes readiness, not just "the port is open". The workers deliberately
+      # do NOT depend_on it: they never call the API, and gating them would only slow boot.
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/health >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
     restart: unless-stopped
 
-  worker-outbox:
+  worker-relay:
     build:
       context: .
       dockerfile: Dockerfile.worker
     env_file: .env
     environment:
-      WORKER_TYPE: outbox
+      WORKER_TYPE: relay
       MONGO_URI: mongodb://mongo:27017/flavorstack?replicaSet=rs0
       REDIS_HOST: redis
     depends_on:
@@ -72,46 +85,13 @@ services:
         condition: service_started
     restart: unless-stopped
 
-  worker-email:
+  worker-jobs:
     build:
       context: .
       dockerfile: Dockerfile.worker
     env_file: .env
     environment:
-      WORKER_TYPE: email
-      REDIS_HOST: redis
-    depends_on:
-      redis:
-        condition: service_started
-    restart: unless-stopped
-
-  worker-notification:
-    build:
-      context: .
-      dockerfile: Dockerfile.worker
-    env_file: .env
-    environment:
-      WORKER_TYPE: notification
-      # notification.worker calls bootstrap() (NotificationRepository + IdentityRecipientResolver +
-      # email channel) → needs the replica-set Mongo, not just Redis.
-      MONGO_URI: mongodb://mongo:27017/flavorstack?replicaSet=rs0
-      REDIS_HOST: redis
-    depends_on:
-      mongo-init:
-        condition: service_completed_successfully
-      redis:
-        condition: service_started
-    restart: unless-stopped
-
-  worker-fulfillment:
-    build:
-      context: .
-      dockerfile: Dockerfile.worker
-    env_file: .env
-    environment:
-      WORKER_TYPE: fulfillment
-      # fulfillment.worker calls bootstrap() (FulfillmentJobHandler: assignment-/sla-timeout jobs)
-      # → needs the replica-set Mongo.
+      WORKER_TYPE: jobs
       MONGO_URI: mongodb://mongo:27017/flavorstack?replicaSet=rs0
       REDIS_HOST: redis
     depends_on:

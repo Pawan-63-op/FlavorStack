@@ -265,14 +265,22 @@ export async function addMargheritaToCart(page: Page, restaurantId: string): Pro
   await page.getByRole("button", { name: /Add to Cart/i }).first().click();
 }
 
+const E2E_ADDRESS_LABEL = "123 MG Road, Bengaluru, Karnataka 560001";
+
+/**
+ * Idempotent: adds the E2E delivery address only if the account has none.
+ *
+ * The existence check counts matches rather than calling `.isVisible()` on a strict locator.
+ * `getByText` is strict, so with 2+ matches `.isVisible()` *throws* — and the previous
+ * `.catch(() => false)` read that throw as "no address exists" and added another one. That
+ * made the helper self-amplifying: every call across every spec appended one more duplicate
+ * until the closing `expect(...)` hit its own strict-mode violation and the spec failed
+ * inside the fixture, before it ever placed an order. Addresses are server-backed (they live
+ * on the Customer aggregate), so the duplicates persisted for the whole run.
+ */
 export async function ensureLocalAddress(page: Page): Promise<void> {
   await page.goto("/profile/addresses");
-  if (
-    await page
-      .getByText("123 MG Road, Bengaluru, Karnataka 560001")
-      .isVisible()
-      .catch(() => false)
-  ) {
+  if ((await page.getByText(E2E_ADDRESS_LABEL).count()) > 0) {
     return;
   }
   await page.getByRole("button", { name: "Add Address" }).click();
@@ -285,7 +293,7 @@ export async function ensureLocalAddress(page: Page): Promise<void> {
   await page.getByRole("button", { name: /Use my location/i }).click();
   await page.getByRole("button", { name: /Apply captured location/i }).click();
   await page.getByRole("button", { name: /Save Address/i }).click();
-  await expect(page.getByText("123 MG Road, Bengaluru, Karnataka 560001")).toBeVisible();
+  await expect(page.getByText(E2E_ADDRESS_LABEL).first()).toBeVisible();
 }
 
 export async function placeOrder(page: Page, restaurantId: string): Promise<void> {

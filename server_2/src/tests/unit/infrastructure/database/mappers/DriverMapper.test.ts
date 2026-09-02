@@ -59,7 +59,6 @@ function buildDriver(overrides: { currentLocation?: GeoPoint | null } = {}): Dri
     averageRating: 4.5,
     totalDeliveries: 10,
     totalRatings: 8,
-    fcmTokens: ['token-a', 'token-b'],
   });
 }
 
@@ -97,7 +96,6 @@ describe('DriverMapper', () => {
     expect(rehydrated.averageRating).toBe(original.averageRating);
     expect(rehydrated.totalDeliveries).toBe(original.totalDeliveries);
     expect(rehydrated.totalRatings).toBe(original.totalRatings);
-    expect(rehydrated.fcmTokens).toEqual(original.fcmTokens);
   });
 
   it('maps a null currentLocation to null in both directions', () => {

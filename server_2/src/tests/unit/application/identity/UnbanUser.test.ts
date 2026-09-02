@@ -2,7 +2,6 @@ import { UnbanUser } from '../../../../application/identity/use-cases/UnbanUser'
 import { UnbanUserDto } from '../../../../application/identity/dtos/UnbanUserDto';
 import {
   InMemoryUserRepository,
-  InMemoryOutboxStore,
   InMemoryUnitOfWork,
 } from '../../../mocks/identity.mocks';
 import { createEventBusSpy, EventBusSpy } from '../../../mocks/shared.mocks';
@@ -47,16 +46,14 @@ function makeBannedCustomer(email = 'user@example.com'): Customer {
 describe('UnbanUser use-case', () => {
   let userRepo: InMemoryUserRepository;
   let unitOfWork: InMemoryUnitOfWork;
-  let outboxStore: InMemoryOutboxStore;
   let eventBus: EventBusSpy;
   let useCase: UnbanUser;
 
   beforeEach(() => {
     userRepo = new InMemoryUserRepository();
     unitOfWork = new InMemoryUnitOfWork();
-    outboxStore = new InMemoryOutboxStore();
     eventBus = createEventBusSpy();
-    useCase = new UnbanUser(userRepo, unitOfWork, outboxStore, eventBus);
+    useCase = new UnbanUser(userRepo, unitOfWork, eventBus);
   });
 
   describe('success', () => {
@@ -79,7 +76,7 @@ describe('UnbanUser use-case', () => {
       expect(updated!.isActive).toBe(true);
     });
 
-    it('appends UserUnbanned to the outbox and publishes it post-commit', async () => {
+    it('raises no domain event, so nothing is published', async () => {
       const admin = makeSuperAdmin();
       const target = makeBannedCustomer();
       await userRepo.save(admin);
@@ -87,12 +84,9 @@ describe('UnbanUser use-case', () => {
 
       await useCase.execute({ actorId: admin._id, targetUserId: target._id });
 
-      expect(outboxStore.appended).toHaveLength(1);
-      expect(outboxStore.appended[0].eventName).toBe('UserUnbanned');
-      expect(outboxStore.appended[0].aggregateId).toBe(target._id);
-
-      expect(eventBus.publishedEvents).toHaveLength(1);
-      expect(eventBus.publishedEvents[0].eventName).toBe('UserUnbanned');
+      // Phase 6: this state change raises no domain event — it had no subscriber.
+      expect(eventBus.publishedEvents).toHaveLength(0);
+      expect(eventBus.publishedEvents).toHaveLength(0);
     });
 
     it('allows a super admin to unban another admin', async () => {
@@ -174,7 +168,7 @@ describe('UnbanUser use-case', () => {
 
       const updated = await userRepo.findById(targetAdmin._id);
       expect(updated!.isBanned).toBe(true);
-      expect(outboxStore.appended).toHaveLength(0);
+      expect(eventBus.publishedEvents).toHaveLength(0);
       expect(eventBus.publishedEvents).toHaveLength(0);
     });
   });

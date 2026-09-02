@@ -43,6 +43,21 @@ describe('MetricsRegistry', () => {
     expect(h).toEqual({ count: 3, sum: 60, min: 10, max: 30, avg: 20 });
   });
 
+  it('keeps histogram memory flat as observations accumulate', () => {
+    // Regression guard for the Phase 9 swap from `number[]` to a running aggregate:
+    // observations must fold in place, never accumulate one entry per call.
+    for (let i = 0; i < 10_000; i++) registry.observe('latency', i, { route: 'checkout' });
+
+    expect(Object.keys(registry.snapshot().histograms)).toEqual(['latency{route=checkout}']);
+    expect(registry.getHistogram('latency', { route: 'checkout' })).toEqual({
+      count: 10_000,
+      sum: (9999 * 10_000) / 2,
+      min: 0,
+      max: 9999,
+      avg: 9999 / 2,
+    });
+  });
+
   it('returns undefined for an unseen histogram', () => {
     expect(registry.getHistogram('nope')).toBeUndefined();
   });

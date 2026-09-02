@@ -69,7 +69,6 @@ function buildCustomer(): Customer {
     savedRestaurants: ['rest-1', 'rest-2'],
     dietaryPreferences: ['VEGAN'],
     defaultPaymentMethod: 'CARD',
-    fcmTokens: ['token-1'],
     notificationsEnabled: false,
   });
 }
@@ -121,7 +120,6 @@ describe('CustomerMapper', () => {
     expect(rehydrated.savedRestaurants).toEqual(original.savedRestaurants);
     expect(rehydrated.dietaryPreferences).toEqual(original.dietaryPreferences);
     expect(rehydrated.defaultPaymentMethod).toBe(original.defaultPaymentMethod);
-    expect(rehydrated.fcmTokens).toEqual(original.fcmTokens);
     expect(rehydrated.notificationsEnabled).toBe(original.notificationsEnabled);
   });
 

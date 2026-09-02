@@ -5,7 +5,6 @@ import { MongoCustomerRepository } from '../../../infrastructure/repositories/Cu
 import { MongoDriverRepository } from '../../../infrastructure/repositories/DriverRepository';
 import { MongoAdminRepository } from '../../../infrastructure/repositories/AdminRepository';
 import { MongoUnitOfWork } from '../../../infrastructure/database/MongoUnitOfWork';
-import { MongoOutboxStore } from '../../../infrastructure/database/MongoOutboxStore';
 import { MongoOutboxRepository } from '../../../infrastructure/repositories/OutboxRepository';
 
 function fakeConnection(): Connection {
@@ -21,7 +20,6 @@ describe('createIdentityContainer', () => {
     expect(container.driverRepository).toBeInstanceOf(MongoDriverRepository);
     expect(container.adminRepository).toBeInstanceOf(MongoAdminRepository);
     expect(container.unitOfWork).toBeInstanceOf(MongoUnitOfWork);
-    expect(container.outboxStore).toBeInstanceOf(MongoOutboxStore);
     expect(container.outboxRepository).toBeInstanceOf(MongoOutboxRepository);
   });
 
@@ -34,7 +32,6 @@ describe('createIdentityContainer', () => {
       container.driverRepository,
       container.adminRepository,
       container.unitOfWork,
-      container.outboxStore,
       container.outboxRepository,
     ];
 

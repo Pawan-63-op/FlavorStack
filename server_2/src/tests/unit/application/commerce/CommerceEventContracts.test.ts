@@ -118,16 +118,10 @@ describe('Commerce published event payload contracts', () => {
     expect((payload.pricing as { total: { amount: number } }).total.amount).toBe(2500);
   });
 
-  it('CheckoutReadyForPayment carries the payment intent (amount + method) only', () => {
-    const payload = serialized(byName.get('CheckoutReadyForPayment') as DomainEvent);
-    expect(payload.amount).toEqual({ amount: 2500, currency: 'INR' });
-    expect(payload.paymentMethod).toBe(PAYMENT_METHOD.UPI);
-  });
-
   it('rejects a payload missing a required field', () => {
-    const payload = serialized(byName.get('CheckoutReadyForPayment') as DomainEvent);
-    delete (payload as Record<string, unknown>).amount;
-    expect(() => assertCommerceEventContract('CheckoutReadyForPayment', payload)).toThrow();
+    const payload = serialized(byName.get('OrderRequested') as DomainEvent);
+    delete (payload as Record<string, unknown>).pricing;
+    expect(() => assertCommerceEventContract('OrderRequested', payload)).toThrow();
   });
 
   it('isCommerceEvent is false for unknown / consumed event names', () => {

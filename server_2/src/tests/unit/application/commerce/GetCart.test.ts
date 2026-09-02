@@ -7,24 +7,31 @@ import { NotFoundError } from '../../../../domain/shared/errors/NotFoundError';
 import { ValidationError } from '../../../../domain/shared/errors/ValidationError';
 import { Result } from '../../../../domain/shared/Result';
 import { CartValidator } from '../../../../infrastructure/services/CartValidator';
-import { ICommerceCatalogReadRepository } from '../../../../domain/commerce/repositories/ICommerceCatalogReadRepository';
+import { ICatalogGateway } from '../../../../domain/commerce/services/ICatalogGateway';
 import { ICartValidator } from '../../../../domain/commerce/services/ICartValidator';
-import { CommerceCatalogRestaurantView } from '../../../../domain/commerce/types/CommerceCatalogView';
+import { CartCatalogView } from '../../../../domain/commerce/types/CatalogGatewayRead';
 import { VALIDATION_ISSUE_CODE, ValidationReport } from '../../../../domain/commerce/types/ValidationReport';
 import { COMMERCE_RESTAURANT_STATUS } from '../../../../domain/commerce/enums/restaurant-status.enum';
 import { COMMERCE_CATALOG_VISIBILITY } from '../../../../domain/commerce/enums/catalog-visibility.enum';
 
-function makeCatalogReadRepository(view: CommerceCatalogRestaurantView | null = null): ICommerceCatalogReadRepository {
+/** Splits a cart view back into the two gateway reads GetCart assembles it from. */
+function makeCatalogGateway(view: CartCatalogView | null = null): ICatalogGateway {
+  const restaurant = view ? { ...view, items: undefined } : null;
+  if (restaurant) delete (restaurant as { items?: unknown }).items;
+
   return {
-    findRestaurantView: jest.fn().mockResolvedValue(view),
-    findMenuItemViews: jest.fn(),
-    upsertRestaurantView: jest.fn(),
-    removeRestaurantView: jest.fn(),
-    markEventProcessed: jest.fn(),
-  } as unknown as ICommerceCatalogReadRepository;
+    getRestaurantForCart: jest.fn().mockResolvedValue(Result.ok(restaurant)),
+    getItemsForCart: jest.fn(async (menuItemIds: string[]) =>
+      Result.ok((view?.items ?? []).filter((item) => menuItemIds.includes(item.menuItemId)))
+    ),
+    getRestaurantForCheckout: jest.fn(),
+    getItemsSnapshot: jest.fn(),
+    checkServiceability: jest.fn(),
+    isRestaurantOpen: jest.fn(),
+  } as unknown as ICatalogGateway;
 }
 
-function buildRestaurantView(overrides: Partial<CommerceCatalogRestaurantView> = {}): CommerceCatalogRestaurantView {
+function buildRestaurantView(overrides: Partial<CartCatalogView> = {}): CartCatalogView {
   return {
     restaurantId: 'restaurant-1',
     name: 'Test Restaurant',
@@ -37,6 +44,7 @@ function buildRestaurantView(overrides: Partial<CommerceCatalogRestaurantView> =
     items: [
       {
         menuItemId: 'menu-1',
+        restaurantId: 'restaurant-1',
         categoryId: 'cat-1',
         name: 'Burger',
         basePriceAmount: 15000,
@@ -46,7 +54,6 @@ function buildRestaurantView(overrides: Partial<CommerceCatalogRestaurantView> =
         outOfStockReason: null,
       },
     ],
-    updatedAt: new Date(),
     ...overrides,
   };
 }
@@ -64,8 +71,8 @@ describe('GetCart use-case', () => {
     cart.addItem('restaurant-1', selection, Money.create(15000).getValue());
     await cartRepo.save(cart);
 
-    const catalogReadRepository = makeCatalogReadRepository(buildRestaurantView());
-    const useCase = new GetCart(cartRepo, catalogReadRepository, new CartValidator());
+    const catalogGateway = makeCatalogGateway(buildRestaurantView());
+    const useCase = new GetCart(cartRepo, catalogGateway, new CartValidator());
 
     const result = await useCase.execute({ customerId: 'customer-1' });
 
@@ -79,7 +86,7 @@ describe('GetCart use-case', () => {
     expect(view.items[0].unitPriceSnapshot).toEqual({ amount: 15000, currency: 'INR' });
     expect(view.items[0].lineTotal).toEqual({ amount: 30000, currency: 'INR' });
     expect(view.validation).toEqual({ isValid: true, issues: [] });
-    expect(catalogReadRepository.findRestaurantView).toHaveBeenCalledWith('restaurant-1');
+    expect(catalogGateway.getRestaurantForCart).toHaveBeenCalledWith('restaurant-1');
   });
 
   it('enriches each cart line with current name, price and availability from the projection', async () => {
@@ -88,8 +95,8 @@ describe('GetCart use-case', () => {
     cart.addItem('restaurant-1', selection, Money.create(15000).getValue());
     await cartRepo.save(cart);
 
-    const catalogReadRepository = makeCatalogReadRepository(buildRestaurantView());
-    const useCase = new GetCart(cartRepo, catalogReadRepository, new CartValidator());
+    const catalogGateway = makeCatalogGateway(buildRestaurantView());
+    const useCase = new GetCart(cartRepo, catalogGateway, new CartValidator());
 
     const result = await useCase.execute({ customerId: 'customer-1' });
 
@@ -116,6 +123,7 @@ describe('GetCart use-case', () => {
       items: [
         {
           menuItemId: 'menu-1',
+          restaurantId: 'restaurant-1',
           categoryId: 'cat-1',
           name: 'Burger',
           basePriceAmount: 15000,
@@ -145,8 +153,8 @@ describe('GetCart use-case', () => {
         },
       ],
     });
-    const catalogReadRepository = makeCatalogReadRepository(view);
-    const useCase = new GetCart(cartRepo, catalogReadRepository, new CartValidator());
+    const catalogGateway = makeCatalogGateway(view);
+    const useCase = new GetCart(cartRepo, catalogGateway, new CartValidator());
 
     const result = await useCase.execute({ customerId: 'customer-1' });
 
@@ -164,8 +172,8 @@ describe('GetCart use-case', () => {
     cart.addItem('restaurant-1', selection, Money.create(15000).getValue());
     await cartRepo.save(cart);
 
-    const catalogReadRepository = makeCatalogReadRepository(buildRestaurantView());
-    const useCase = new GetCart(cartRepo, catalogReadRepository, new CartValidator());
+    const catalogGateway = makeCatalogGateway(buildRestaurantView());
+    const useCase = new GetCart(cartRepo, catalogGateway, new CartValidator());
 
     const result = await useCase.execute({ customerId: 'customer-1' });
 
@@ -178,8 +186,8 @@ describe('GetCart use-case', () => {
   });
 
   it('fails with NotFoundError when the customer has no cart', async () => {
-    const catalogReadRepository = makeCatalogReadRepository();
-    const useCase = new GetCart(cartRepo, catalogReadRepository, new CartValidator());
+    const catalogGateway = makeCatalogGateway();
+    const useCase = new GetCart(cartRepo, catalogGateway, new CartValidator());
 
     const result = await useCase.execute({ customerId: 'no-cart-customer' });
 
@@ -191,15 +199,15 @@ describe('GetCart use-case', () => {
     const cart = Cart.create('customer-1').getValue();
     await cartRepo.save(cart);
 
-    const catalogReadRepository = makeCatalogReadRepository();
-    const useCase = new GetCart(cartRepo, catalogReadRepository, new CartValidator());
+    const catalogGateway = makeCatalogGateway();
+    const useCase = new GetCart(cartRepo, catalogGateway, new CartValidator());
 
     const result = await useCase.execute({ customerId: 'customer-1' });
 
     expect(result.isSuccess).toBe(true);
     const view = result.getValue();
     expect(view.validation).toEqual({ isValid: true, issues: [] });
-    expect(catalogReadRepository.findRestaurantView).not.toHaveBeenCalled();
+    expect(catalogGateway.getRestaurantForCart).not.toHaveBeenCalled();
   });
 
   it('surfaces validation issues from the catalog projection (e.g. unavailable item)', async () => {
@@ -212,6 +220,7 @@ describe('GetCart use-case', () => {
       items: [
         {
           menuItemId: 'menu-1',
+          restaurantId: 'restaurant-1',
           categoryId: 'cat-1',
           name: 'Burger',
           basePriceAmount: 15000,
@@ -222,8 +231,8 @@ describe('GetCart use-case', () => {
         },
       ],
     });
-    const catalogReadRepository = makeCatalogReadRepository(view);
-    const useCase = new GetCart(cartRepo, catalogReadRepository, new CartValidator());
+    const catalogGateway = makeCatalogGateway(view);
+    const useCase = new GetCart(cartRepo, catalogGateway, new CartValidator());
 
     const result = await useCase.execute({ customerId: 'customer-1' });
 
@@ -241,11 +250,11 @@ describe('GetCart use-case', () => {
     cart.addItem('restaurant-1', selection, Money.create(15000).getValue());
     await cartRepo.save(cart);
 
-    const catalogReadRepository = makeCatalogReadRepository(buildRestaurantView());
+    const catalogGateway = makeCatalogGateway(buildRestaurantView());
     const failingValidator: ICartValidator = {
       validate: jest.fn().mockReturnValue(Result.fail<ValidationReport>(new ValidationError('validator_exploded'))),
     };
-    const useCase = new GetCart(cartRepo, catalogReadRepository, failingValidator);
+    const useCase = new GetCart(cartRepo, catalogGateway, failingValidator);
 
     const result = await useCase.execute({ customerId: 'customer-1' });
 

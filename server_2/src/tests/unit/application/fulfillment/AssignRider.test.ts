@@ -5,7 +5,6 @@ import {
   buildReadyFulfillment,
   makeRepo,
   makeUnitOfWork,
-  makeOutbox,
   makeEventBus,
   makeAssignmentService,
 } from './assignment-uc-fixtures';
@@ -17,8 +16,8 @@ describe('AssignRider (admin manual)', () => {
     const f = buildReadyFulfillment();
     const repo = makeRepo({ findById: jest.fn().mockResolvedValue(f) });
     const service = makeAssignmentService(null); // would return null if consulted
-    const outbox = makeOutbox();
-    const uc = new AssignRider(repo, service, makeUnitOfWork(), outbox, makeEventBus(), TTL);
+    const bus = makeEventBus();
+    const uc = new AssignRider(repo, service, makeUnitOfWork(), bus, TTL);
 
     const result = await uc.execute({ fulfillmentId: f.id.toString(), riderId: 'rider-admin' });
 
@@ -28,14 +27,14 @@ describe('AssignRider (admin manual)', () => {
       riderId: 'rider-admin',
       status: RIDER_ASSIGNMENT_STATUS.OFFERED,
     });
-    expect(outbox.append.mock.calls[0][0][0].eventName).toBe('RiderOffered');
+    expect(bus.publishAll.mock.calls[0][0][0].eventName).toBe('RiderOffered');
   });
 
   it('falls back to the service when no riderId is supplied', async () => {
     const f = buildReadyFulfillment();
     const repo = makeRepo({ findById: jest.fn().mockResolvedValue(f) });
     const service = makeAssignmentService('rider-auto');
-    const uc = new AssignRider(repo, service, makeUnitOfWork(), makeOutbox(), makeEventBus(), TTL);
+    const uc = new AssignRider(repo, service, makeUnitOfWork(), makeEventBus(), TTL);
 
     const result = await uc.execute({ fulfillmentId: f.id.toString() });
 
@@ -46,7 +45,7 @@ describe('AssignRider (admin manual)', () => {
   it('fails with ConflictError when no riderId and the service finds nobody', async () => {
     const f = buildReadyFulfillment();
     const repo = makeRepo({ findById: jest.fn().mockResolvedValue(f) });
-    const uc = new AssignRider(repo, makeAssignmentService(null), makeUnitOfWork(), makeOutbox(), makeEventBus(), TTL);
+    const uc = new AssignRider(repo, makeAssignmentService(null), makeUnitOfWork(), makeEventBus(), TTL);
 
     const result = await uc.execute({ fulfillmentId: f.id.toString() });
 

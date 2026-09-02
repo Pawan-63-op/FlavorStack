@@ -1,5 +1,4 @@
 import { randomUUID } from 'crypto';
-import type { Job, Queue } from 'bullmq';
 
 import { Fulfillment } from '../../../domain/fulfillment/entities/Fulfillment';
 import { FulfillmentLine } from '../../../domain/fulfillment/value-objects/FulfillmentLine';
@@ -14,18 +13,16 @@ import { TransactionContext } from '../../../infrastructure/database/Transaction
 import { MongoUnitOfWork } from '../../../infrastructure/database/MongoUnitOfWork';
 import { MongoOutboxStore } from '../../../infrastructure/database/MongoOutboxStore';
 import { MongoFulfillmentRepository } from '../../../infrastructure/repositories/FulfillmentRepository';
-import { MongoFulfillmentProjectionRepository } from '../../../infrastructure/repositories/FulfillmentProjectionRepository';
+import { MongoCustomerTrackingRepository } from '../../../infrastructure/repositories/CustomerTrackingRepository';
+import { MongoFulfillmentQueryRepository } from '../../../infrastructure/repositories/FulfillmentQueryRepository';
 import { MongoDeliveryTrackingStore } from '../../../infrastructure/repositories/DeliveryTrackingStore';
 import { CacheStore } from '../../../infrastructure/redis/CacheStore';
 import { RedisClient } from '../../../infrastructure/redis/client';
 import { FulfillmentCache } from '../../../infrastructure/redis/fulfillment/FulfillmentCache';
-import { DLQHandler } from '../../../infrastructure/workers/shared/DLQHandler';
-import { QUEUE } from '../../../config/bullmq';
 
 import { FulfillmentModel } from '../../../infrastructure/database/models/FulfillmentModel';
 import { OutboxEventModel } from '../../../infrastructure/database/models/OutboxEventModel';
 import { CustomerTrackingViewModel } from '../../../infrastructure/database/models/CustomerTrackingViewModel';
-import { AdminDashboardViewModel } from '../../../infrastructure/database/models/AdminDashboardViewModel';
 import { DeliveryTrackingModel } from '../../../infrastructure/database/models/DeliveryTrackingModel';
 
 import { GetLiveTracking } from '../../../application/fulfillment/use-cases/GetLiveTracking';
@@ -36,10 +33,7 @@ import { getFulfillmentConfig } from '../../../config/fulfillment';
 import { ILiveLocationStore } from '../../../application/fulfillment/ports/ILiveLocationStore';
 import { ITrackingBroadcaster } from '../../../application/fulfillment/ports/ITrackingBroadcaster';
 import { RiderLocationSnapshot } from '../../../application/fulfillment/ports/RiderLocationSnapshot';
-import {
-  CustomerTrackingView,
-  AdminDashboardView,
-} from '../../../domain/fulfillment/repositories/IFulfillmentProjectionRepository';
+import { CustomerTrackingView } from '../../../domain/fulfillment/repositories/ICustomerTrackingRepository';
 
 const CUSTOMER_ID = 'cust-1';
 const RESTAURANT_ID = 'rest-1';
@@ -149,15 +143,15 @@ describe('Fulfillment benchmarks & production hardening (Phase 9.4)', () => {
   let txContext: TransactionContext;
   let repo: MongoFulfillmentRepository;
   let uow: MongoUnitOfWork;
-  let outbox: MongoOutboxStore;
-  let projectionRepo: MongoFulfillmentProjectionRepository;
+  let trackingRepo: MongoCustomerTrackingRepository;
+  let queryRepo: MongoFulfillmentQueryRepository;
 
   beforeEach(() => {
     txContext = new TransactionContext();
     repo = new MongoFulfillmentRepository(txContext);
     uow = new MongoUnitOfWork(getConnection(), txContext);
-    outbox = new MongoOutboxStore(txContext);
-    projectionRepo = new MongoFulfillmentProjectionRepository();
+    trackingRepo = new MongoCustomerTrackingRepository();
+    queryRepo = new MongoFulfillmentQueryRepository();
   });
 
   afterEach(async () => {
@@ -165,13 +159,12 @@ describe('Fulfillment benchmarks & production hardening (Phase 9.4)', () => {
       FulfillmentModel.deleteMany({}),
       OutboxEventModel.deleteMany({}),
       CustomerTrackingViewModel.deleteMany({}),
-      AdminDashboardViewModel.deleteMany({}),
       DeliveryTrackingModel.deleteMany({}),
     ]);
   });
 
   async function seedTracking(fulfillmentId: string): Promise<void> {
-    await projectionRepo.upsertCustomerTracking({
+    await trackingRepo.upsertCustomerTracking({
       fulfillmentId,
       eventId: randomUUID(),
       set: {
@@ -196,26 +189,38 @@ describe('Fulfillment benchmarks & production hardening (Phase 9.4)', () => {
     });
   }
 
-  async function seedAdminViews(count: number): Promise<void> {
-    for (let i = 0; i < count; i += 1) {
-      const view: AdminDashboardView = {
-        fulfillmentId: `adm-${i}-${randomUUID().slice(0, 6)}`,
+  /**
+   * Phase 3 / Batch 5: the dashboard reads the `fulfillments` aggregate, so the benchmark seeds
+   * aggregate documents rather than the retired admin_dashboard_views projection.
+   */
+  async function seedDashboardRows(count: number): Promise<void> {
+    const now = Date.now();
+    await FulfillmentModel.insertMany(
+      Array.from({ length: count }, (_, i) => ({
+        _id: `adm-${i}-${randomUUID().slice(0, 6)}`,
         orderRequestId: `order-${i}`,
         customerId: CUSTOMER_ID,
         restaurantId: RESTAURANT_ID,
-        status: FULFILLMENT_STATUS.PREPARING,
+        lines: [],
+        deliveryAddress: {
+          street: '12 MG Road',
+          city: 'Bengaluru',
+          state: 'Karnataka',
+          pinCode: '560001',
+          coordinates: { lat: 12.97, lng: 77.59 },
+        },
+        pricingTotal: { amount: 45000, currency: 'INR' },
+        fulfillmentStatus: FULFILLMENT_STATUS.PREPARING,
         deliveryStatus: 'UNASSIGNED',
-        riderId: null,
-        createdAt: new Date(Date.now() - i * 1000),
-        updatedAt: new Date(),
-        slaBreached: false,
-        exceptionFlag: false,
+        currentAssignment: null,
+        assignmentHistory: [],
         cancellation: null,
         failureReason: null,
-        total: { amount: 45000, currency: 'INR' },
-      };
-      await projectionRepo.upsertAdminView(view);
-    }
+        createdAt: new Date(now - i * 1000),
+        updatedAt: new Date(now - i * 1000),
+        version: 1,
+      }))
+    );
   }
 
   describe('hot-read caching baseline (cached vs uncached)', () => {
@@ -223,9 +228,9 @@ describe('Fulfillment benchmarks & production hardening (Phase 9.4)', () => {
       const id = `ful-${randomUUID().slice(0, 8)}`;
       await seedTracking(id);
 
-      const findSpy = jest.spyOn(projectionRepo, 'findCustomerTracking');
+      const findSpy = jest.spyOn(trackingRepo, 'findCustomerTracking');
       const cache = new FulfillmentCache(new InMemoryCacheStore());
-      const uc = new GetLiveTracking(projectionRepo, cache);
+      const uc = new GetLiveTracking(trackingRepo, cache);
 
       const t0 = process.hrtime.bigint();
       const cold = await uc.execute({ fulfillmentId: id, customerId: CUSTOMER_ID });
@@ -243,11 +248,11 @@ describe('Fulfillment benchmarks & production hardening (Phase 9.4)', () => {
     });
 
     it('dashboard: a warm read is served from cache and elides the projection read', async () => {
-      await seedAdminViews(25);
+      await seedDashboardRows(25);
 
-      const findSpy = jest.spyOn(projectionRepo, 'findAdminDashboard');
+      const findSpy = jest.spyOn(queryRepo, 'findAdminDashboard');
       const cache = new FulfillmentCache(new InMemoryCacheStore());
-      const uc = new GetAdminDashboard(projectionRepo, cache);
+      const uc = new GetAdminDashboard(queryRepo, cache);
       const dto = { status: FULFILLMENT_STATUS.PREPARING, limit: 50, offset: 0 };
 
       const t0 = process.hrtime.bigint();
@@ -310,7 +315,7 @@ describe('Fulfillment benchmarks & production hardening (Phase 9.4)', () => {
       await seedTracking(id);
 
       const cache = new FulfillmentCache(new DownCacheStore());
-      const uc = new GetLiveTracking(projectionRepo, cache);
+      const uc = new GetLiveTracking(trackingRepo, cache);
 
       const result = await uc.execute({ fulfillmentId: id, customerId: CUSTOMER_ID });
       expect(result.isSuccess).toBe(true);
@@ -318,10 +323,10 @@ describe('Fulfillment benchmarks & production hardening (Phase 9.4)', () => {
     });
 
     it('dashboard read falls back to Mongo when the cache faults', async () => {
-      await seedAdminViews(5);
+      await seedDashboardRows(5);
 
       const cache = new FulfillmentCache(new DownCacheStore());
-      const uc = new GetAdminDashboard(projectionRepo, cache);
+      const uc = new GetAdminDashboard(queryRepo, cache);
 
       const result = await uc.execute({ status: FULFILLMENT_STATUS.PREPARING });
       expect(result.isSuccess).toBe(true);
@@ -429,7 +434,11 @@ describe('Fulfillment benchmarks & production hardening (Phase 9.4)', () => {
     });
   });
 
-  describe('outbox atomicity (replica-set requirement) & DLQ wiring', () => {
+  describe('outbox atomicity (replica-set requirement)', () => {
+    // Drives MongoOutboxStore directly: this block covers the UnitOfWork/replica-set
+    // atomicity contract, not fulfillment's use of the outbox (removed in Phase 7).
+    const outbox = new MongoOutboxStore(new TransactionContext());
+
     it('commits the aggregate and its outbox rows in one transaction', async () => {
       const f = buildFulfillment();
       const loaded = await (async () => {
@@ -468,28 +477,6 @@ describe('Fulfillment benchmarks & production hardening (Phase 9.4)', () => {
       const persisted = (await repo.findById(f.id.toString())) as Fulfillment;
       expect(persisted.fulfillmentStatus.value).toBe(FULFILLMENT_STATUS.CREATED);
       expect(await OutboxEventModel.countDocuments({ aggregateId: f.id.toString() })).toBe(0);
-    });
-
-    it('DLQ wiring routes an exhausted job (payload + failure context) to the dead-letter queue', async () => {
-      const add = jest.fn(async () => undefined);
-      const handler = new DLQHandler({ add } as unknown as Queue);
-      const job = {
-        name: 'assignment-timeout',
-        data: { fulfillmentId: 'ful-1', attempt: 3 },
-        attemptsMade: 3,
-      } as unknown as Job;
-
-      await handler.handle('fulfillment-queue', job, new Error('handler exhausted'));
-
-      expect(add).toHaveBeenCalledWith(
-        QUEUE.dlq,
-        expect.objectContaining({
-          sourceQueue: 'fulfillment-queue',
-          jobName: 'assignment-timeout',
-          failedReason: 'handler exhausted',
-          attemptsMade: 3,
-        })
-      );
     });
   });
 });

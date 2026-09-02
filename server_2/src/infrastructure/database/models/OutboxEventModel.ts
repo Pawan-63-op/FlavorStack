@@ -21,6 +21,9 @@ export interface OutboxEventDocument {
   processedAt: Date | null;
   nextAttemptAt: Date;
   lastError: string | null;
+  /** Set when a relay claims the row (PENDING → PROCESSING); cleared on settle.
+   *  A row whose lockedAt is older than the lease is reclaimed as PENDING. */
+  lockedAt: Date | null;
 }
 
 const OutboxEventSchema = new Schema<OutboxEventDocument>(
@@ -36,6 +39,7 @@ const OutboxEventSchema = new Schema<OutboxEventDocument>(
     processedAt: { type: Date, default: null },
     nextAttemptAt: { type: Date, required: true, default: Date.now },
     lastError: { type: String, default: null },
+    lockedAt: { type: Date, default: null },
   },
   {
     versionKey: false,
@@ -44,5 +48,7 @@ const OutboxEventSchema = new Schema<OutboxEventDocument>(
 );
 
 OutboxEventSchema.index({ status: 1, nextAttemptAt: 1 });
+// Supports the stale-lease reaper: PROCESSING rows ordered by claim time.
+OutboxEventSchema.index({ status: 1, lockedAt: 1 });
 
 export const OutboxEventModel = model<OutboxEventDocument>('OutboxEvent', OutboxEventSchema);

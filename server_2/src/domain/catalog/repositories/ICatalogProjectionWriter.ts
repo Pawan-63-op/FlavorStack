@@ -12,8 +12,8 @@ import { MenuItem } from '../entities/MenuItem';
  */
 export interface ICatalogProjectionWriter {
   /**
-   * Rebuild `restaurant_summary`, `restaurant_menu_view`, and the restaurant's
-   * `menu_item_search` documents from the live aggregate + its menu items.
+   * Rebuild `restaurant_summary` and the restaurant's `menu_item_search`
+   * documents from the live aggregate + its menu items.
    */
   rebuildRestaurant(restaurant: Restaurant, items: MenuItem[]): Promise<void>;
 

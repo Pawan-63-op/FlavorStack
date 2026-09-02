@@ -65,7 +65,7 @@ else
 fi
 
 head "Restarting the rest of the stack (current images)"
-"${COMPOSE[@]}" up -d
+"${COMPOSE[@]}" up -d --remove-orphans
 log "compose up -d issued"
 
 head "Rollback done — verifying"

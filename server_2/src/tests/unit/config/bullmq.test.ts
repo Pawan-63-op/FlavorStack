@@ -11,13 +11,7 @@ describe('bullmq config', () => {
     it('exposes the exact queue names', () => {
       expect(QUEUE).toEqual({
         email: 'email-queue',
-        notification: 'notification-queue',
-        dlq: 'dead-letter-queue',
-        commerce: 'commerce-queue',
         fulfillment: 'fulfillment-queue',
-        searchReindex: 'search-reindex-queue',
-        ordering: 'ordering-queue',
-        payments: 'payments-queue',
       });
     });
   });
@@ -66,6 +60,8 @@ describe('bullmq config', () => {
   });
 
   describe('getDefaultJobOptions', () => {
+    // `removeOnFail: false` is the dead-letter queue's replacement (Phase 8): an exhausted job
+    // is retained in `bull:<queue>:failed` rather than copied onto a queue nothing drained.
     it('returns 3 attempts with exponential backoff and removeOnComplete only', () => {
       expect(getDefaultJobOptions()).toEqual({
         attempts: 3,

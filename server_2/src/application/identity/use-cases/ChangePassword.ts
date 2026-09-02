@@ -6,7 +6,6 @@ import { IUserRepository } from '../../../domain/identity/repositories/IUserRepo
 import { IPasswordHasher } from '../../../domain/identity/services/IPasswordHasher';
 import { ISessionStore } from '../../../domain/identity/services/ISessionStore';
 import { IUnitOfWork } from '../../shared/ports/IUnitOfWork';
-import { IOutboxStore } from '../../shared/outbox/IOutboxStore';
 import { IEventBus } from '../../shared/events/IEventBus';
 import { ChangePasswordDto } from '../dtos/ChangePasswordDto';
 
@@ -16,7 +15,6 @@ export class ChangePassword {
     private passwordHasher: IPasswordHasher,
     private sessionStore: ISessionStore,
     private unitOfWork: IUnitOfWork,
-    private outboxStore: IOutboxStore,
     private eventBus: IEventBus,
   ) {}
 
@@ -37,9 +35,8 @@ export class ChangePassword {
 
     const events = user.pullDomainEvents();
 
-    await this.unitOfWork.runInTransaction(async (ctx) => {
+    await this.unitOfWork.runInTransaction(async () => {
       await this.userRepo.update(user);
-      await this.outboxStore.append(events, ctx);
     });
 
     await this.eventBus.publishAll(events);

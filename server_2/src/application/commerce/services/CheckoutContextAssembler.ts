@@ -8,7 +8,6 @@ import { Cart } from '../../../domain/commerce/entities/Cart';
 import { Quantity } from '../../../domain/commerce/value-objects/Quantity';
 import { AppliedPromotion } from '../../../domain/commerce/value-objects/AppliedPromotion';
 import { ICatalogGateway } from '../../../domain/commerce/services/ICatalogGateway';
-import { ICommerceCatalogReadRepository } from '../../../domain/commerce/repositories/ICommerceCatalogReadRepository';
 import { IPromotionService } from '../../../domain/commerce/services/IPromotionService';
 import { SubtotalStage } from '../../../domain/commerce/services/pricing/SubtotalStage';
 import { PricingContext, PricingLineInput } from '../../../domain/commerce/types/PricingContext';
@@ -43,7 +42,6 @@ export interface CheckoutAssembly {
 export class CheckoutContextAssembler {
   constructor(
     private readonly catalogGateway: ICatalogGateway,
-    private readonly catalogReadRepo: ICommerceCatalogReadRepository,
     private readonly promotionService: IPromotionService,
     private readonly pricingPolicy: CommercePricingPolicy
   ) {}
@@ -70,8 +68,12 @@ export class CheckoutContextAssembler {
     if (itemsResult.isFailure) return Result.fail<CheckoutAssembly>(itemsResult.getError());
     const itemsById = new Map(itemsResult.getValue().map((item) => [item.menuItemId, item]));
 
-    const projectionViews = await this.catalogReadRepo.findMenuItemViews(menuItemIds);
-    const projectionById = new Map(projectionViews.map((view) => [view.menuItemId, view]));
+    // Variant option groups are not on the checkout snapshot, so they are read from the
+    // catalog source of truth. Previously this came from a Commerce-local projection, and a
+    // stale or missing row failed the checkout outright.
+    const variantsResult = await this.catalogGateway.getItemsForCart(menuItemIds);
+    if (variantsResult.isFailure) return Result.fail<CheckoutAssembly>(variantsResult.getError());
+    const variantsById = new Map(variantsResult.getValue().map((view) => [view.menuItemId, view]));
 
     const resolvedLines: ResolvedCheckoutLine[] = [];
     for (const item of cart.items) {
@@ -88,7 +90,7 @@ export class CheckoutContextAssembler {
         return Result.fail<CheckoutAssembly>(new ConflictError(`Item is unavailable: ${item.menuItemId}`));
       }
 
-      const optionsResult = this.resolveOptions(item.menuItemId, item.selectedOptionIds, projectionById.get(item.menuItemId));
+      const optionsResult = this.resolveOptions(item.menuItemId, item.selectedOptionIds, variantsById.get(item.menuItemId));
       if (optionsResult.isFailure) return Result.fail<CheckoutAssembly>(optionsResult.getError());
 
       resolvedLines.push({
@@ -155,18 +157,18 @@ export class CheckoutContextAssembler {
   private resolveOptions(
     menuItemId: string,
     selectedOptionIds: string[],
-    projection: { variantGroups: { options: { optionId: string; label: string; priceDeltaAmount: number; currency: string; isAvailable: boolean }[] }[] } | undefined
+    variants: { variantGroups: { options: { optionId: string; label: string; priceDeltaAmount: number; currency: string; isAvailable: boolean }[] }[] } | undefined
   ): Result<ResolvedCheckoutOption[]> {
     if (selectedOptionIds.length === 0) return Result.ok<ResolvedCheckoutOption[]>([]);
 
-    if (!projection) {
+    if (!variants) {
       return Result.fail<ResolvedCheckoutOption[]>(
         new NotFoundError(`No projected variants for item: ${menuItemId}`)
       );
     }
 
     const optionsById = new Map<string, { label: string; priceDeltaAmount: number; currency: string; isAvailable: boolean }>();
-    for (const group of projection.variantGroups) {
+    for (const group of variants.variantGroups) {
       for (const option of group.options) {
         optionsById.set(option.optionId, option);
       }

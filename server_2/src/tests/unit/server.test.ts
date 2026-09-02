@@ -28,7 +28,7 @@ describe('server entrypoint', () => {
     mockCreateApp.mockReturnValue({ listen: mockListen });
 
     await jest.isolateModulesAsync(async () => {
-      await import('../../server');
+      await import('../../server.js');
     });
     await new Promise((resolve) => setImmediate(resolve));
 

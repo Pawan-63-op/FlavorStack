@@ -1,6 +1,6 @@
 import { ReorderCategories } from '../../../../application/catalog/use-cases/ReorderCategories';
 import { InMemoryRestaurantRepository } from '../../../mocks/catalog.mocks';
-import { InMemoryUnitOfWork, InMemoryOutboxStore } from '../../../mocks/identity.mocks';
+import { InMemoryUnitOfWork } from '../../../mocks/identity.mocks';
 import { createEventBusSpy, EventBusSpy } from '../../../mocks/shared.mocks';
 import { buildRestaurant } from './helpers';
 import { NotFoundError } from '../../../../domain/shared/errors/NotFoundError';
@@ -10,16 +10,14 @@ import { ValidationError } from '../../../../domain/shared/errors/ValidationErro
 describe('ReorderCategories use-case', () => {
   let restaurantRepo: InMemoryRestaurantRepository;
   let unitOfWork: InMemoryUnitOfWork;
-  let outboxStore: InMemoryOutboxStore;
   let eventBus: EventBusSpy;
   let useCase: ReorderCategories;
 
   beforeEach(() => {
     restaurantRepo = new InMemoryRestaurantRepository();
     unitOfWork = new InMemoryUnitOfWork();
-    outboxStore = new InMemoryOutboxStore();
     eventBus = createEventBusSpy();
-    useCase = new ReorderCategories(restaurantRepo, unitOfWork, outboxStore, eventBus);
+    useCase = new ReorderCategories(restaurantRepo, unitOfWork, eventBus);
   });
 
   it('reorders the restaurant categories', async () => {
@@ -41,8 +39,8 @@ describe('ReorderCategories use-case', () => {
     expect(categories.find((c) => c.id === dessertsId)?.sortOrder).toBe(0);
     expect(categories.find((c) => c.id === mainsId)?.sortOrder).toBe(1);
 
-    expect(outboxStore.appended).toHaveLength(1);
-    expect(outboxStore.appended[0].eventName).toBe('CategoryUpdated');
+    expect(eventBus.publishedEvents).toHaveLength(1);
+    expect(eventBus.publishedEvents[0].eventName).toBe('CategoryUpdated');
     expect(eventBus.publishedEvents).toHaveLength(1);
   });
 
@@ -84,7 +82,7 @@ describe('ReorderCategories use-case', () => {
 
     expect(result.isFailure).toBe(true);
     expect(result.getError()).toBeInstanceOf(ValidationError);
-    expect(outboxStore.appended).toHaveLength(0);
+    expect(eventBus.publishedEvents).toHaveLength(0);
     expect(eventBus.publishedEvents).toHaveLength(0);
   });
 });

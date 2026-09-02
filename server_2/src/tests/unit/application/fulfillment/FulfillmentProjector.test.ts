@@ -2,30 +2,23 @@ import { randomUUID } from 'crypto';
 import { DomainEvent } from '../../../../domain/shared/DomainEvent';
 import { FulfillmentProjector } from '../../../../application/fulfillment/projector/FulfillmentProjector';
 import {
-  IFulfillmentProjectionRepository,
+  ICustomerTrackingRepository,
   CustomerTrackingView,
-  RestaurantFulfillmentView,
-  RiderQueueView,
-} from '../../../../domain/fulfillment/repositories/IFulfillmentProjectionRepository';
+} from '../../../../domain/fulfillment/repositories/ICustomerTrackingRepository';
+import {
+  RiderQueueView as QueryRiderQueueView,
+  AdminDashboardView as QueryAdminDashboardView,
+} from '../../../../domain/fulfillment/repositories/IFulfillmentQueryRepository';
+// Read-side port (Phase 3) — rider and admin reads no longer go through the projection.
+import { makeQueryRepo } from '../../../mocks/fulfillment.mocks';
+import { registerFulfillmentProjector } from '../../../../application/fulfillment/projector/FulfillmentProjectionRegistry';
+import { IEventBus } from '../../../../application/shared/events/IEventBus';
 
-
-function makeRepo(): jest.Mocked<IFulfillmentProjectionRepository> {
+function makeRepo(): jest.Mocked<ICustomerTrackingRepository> {
   return {
     upsertCustomerTracking: jest.fn().mockResolvedValue(undefined),
     findCustomerTracking: jest.fn().mockResolvedValue(null),
     findByCustomer: jest.fn().mockResolvedValue([]),
-    upsertRestaurantView: jest.fn().mockResolvedValue(undefined),
-    removeRestaurantView: jest.fn().mockResolvedValue(undefined),
-    findRestaurantQueue: jest.fn().mockResolvedValue([]),
-    upsertRiderQueueItem: jest.fn().mockResolvedValue(undefined),
-    removeRiderQueueItem: jest.fn().mockResolvedValue(undefined),
-    removeAllRiderQueueItemsForFulfillment: jest.fn().mockResolvedValue(undefined),
-    findRiderQueue: jest.fn().mockResolvedValue([]),
-    findRiderCompletedDeliveries: jest.fn().mockResolvedValue([]),
-    upsertAdminView: jest.fn().mockResolvedValue(undefined),
-    patchAdminView: jest.fn().mockResolvedValue(undefined),
-    findAdminDashboard: jest.fn().mockResolvedValue([]),
-    aggregateAnalytics: jest.fn(),
   };
 }
 
@@ -54,7 +47,7 @@ const ADDRESS = {
 
 
 describe('FulfillmentProjector', () => {
-  let repo: jest.Mocked<IFulfillmentProjectionRepository>;
+  let repo: jest.Mocked<ICustomerTrackingRepository>;
   let projector: FulfillmentProjector;
 
   beforeEach(() => {
@@ -63,7 +56,7 @@ describe('FulfillmentProjector', () => {
   });
 
   describe('onFulfillmentCreated', () => {
-    it('seeds CustomerTrackingView, RestaurantFulfillmentView, and AdminDashboardView', async () => {
+    it('seeds the CustomerTrackingView', async () => {
       const event = evt('FulfillmentCreated', FULFILLMENT_ID, {
         orderRequestId: 'or-1',
         customerId: CUSTOMER_ID,
@@ -80,68 +73,24 @@ describe('FulfillmentProjector', () => {
       expect(ctArgs.fulfillmentId).toBe(FULFILLMENT_ID);
       expect(ctArgs.set.currentStatus).toBe('CREATED');
       expect(ctArgs.timelineEntry.status).toBe('CREATED');
-
-      expect(repo.upsertRestaurantView).toHaveBeenCalledTimes(1);
-      const rvArgs = repo.upsertRestaurantView.mock.calls[0][0];
-      expect(rvArgs.restaurantId).toBe(RESTAURANT_ID);
-      expect(rvArgs.status).toBe('CREATED');
-      expect(rvArgs.lines).toHaveLength(1);
-
-      expect(repo.upsertAdminView).toHaveBeenCalledTimes(1);
-      const avArgs = repo.upsertAdminView.mock.calls[0][0];
-      expect(avArgs.status).toBe('CREATED');
-      expect(avArgs.slaBreached).toBe(false);
+      expect(ctArgs.set.customerId).toBe(CUSTOMER_ID);
+      expect(ctArgs.set.restaurantId).toBe(RESTAURANT_ID);
     });
   });
 
   describe('onPreparationStarted', () => {
-    it('updates CustomerTracking and patches AdminView status to PREPARING', async () => {
-      const existingRow: RestaurantFulfillmentView = {
-        fulfillmentId: FULFILLMENT_ID,
-        restaurantId: RESTAURANT_ID,
-        customerId: CUSTOMER_ID,
-        orderRequestId: 'or-1',
-        status: 'CREATED',
-        prepEstimateMinutes: null,
-        lines: [],
-        total: TOTAL,
-        createdAt: new Date(),
-        readyAt: null,
-        updatedAt: new Date(),
-      };
-      repo.findRestaurantQueue.mockResolvedValue([existingRow]);
-
+    it('updates CustomerTracking to PREPARING', async () => {
       await projector.onPreparationStarted(
         evt('PreparationStarted', FULFILLMENT_ID, { restaurantId: RESTAURANT_ID, prepEstimateMinutes: 15 })
       );
 
       expect(repo.upsertCustomerTracking).toHaveBeenCalledTimes(1);
       expect(repo.upsertCustomerTracking.mock.calls[0][0].set.currentStatus).toBe('PREPARING');
-
-      expect(repo.upsertRestaurantView).toHaveBeenCalledTimes(1);
-      expect(repo.upsertRestaurantView.mock.calls[0][0].prepEstimateMinutes).toBe(15);
-      expect(repo.upsertRestaurantView.mock.calls[0][0].status).toBe('PREPARING');
-
-      expect(repo.patchAdminView).toHaveBeenCalledWith(FULFILLMENT_ID, expect.objectContaining({ status: 'PREPARING' }));
     });
   });
 
   describe('onReadyForPickup', () => {
-    it('updates CustomerTracking, RestaurantView readyAt, and AdminView', async () => {
-      const existingRow: RestaurantFulfillmentView = {
-        fulfillmentId: FULFILLMENT_ID,
-        restaurantId: RESTAURANT_ID,
-        customerId: CUSTOMER_ID,
-        orderRequestId: 'or-1',
-        status: 'PREPARING',
-        prepEstimateMinutes: null,
-        lines: [],
-        total: TOTAL,
-        createdAt: new Date(),
-        readyAt: null,
-        updatedAt: new Date(),
-      };
-      repo.findRestaurantQueue.mockResolvedValue([existingRow]);
+    it('updates CustomerTracking and stamps the timeline entry at readyAt', async () => {
       const readyAt = new Date();
 
       await projector.onReadyForPickup(
@@ -149,109 +98,42 @@ describe('FulfillmentProjector', () => {
       );
 
       expect(repo.upsertCustomerTracking.mock.calls[0][0].set.currentStatus).toBe('READY_FOR_PICKUP');
-      expect(repo.upsertRestaurantView.mock.calls[0][0].readyAt).toBe(readyAt);
-      expect(repo.patchAdminView).toHaveBeenCalledWith(FULFILLMENT_ID, expect.objectContaining({ status: 'READY_FOR_PICKUP' }));
-    });
-  });
-
-  describe('onRiderOffered', () => {
-    it('adds rider queue item when tracking view exists', async () => {
-      const trackingView: CustomerTrackingView = {
-        fulfillmentId: FULFILLMENT_ID,
-        orderRequestId: 'or-1',
-        customerId: CUSTOMER_ID,
-        restaurantId: RESTAURANT_ID,
-        currentStatus: 'READY_FOR_PICKUP',
-        deliveryStatus: 'UNASSIGNED',
-        riderId: null,
-        timeline: [],
-        deliveryAddress: ADDRESS,
-        total: TOTAL,
-        cancellation: null,
-        failureReason: null,
-        updatedAt: new Date(),
-      };
-      repo.findCustomerTracking.mockResolvedValue(trackingView);
-
-      const expiresAt = new Date(Date.now() + 60000);
-      await projector.onRiderOffered(
-        evt('RiderOffered', FULFILLMENT_ID, { riderId: RIDER_ID, attempt: 1, expiresAt })
-      );
-
-      expect(repo.upsertRiderQueueItem).toHaveBeenCalledTimes(1);
-      const item = repo.upsertRiderQueueItem.mock.calls[0][0];
-      expect(item.riderId).toBe(RIDER_ID);
-      expect(item.assignmentStatus).toBe('OFFERED');
-      expect(item.attempt).toBe(1);
-    });
-
-    it('is a no-op when tracking view does not exist', async () => {
-      repo.findCustomerTracking.mockResolvedValue(null);
-      await projector.onRiderOffered(
-        evt('RiderOffered', FULFILLMENT_ID, { riderId: RIDER_ID, attempt: 1, expiresAt: new Date() })
-      );
-      expect(repo.upsertRiderQueueItem).not.toHaveBeenCalled();
+      expect(repo.upsertCustomerTracking.mock.calls[0][0].timelineEntry.at).toBe(readyAt);
     });
   });
 
   describe('onRiderAssigned', () => {
-    it('updates CustomerTracking rider, moves queue item to ACCEPTED, and patches AdminView', async () => {
-      const existingQueueItem: RiderQueueView = {
-        riderId: RIDER_ID,
-        fulfillmentId: FULFILLMENT_ID,
-        assignmentStatus: 'OFFERED',
-        attempt: 1,
-        expiresAt: new Date(Date.now() + 60000),
-        restaurantId: RESTAURANT_ID,
-        deliveryAddress: ADDRESS,
-        total: TOTAL,
-        fulfillmentStatus: 'READY_FOR_PICKUP',
-        offeredAt: new Date(),
-        updatedAt: new Date(),
-      };
-      repo.findRiderQueue.mockResolvedValue([existingQueueItem]);
+    it('records the rider and the ASSIGNED delivery status on the tracking view', async () => {
+      const assignedAt = new Date();
 
       await projector.onRiderAssigned(
-        evt('RiderAssigned', FULFILLMENT_ID, { riderId: RIDER_ID, assignedAt: new Date() })
+        evt('RiderAssigned', FULFILLMENT_ID, { riderId: RIDER_ID, assignedAt })
       );
 
-      expect(repo.upsertCustomerTracking.mock.calls[0][0].set.riderId).toBe(RIDER_ID);
-      expect(repo.upsertRiderQueueItem.mock.calls[0][0].assignmentStatus).toBe('ACCEPTED');
-      expect(repo.patchAdminView).toHaveBeenCalledWith(
-        FULFILLMENT_ID,
-        expect.objectContaining({ riderId: RIDER_ID, deliveryStatus: 'ASSIGNED' })
-      );
-    });
-  });
-
-  describe('onRiderAssignmentExpired', () => {
-    it('removes the rider queue item', async () => {
-      await projector.onRiderAssignmentExpired(
-        evt('RiderAssignmentExpired', FULFILLMENT_ID, { riderId: RIDER_ID, attempt: 1 })
-      );
-      expect(repo.removeRiderQueueItem).toHaveBeenCalledWith(RIDER_ID, FULFILLMENT_ID);
+      const ctCall = repo.upsertCustomerTracking.mock.calls[0][0];
+      expect(ctCall.set.riderId).toBe(RIDER_ID);
+      expect(ctCall.set.deliveryStatus).toBe('ASSIGNED');
+      expect(ctCall.timelineEntry.status).toBe('ASSIGNED');
+      expect(ctCall.timelineEntry.at).toBe(assignedAt);
     });
   });
 
   describe('onDeliveryCompleted', () => {
-    it('marks DELIVERED, removes restaurant view, removes all rider queue items', async () => {
+    it('marks the tracking view DELIVERED at the delivery timestamp', async () => {
       const deliveredAt = new Date();
       await projector.onDeliveryCompleted(
         evt('DeliveryCompleted', FULFILLMENT_ID, { riderId: RIDER_ID, deliveredAt })
       );
 
-      expect(repo.upsertCustomerTracking.mock.calls[0][0].set.currentStatus).toBe('DELIVERED');
-      expect(repo.removeRestaurantView).toHaveBeenCalledWith(FULFILLMENT_ID);
-      expect(repo.removeAllRiderQueueItemsForFulfillment).toHaveBeenCalledWith(FULFILLMENT_ID);
-      expect(repo.patchAdminView).toHaveBeenCalledWith(
-        FULFILLMENT_ID,
-        expect.objectContaining({ status: 'DELIVERED' })
-      );
+      const ctCall = repo.upsertCustomerTracking.mock.calls[0][0];
+      expect(ctCall.set.currentStatus).toBe('DELIVERED');
+      expect(ctCall.set.deliveryStatus).toBe('DELIVERED');
+      expect(ctCall.timelineEntry.at).toBe(deliveredAt);
     });
   });
 
   describe('onFulfillmentCancelled', () => {
-    it('marks CANCELLED with cancellation info and flags exceptionFlag in admin view', async () => {
+    it('marks CANCELLED with cancellation info', async () => {
       await projector.onFulfillmentCancelled(
         evt('FulfillmentCancelled', FULFILLMENT_ID, {
           cancelledBy: 'CUSTOMER',
@@ -263,17 +145,12 @@ describe('FulfillmentProjector', () => {
       const ctCall = repo.upsertCustomerTracking.mock.calls[0][0];
       expect(ctCall.set.currentStatus).toBe('CANCELLED');
       expect(ctCall.set.cancellation?.cancelledBy).toBe('CUSTOMER');
-      expect(repo.removeRestaurantView).toHaveBeenCalledWith(FULFILLMENT_ID);
-      expect(repo.removeAllRiderQueueItemsForFulfillment).toHaveBeenCalledWith(FULFILLMENT_ID);
-      expect(repo.patchAdminView).toHaveBeenCalledWith(
-        FULFILLMENT_ID,
-        expect.objectContaining({ status: 'CANCELLED', exceptionFlag: true })
-      );
+      expect(ctCall.set.cancellation?.reason).toBe('Changed mind');
     });
   });
 
   describe('onDeliveryFailed', () => {
-    it('marks FAILED with failureReason and sets exceptionFlag', async () => {
+    it('marks FAILED with failureReason', async () => {
       await projector.onDeliveryFailed(
         evt('DeliveryFailed', FULFILLMENT_ID, { riderId: RIDER_ID, failureReason: 'CUSTOMER_UNAVAILABLE' })
       );
@@ -281,15 +158,12 @@ describe('FulfillmentProjector', () => {
       const ctCall = repo.upsertCustomerTracking.mock.calls[0][0];
       expect(ctCall.set.currentStatus).toBe('FAILED');
       expect(ctCall.set.failureReason).toBe('CUSTOMER_UNAVAILABLE');
-      expect(repo.patchAdminView).toHaveBeenCalledWith(
-        FULFILLMENT_ID,
-        expect.objectContaining({ status: 'FAILED', exceptionFlag: true, failureReason: 'CUSTOMER_UNAVAILABLE' })
-      );
+      expect(ctCall.timelineEntry.note).toBe('CUSTOMER_UNAVAILABLE');
     });
   });
 
   describe('onRiderReassigned', () => {
-    it('updates tracking riderId and removes old rider queue item', async () => {
+    it('updates tracking riderId and records a REASSIGNED timeline entry', async () => {
       const NEW_RIDER = 'rider-2';
       await projector.onRiderReassigned(
         evt('RiderReassigned', FULFILLMENT_ID, {
@@ -299,51 +173,45 @@ describe('FulfillmentProjector', () => {
         })
       );
 
-      expect(repo.upsertCustomerTracking.mock.calls[0][0].set.riderId).toBe(NEW_RIDER);
-      expect(repo.removeRiderQueueItem).toHaveBeenCalledWith(RIDER_ID, FULFILLMENT_ID);
-      expect(repo.patchAdminView).toHaveBeenCalledWith(
-        FULFILLMENT_ID,
-        expect.objectContaining({ riderId: NEW_RIDER })
-      );
+      const ctCall = repo.upsertCustomerTracking.mock.calls[0][0];
+      expect(ctCall.set.riderId).toBe(NEW_RIDER);
+      expect(ctCall.timelineEntry.status).toBe('REASSIGNED');
     });
   });
 });
 
-describe('GetFulfillment', () => {
-  const { GetFulfillment } = require('../../../../application/fulfillment/use-cases/GetFulfillment');
-
-  it('returns TrackingResponse when view exists', async () => {
-    const repo = makeRepo();
-    const view: CustomerTrackingView = {
-      fulfillmentId: FULFILLMENT_ID,
-      orderRequestId: 'or-1',
-      customerId: CUSTOMER_ID,
-      restaurantId: RESTAURANT_ID,
-      currentStatus: 'CREATED',
-      deliveryStatus: 'UNASSIGNED',
-      riderId: null,
-      timeline: [{ eventId: 'e1', status: 'CREATED', at: new Date() }],
-      deliveryAddress: ADDRESS,
-      total: TOTAL,
-      cancellation: null,
-      failureReason: null,
-      updatedAt: new Date(),
+/**
+ * Phase 3 / Batch 5: the projector maintains `customer_tracking_views` and nothing else. This pins
+ * the subscription set so a rider-queue or admin-dashboard handler cannot be reintroduced silently
+ * — `RiderOffered` is absent because it wrote only the retired rider queue and never invalidated
+ * the cache.
+ */
+describe('registerFulfillmentProjector', () => {
+  it('subscribes to exactly the ten tracking-relevant events', () => {
+    const subscribed: string[] = [];
+    const bus: IEventBus = {
+      subscribe: (name) => {
+        subscribed.push(name);
+      },
+      publish: jest.fn(),
+      publishAll: jest.fn(),
     };
-    repo.findCustomerTracking.mockResolvedValue(view);
 
-    const uc = new GetFulfillment(repo);
-    const result = await uc.execute({ fulfillmentId: FULFILLMENT_ID });
-    expect(result.isSuccess).toBe(true);
-    expect(result.getValue().currentStatus).toBe('CREATED');
-    expect(result.getValue().timeline).toHaveLength(1);
-  });
+    registerFulfillmentProjector(bus, new FulfillmentProjector(makeRepo()));
 
-  it('returns NotFoundError when view does not exist', async () => {
-    const repo = makeRepo();
-    repo.findCustomerTracking.mockResolvedValue(null);
-    const uc = new GetFulfillment(repo);
-    const result = await uc.execute({ fulfillmentId: 'nonexistent' });
-    expect(result.isFailure).toBe(true);
+    expect(subscribed).toEqual([
+      'FulfillmentCreated',
+      'PreparationStarted',
+      'ReadyForPickup',
+      'RiderAssigned',
+      'PickupConfirmed',
+      'OutForDelivery',
+      'DeliveryCompleted',
+      'FulfillmentCancelled',
+      'DeliveryFailed',
+      'RiderReassigned',
+    ]);
+    expect(subscribed).not.toContain('RiderOffered');
   });
 });
 
@@ -397,8 +265,8 @@ describe('GetRiderQueue', () => {
   const { GetRiderQueue } = require('../../../../application/fulfillment/use-cases/GetRiderQueue');
 
   it('returns list of rider queue items', async () => {
-    const repo = makeRepo();
-    const item: RiderQueueView = {
+    const repo = makeQueryRepo();
+    const item: QueryRiderQueueView = {
       riderId: RIDER_ID,
       fulfillmentId: FULFILLMENT_ID,
       assignmentStatus: 'OFFERED',
@@ -423,26 +291,25 @@ describe('GetRiderQueue', () => {
 describe('GetAdminDashboard', () => {
   const { GetAdminDashboard } = require('../../../../application/fulfillment/use-cases/GetAdminDashboard');
 
-  it('passes filters to the projection repository and returns mapped views', async () => {
-    const repo = makeRepo();
-    repo.findAdminDashboard.mockResolvedValue([
-      {
-        fulfillmentId: FULFILLMENT_ID,
-        orderRequestId: 'or-1',
-        customerId: CUSTOMER_ID,
-        restaurantId: RESTAURANT_ID,
-        status: 'FAILED',
-        deliveryStatus: 'FAILED',
-        riderId: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        slaBreached: false,
-        exceptionFlag: true,
-        cancellation: null,
-        failureReason: 'CUSTOMER_UNAVAILABLE',
-        total: TOTAL,
-      },
-    ]);
+  it('passes filters to the query repository and returns mapped views', async () => {
+    const repo = makeQueryRepo();
+    const view: QueryAdminDashboardView = {
+      fulfillmentId: FULFILLMENT_ID,
+      orderRequestId: 'or-1',
+      customerId: CUSTOMER_ID,
+      restaurantId: RESTAURANT_ID,
+      status: 'FAILED',
+      deliveryStatus: 'FAILED',
+      riderId: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      slaBreached: false,
+      exceptionFlag: true,
+      cancellation: null,
+      failureReason: 'CUSTOMER_UNAVAILABLE',
+      total: TOTAL,
+    };
+    repo.findAdminDashboard.mockResolvedValue([view]);
     const uc = new GetAdminDashboard(repo);
     const result = await uc.execute({ status: 'FAILED', slaBreached: false });
     expect(result.isSuccess).toBe(true);

@@ -8,7 +8,6 @@ import { Fulfillment } from '../../../domain/fulfillment/entities/Fulfillment';
 import { FulfillmentLine, FulfillmentLineOption } from '../../../domain/fulfillment/value-objects/FulfillmentLine';
 import { DeliveryAddress } from '../../../domain/fulfillment/value-objects/DeliveryAddress';
 import { IUnitOfWork } from '../../shared/ports/IUnitOfWork';
-import { IOutboxStore } from '../../shared/outbox/IOutboxStore';
 import { IEventBus } from '../../shared/events/IEventBus';
 import { CreateFulfillmentDto, CreateFulfillmentMoneyDto } from '../dtos/CreateFulfillmentDto';
 import { FulfillmentResponse, toFulfillmentResponse } from '../responses/FulfillmentResponse';
@@ -17,7 +16,6 @@ export class CreateFulfillment {
   constructor(
     private readonly fulfillmentRepo: IFulfillmentRepository,
     private readonly unitOfWork: IUnitOfWork,
-    private readonly outboxStore: IOutboxStore,
     private readonly eventBus: IEventBus
   ) {}
 
@@ -50,9 +48,8 @@ export class CreateFulfillment {
     const events = fulfillment.pullDomainEvents();
 
     try {
-      await this.unitOfWork.runInTransaction(async (ctx) => {
+      await this.unitOfWork.runInTransaction(async () => {
         await this.fulfillmentRepo.save(fulfillment);
-        await this.outboxStore.append(events, ctx);
       });
     } catch (err) {
       if (err instanceof ConflictError) {

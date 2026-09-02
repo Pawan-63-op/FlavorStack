@@ -2,11 +2,10 @@ import { test, expect, type Page } from "@playwright/test";
 import { login } from "./fixtures/seed";
 import { seedServiceableRestaurant, placeOrder, SEED_LAT, SEED_LNG } from "./fixtures/seed";
 import { flushRateLimits } from "./fixtures/seed";
+import { isEnabled } from "./fixtures/flags";
 
 
-const NOTIFICATIONS_ON =
-  process.env.NEXT_PUBLIC_FEATURE_NOTIFICATIONS === "true" ||
-  process.env.NEXT_PUBLIC_FEATURE_NOTIFICATIONS === "1";
+const NOTIFICATIONS_ON = isEnabled("notifications");
 
 /** Poll the unread-count API (shares the page's cookies) until it satisfies `predicate`. */
 async function pollUnreadCount(page: Page, predicate: (count: number) => boolean): Promise<number> {

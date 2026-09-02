@@ -162,7 +162,7 @@ describe('Identity container bootstrap (Phase 9, Batch 5)', () => {
 
       await app.identity.unitOfWork.runInTransaction(async (ctx) => {
         await app.identity.userRepository.save(customer);
-        await app.identity.outboxStore.append([event], ctx);
+        await app.commerce.outboxStore.append([event], ctx);
       });
 
       const savedUser = await UserModel.findById(customer._id).lean();
@@ -179,7 +179,7 @@ describe('Identity container bootstrap (Phase 9, Batch 5)', () => {
       await expect(
         app.identity.unitOfWork.runInTransaction(async (ctx) => {
           await app.identity.userRepository.save(customer);
-          await app.identity.outboxStore.append([event], ctx);
+          await app.commerce.outboxStore.append([event], ctx);
           throw new Error('boom');
         }),
       ).rejects.toThrow('boom');

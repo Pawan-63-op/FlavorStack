@@ -70,7 +70,6 @@ describe('Commerce Checkout API e2e (Phase 12)', () => {
 
     app = await bootstrap();
     app.auth.emailProvider.sendVerification = jest.fn().mockResolvedValue(undefined);
-    app.auth.emailProvider.sendPasswordReset = jest.fn().mockResolvedValue(undefined);
     app.auth.emailProvider.sendNotification = jest.fn().mockResolvedValue(undefined);
 
     server = createApp(app);

@@ -1,5 +1,4 @@
 import { DomainEvent } from '../../../domain/shared/DomainEvent';
-import { IReviewEligibilityRepository } from '../../../domain/engagement/repositories/IReviewEligibilityRepository';
 import { NOTIFICATION_CATEGORY } from '../../../domain/engagement/enums/notification-category.enum';
 import { NOTIFICATION_CHANNEL } from '../../../domain/engagement/enums/notification-channel.enum';
 import { DispatchNotification } from '../use-cases/DispatchNotification';
@@ -17,32 +16,15 @@ interface ConsumedFulfillmentCreated extends DomainEvent {
 }
 
 export class OnFulfillmentCreated {
-  private readonly processedEventIds = new Set<string>();
-
-  constructor(
-    private readonly dispatch: DispatchNotification,
-    private readonly eligibilityRepo: IReviewEligibilityRepository
-  ) {}
+  constructor(private readonly dispatch: DispatchNotification) {}
 
   async handle(event: DomainEvent): Promise<void> {
-    if (this.processedEventIds.has(event.eventId)) return;
     const e = event as ConsumedFulfillmentCreated;
-
-    const existing = await this.eligibilityRepo.findByFulfillmentId(e.aggregateId);
-    if (!existing) {
-      await this.eligibilityRepo.upsert({
-        fulfillmentId: e.aggregateId,
-        customerId: e.customerId,
-        restaurantId: e.restaurantId,
-        deliveredAt: null,
-        reviewed: false,
-      });
-    }
 
     const result = await this.dispatch.execute({
       recipientUserId: e.customerId,
       category: NOTIFICATION_CATEGORY.ORDER_UPDATES,
-      channel: NOTIFICATION_CHANNEL.PUSH,
+      channel: NOTIFICATION_CHANNEL.INBOX,
       templateKey: 'order_confirmed',
       vars: { fulfillmentId: e.aggregateId },
       sourceEventId: event.eventId,
@@ -54,7 +36,5 @@ export class OnFulfillmentCreated {
       );
       return;
     }
-
-    this.processedEventIds.add(event.eventId);
   }
 }

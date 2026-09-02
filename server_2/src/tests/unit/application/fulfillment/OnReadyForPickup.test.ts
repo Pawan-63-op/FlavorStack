@@ -27,7 +27,10 @@ describe('OnReadyForPickup (auto-offer)', () => {
     expect(offer.execute).toHaveBeenCalledWith({ fulfillmentId: 'ful-1' });
   });
 
-  it('is idempotent: a redelivered eventId does not re-offer', async () => {
+  // Phase 6 removed the per-handler in-memory `processedEventIds` set. It was an unbounded,
+  // restart-losing cache compensating for the outbox double-delivery; the real guard is on the
+  // aggregate — `Fulfillment.offerToRider` rejects a second offer while one is live.
+  it('delegates every delivery — de-duplication belongs to the aggregate, not the handler', async () => {
     const offer = makeOffer();
     const handler = new OnReadyForPickup(offer);
     const event = readyEvent('ful-1', 'evt-dup');
@@ -35,17 +38,14 @@ describe('OnReadyForPickup (auto-offer)', () => {
     await handler.handle(event);
     await handler.handle(event);
 
-    expect(offer.execute).toHaveBeenCalledTimes(1);
+    expect(offer.execute).toHaveBeenCalledTimes(2);
   });
 
-  it('does NOT mark processed on failure, so a redelivery can retry', async () => {
+  it('swallows a use-case failure so the bus is not broken for other subscribers', async () => {
     const offer = makeOffer(Result.fail(new ConflictError('no_available_rider')));
     const handler = new OnReadyForPickup(offer);
-    const event = readyEvent('ful-1', 'evt-retry');
 
-    await handler.handle(event);
-    await handler.handle(event);
-
-    expect(offer.execute).toHaveBeenCalledTimes(2);
+    await expect(handler.handle(readyEvent('ful-1', 'evt-retry'))).resolves.toBeUndefined();
+    expect(offer.execute).toHaveBeenCalledTimes(1);
   });
 });

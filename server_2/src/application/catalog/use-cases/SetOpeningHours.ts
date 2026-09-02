@@ -3,7 +3,6 @@ import { NotFoundError } from '../../../domain/shared/errors/NotFoundError';
 import { OpeningHours } from '../../../domain/catalog/value-objects/OpeningHours.vo';
 import { IRestaurantRepository } from '../../../domain/catalog/repositories/IRestaurantRepository';
 import { IUnitOfWork } from '../../shared/ports/IUnitOfWork';
-import { IOutboxStore } from '../../shared/outbox/IOutboxStore';
 import { IEventBus } from '../../shared/events/IEventBus';
 import { SetOpeningHoursDto } from '../dtos/SetOpeningHoursDto';
 import { RestaurantResponse } from '../responses/RestaurantResponse';
@@ -19,7 +18,6 @@ export class SetOpeningHours {
   constructor(
     private restaurantRepo: IRestaurantRepository,
     private unitOfWork: IUnitOfWork,
-    private outboxStore: IOutboxStore,
     private eventBus: IEventBus
   ) {}
 
@@ -38,11 +36,8 @@ export class SetOpeningHours {
 
     const events = restaurant.pullDomainEvents();
 
-    await this.unitOfWork.runInTransaction(async (ctx) => {
+    await this.unitOfWork.runInTransaction(async () => {
       await this.restaurantRepo.update(restaurant);
-      if (events.length > 0) {
-        await this.outboxStore.append(events, ctx);
-      }
     });
 
     await this.eventBus.publishAll(events);

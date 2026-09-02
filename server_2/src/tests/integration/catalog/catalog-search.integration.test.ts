@@ -14,7 +14,6 @@ import { CatalogProjectionWriter } from '../../../infrastructure/database/projec
 import { RestaurantModel } from '../../../infrastructure/database/models/RestaurantModel';
 import { MenuItemModel } from '../../../infrastructure/database/models/MenuItemModel';
 import { RestaurantSummaryModel } from '../../../infrastructure/database/models/RestaurantSummaryModel';
-import { RestaurantMenuViewModel } from '../../../infrastructure/database/models/RestaurantMenuViewModel';
 import { MenuItemSearchModel } from '../../../infrastructure/database/models/MenuItemSearchModel';
 import { InMemoryEventBus } from '../../../application/shared/events/InMemoryEventBus';
 import { CatalogProjector } from '../../../application/catalog/handlers/CatalogProjector';
@@ -69,7 +68,6 @@ describe('Catalog search & discovery (MongoSearchService)', () => {
       RestaurantModel.deleteMany({}),
       MenuItemModel.deleteMany({}),
       RestaurantSummaryModel.deleteMany({}),
-      RestaurantMenuViewModel.deleteMany({}),
       MenuItemSearchModel.deleteMany({}),
     ]);
   });

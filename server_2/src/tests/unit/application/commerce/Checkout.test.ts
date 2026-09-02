@@ -19,16 +19,20 @@ import { DomainEvent } from '../../../../domain/shared/DomainEvent';
 import { ICartRepository } from '../../../../domain/commerce/repositories/ICartRepository';
 import { IOrderRequestRepository } from '../../../../domain/commerce/repositories/IOrderRequestRepository';
 import { ICatalogGateway } from '../../../../domain/commerce/services/ICatalogGateway';
-import { ICommerceCatalogReadRepository } from '../../../../domain/commerce/repositories/ICommerceCatalogReadRepository';
 import { IUnitOfWork } from '../../../../application/shared/ports/IUnitOfWork';
 import { IOutboxStore } from '../../../../application/shared/outbox/IOutboxStore';
 import { IEventBus } from '../../../../application/shared/events/IEventBus';
+import { ITelemetry, ISpan, LogFields } from '../../../../application/shared/observability/ITelemetry';
+import {
+  CommerceTelemetry,
+  COMMERCE_METRICS,
+} from '../../../../application/commerce/observability/CommerceTelemetry';
 import {
   CheckoutRestaurant,
   CheckoutMenuItem,
   CheckoutServiceability,
 } from '../../../../domain/commerce/types/CatalogGatewayRead';
-import { CommerceCatalogMenuItemView } from '../../../../domain/commerce/types/CommerceCatalogView';
+import { CartMenuItemView } from '../../../../domain/commerce/types/CatalogGatewayRead';
 import { CheckoutRequestDto } from '../../../../application/commerce/dtos/CheckoutRequestDto';
 
 const money = (amount: number, currency = 'INR') => Money.create(amount, currency).getValue();
@@ -90,6 +94,7 @@ interface GatewayConfig {
   restaurant?: CheckoutRestaurant;
   items?: CheckoutMenuItem[];
   serviceability?: CheckoutServiceability;
+  variants?: CartMenuItemView[];
 }
 
 function fakeGateway(cfg: GatewayConfig = {}): ICatalogGateway {
@@ -98,12 +103,16 @@ function fakeGateway(cfg: GatewayConfig = {}): ICatalogGateway {
     getItemsSnapshot: async () => Result.ok(cfg.items ?? defaultItems()),
     checkServiceability: async () => Result.ok(cfg.serviceability ?? defaultServiceability()),
     isRestaurantOpen: async () => Result.ok(true),
+    // Variant option groups for checkout option resolution.
+    getRestaurantForCart: async () => Result.ok(null),
+    getItemsForCart: async () => Result.ok(cfg.variants ?? [defaultVariantView()]),
   };
 }
 
-function defaultProjectionView(): CommerceCatalogMenuItemView {
+function defaultVariantView(): CartMenuItemView {
   return {
     menuItemId: 'menu-1',
+    restaurantId: 'rest-1',
     categoryId: 'cat-1',
     name: 'Margherita',
     basePriceAmount: 1000,
@@ -123,16 +132,6 @@ function defaultProjectionView(): CommerceCatalogMenuItemView {
         ],
       },
     ],
-  };
-}
-
-function fakeProjection(view: CommerceCatalogMenuItemView | null = defaultProjectionView()): ICommerceCatalogReadRepository {
-  return {
-    findRestaurantView: async () => null,
-    findMenuItemViews: async () => (view ? [view] : []),
-    upsertRestaurantView: async () => undefined,
-    removeRestaurantView: async () => undefined,
-    markEventProcessed: async () => true,
   };
 }
 
@@ -199,25 +198,40 @@ function fakeEventBus(): { bus: IEventBus; published: DomainEvent[] } {
   };
 }
 
+/** A spyable ITelemetry so the metric names Checkout emits are assertable by name. */
+function fakeTelemetry(): jest.Mocked<ITelemetry> {
+  return {
+    debug: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    increment: jest.fn(),
+    observe: jest.fn(),
+    startSpan: jest.fn((_name: string, _fields?: LogFields): ISpan => ({
+      end: () => 0,
+      fail: () => 0,
+    })),
+  };
+}
+
 interface Harness {
   useCase: Checkout;
   orderRepo: ReturnType<typeof fakeOrderRepo>;
   cartRepo: ReturnType<typeof fakeCartRepo>;
   outbox: ReturnType<typeof fakeOutbox>;
   eventBus: ReturnType<typeof fakeEventBus>;
+  telemetry: jest.Mocked<ITelemetry>;
 }
 
 function buildHarness(opts: {
   cart?: Cart | null;
   existingOrder?: OrderRequest | null;
   gateway?: ICatalogGateway;
-  projection?: ICommerceCatalogReadRepository;
   promotionService?: PromotionService;
 } = {}): Harness {
   const promotionService = opts.promotionService ?? new PromotionService(buildDefaultCommerceCoupons());
   const assembler = new CheckoutContextAssembler(
     opts.gateway ?? fakeGateway(),
-    opts.projection ?? fakeProjection(),
     promotionService,
     buildDefaultCommercePricingPolicy()
   );
@@ -225,6 +239,7 @@ function buildHarness(opts: {
   const orderRepo = fakeOrderRepo(opts.existingOrder ?? null);
   const outbox = fakeOutbox();
   const eventBus = fakeEventBus();
+  const telemetry = fakeTelemetry();
   const useCase = new Checkout(
     cartRepo.repo,
     orderRepo.repo,
@@ -232,9 +247,9 @@ function buildHarness(opts: {
     new PricingCalculator(),
     fakeUnitOfWork(),
     outbox.store,
-    eventBus.bus
+    new CommerceTelemetry(telemetry)
   );
-  return { useCase, orderRepo, cartRepo, outbox, eventBus };
+  return { useCase, orderRepo, cartRepo, outbox, eventBus, telemetry };
 }
 
 
@@ -276,12 +291,28 @@ describe('Checkout', () => {
       const saved = h.orderRepo.saved[0];
       expect(saved.id.toString()).toBe(summary.orderRequestId);
 
-      const names = h.outbox.appended.map((e) => e.eventName).sort();
-      expect(names).toEqual(['CheckoutReadyForPayment', 'OrderRequested']);
+      // Phase 6: `OrderRequested` is the only event checkout raises. `CheckoutReadyForPayment`
+      // had no subscriber — it was appended, relayed and dropped.
+      expect(h.outbox.appended.map((e) => e.eventName)).toEqual(['OrderRequested']);
+      // Phase 7.3: the outbox row is the ONLY delivery path — checkout no longer publishes inline.
+      expect(h.eventBus.published).toHaveLength(0);
+    });
 
-      const publishedNames = h.eventBus.published.map((e) => e.eventName);
-      expect(publishedNames).toContain('OrderRequested');
-      expect(publishedNames).toContain('CheckoutReadyForPayment');
+    it('counts the outbox handoff exactly once, separately from checkout acceptance', async () => {
+      const h = buildHarness();
+
+      await h.useCase.execute(dto());
+
+      // "Orders accepted" and "orders handed to the relay" must be independently countable —
+      // the two diverging is the failure the outbox exists to make visible.
+      const appends = h.telemetry.increment.mock.calls.filter(
+        ([name]) => name === COMMERCE_METRICS.outboxAppendTotal
+      );
+      expect(appends).toHaveLength(1);
+      expect(appends[0][2]).toBe(h.outbox.appended.length);
+      expect(h.telemetry.increment).toHaveBeenCalledWith(COMMERCE_METRICS.checkoutTotal, {
+        result: 'success',
+      });
     });
 
     it('clears the cart after a successful checkout', async () => {
@@ -314,6 +345,22 @@ describe('Checkout', () => {
       expect(h.orderRepo.saved).toHaveLength(0);
       expect(h.outbox.appended).toHaveLength(0);
       expect(h.eventBus.published).toHaveLength(0);
+    });
+
+    it('does not count an outbox handoff on the replay path', async () => {
+      const existing = buildExistingOrder();
+      const h = buildHarness({ existingOrder: existing });
+
+      await h.useCase.execute(dto({ idempotencyKey: existing.idempotencyKey.value }));
+
+      expect(h.telemetry.increment).not.toHaveBeenCalledWith(
+        COMMERCE_METRICS.outboxAppendTotal,
+        expect.anything(),
+        expect.anything()
+      );
+      expect(h.telemetry.increment).toHaveBeenCalledWith(
+        COMMERCE_METRICS.checkoutIdempotentReplayTotal
+      );
     });
   });
 

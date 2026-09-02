@@ -14,12 +14,9 @@ import { DietaryTag } from '../../domain/catalog/enums/dietary-tag.enum';
 import { RestaurantStatus } from '../../domain/catalog/enums/restaurant-status.enum';
 import { RESTAURANT_STATUS } from '../../domain/catalog/enums/restaurant-status.enum';
 import { CATALOG_VISIBILITY } from '../../domain/catalog/enums/catalog-visibility.enum';
+import { ICatalogQueryRepository } from '../../domain/catalog/repositories/ICatalogQueryRepository';
+import { CatalogQueryMenuItem } from '../../domain/catalog/types/QueryModels';
 import { RestaurantSummaryModel, RestaurantSummaryDocument } from '../database/models/RestaurantSummaryModel';
-import {
-  RestaurantMenuViewModel,
-  RestaurantMenuViewDocument,
-  MenuViewItemDocument,
-} from '../database/models/RestaurantMenuViewModel';
 import { MenuItemSearchModel, MenuItemSearchDocument } from '../database/models/MenuItemSearchModel';
 import { deriveIsOpen } from '../database/projections/openState';
 
@@ -38,6 +35,13 @@ const PUBLIC_RESTAURANT_FILTER = {
 };
 
 export class MongoCatalogReadRepository implements ICatalogReadRepository {
+  /**
+   * `getRestaurantMenu` reads the catalog source of truth through the query repository;
+   * every other read here still comes from the `restaurant_summary` / `menu_item_search`
+   * projections, which remain the discovery/search read models.
+   */
+  constructor(private readonly queryRepo: ICatalogQueryRepository) {}
+
   private toSummaryView(doc: RestaurantSummaryDocument, now: Date): RestaurantSummaryView {
     return {
       id: doc._id,
@@ -123,42 +127,67 @@ export class MongoCatalogReadRepository implements ICatalogReadRepository {
     };
   }
 
+  /**
+   * Assembled from `restaurants` + `menu_items` rather than a projection. The shape
+   * reproduces what `restaurant_menu_view` used to carry, so the response body is
+   * unchanged: inactive categories are dropped, the rest are ordered by `sortOrder`,
+   * items are bucketed into their category in `_id` order (the order the write-side
+   * repository paginates in), and an item whose `categoryId` names an inactive or
+   * absent category is dropped entirely.
+   */
   async getRestaurantMenu(restaurantId: string): Promise<RestaurantMenuView | null> {
-    const doc = await RestaurantMenuViewModel.findOne({
-      _id: restaurantId,
-      ...PUBLIC_RESTAURANT_FILTER,
-    }).lean<RestaurantMenuViewDocument>();
-    if (!doc) return null;
+    const restaurant = await this.queryRepo.findPublicRestaurantById(restaurantId);
+    if (!restaurant) return null;
 
     const now = new Date();
     const restaurantOpen = deriveIsOpen(
-      { status: doc.status, openingHours: doc.openingHours, tzOffsetMinutes: doc.tzOffsetMinutes },
+      {
+        status: restaurant.status,
+        openingHours: restaurant.openingHours,
+        // The projector hardcoded 0 here and never sourced a real offset; kept as-is so
+        // open/closed evaluation is byte-identical to the projected view.
+        tzOffsetMinutes: 0,
+      },
       now
     );
 
-    const categories: RestaurantMenuCategoryView[] = doc.categories.map((cat) => ({
-      id: cat.id,
-      label: cat.label,
-      sortOrder: cat.sortOrder,
-      items: cat.items.map((item) => this.toMenuItemView(item, restaurantOpen)),
-    }));
+    const items = await this.queryRepo.findMenuItemsByRestaurant(restaurantId);
+    const itemsByCategory = new Map<string, CatalogQueryMenuItem[]>();
+    for (const item of items) {
+      const list = itemsByCategory.get(item.categoryId) ?? [];
+      list.push(item);
+      itemsByCategory.set(item.categoryId, list);
+    }
+
+    const categories: RestaurantMenuCategoryView[] = restaurant.categories
+      .filter((category) => category.isActive)
+      .slice()
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((category) => ({
+        id: category.id,
+        label: category.label,
+        sortOrder: category.sortOrder,
+        items: (itemsByCategory.get(category.id) ?? []).map((item) =>
+          this.toMenuItemView(item, restaurantOpen)
+        ),
+      }));
 
     return {
       restaurant: {
-        id: doc._id,
-        name: doc.name,
-        slug: doc.slug,
-        cuisineTypes: doc.cuisineTypes as CuisineType[],
-        status: doc.status as RestaurantStatus,
+        id: restaurant.id,
+        name: restaurant.name,
+        slug: restaurant.slug,
+        cuisineTypes: restaurant.cuisineTypes as CuisineType[],
+        status: restaurant.status as RestaurantStatus,
         isOpen: restaurantOpen,
-        location: { lat: doc.location.coordinates[1], lng: doc.location.coordinates[0] },
-        imageUrl: doc.imageUrl ?? undefined,
+        location: restaurant.location,
+        imageUrl: restaurant.imageUrl ?? undefined,
       },
       categories,
     };
   }
 
-  private toMenuItemView(item: MenuViewItemDocument, restaurantOpen: boolean): MenuItemView {
+  private toMenuItemView(item: CatalogQueryMenuItem, restaurantOpen: boolean): MenuItemView {
     return {
       id: item.id,
       restaurantId: item.restaurantId,
@@ -166,8 +195,8 @@ export class MongoCatalogReadRepository implements ICatalogReadRepository {
       name: item.name,
       description: item.description ?? undefined,
       imageUrl: item.imageUrl ?? undefined,
-      basePriceAmount: item.basePriceAmount,
-      currency: item.currency,
+      basePriceAmount: item.basePrice.amount,
+      currency: item.basePrice.currency,
       tags: item.tags,
       dietary: item.dietary as DietaryTag[],
       isAvailable: item.isAvailable && restaurantOpen,

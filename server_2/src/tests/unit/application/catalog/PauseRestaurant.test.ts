@@ -1,6 +1,6 @@
 import { PauseRestaurant } from '../../../../application/catalog/use-cases/PauseRestaurant';
 import { InMemoryRestaurantRepository } from '../../../mocks/catalog.mocks';
-import { InMemoryUnitOfWork, InMemoryOutboxStore } from '../../../mocks/identity.mocks';
+import { InMemoryUnitOfWork } from '../../../mocks/identity.mocks';
 import { createEventBusSpy, EventBusSpy } from '../../../mocks/shared.mocks';
 import { buildRestaurant } from './helpers';
 import { RESTAURANT_STATUS } from '../../../../domain/catalog/enums/restaurant-status.enum';
@@ -11,16 +11,14 @@ import { ValidationError } from '../../../../domain/shared/errors/ValidationErro
 describe('PauseRestaurant use-case', () => {
   let restaurantRepo: InMemoryRestaurantRepository;
   let unitOfWork: InMemoryUnitOfWork;
-  let outboxStore: InMemoryOutboxStore;
   let eventBus: EventBusSpy;
   let useCase: PauseRestaurant;
 
   beforeEach(() => {
     restaurantRepo = new InMemoryRestaurantRepository();
     unitOfWork = new InMemoryUnitOfWork();
-    outboxStore = new InMemoryOutboxStore();
     eventBus = createEventBusSpy();
-    useCase = new PauseRestaurant(restaurantRepo, unitOfWork, outboxStore, eventBus);
+    useCase = new PauseRestaurant(restaurantRepo, unitOfWork, eventBus);
   });
 
   it('pauses an ACTIVE restaurant and emits RestaurantStatusChanged', async () => {
@@ -33,8 +31,8 @@ describe('PauseRestaurant use-case', () => {
 
     expect(result.isSuccess).toBe(true);
     expect(result.getValue().status).toBe(RESTAURANT_STATUS.PAUSED);
-    expect(outboxStore.appended).toHaveLength(1);
-    expect(outboxStore.appended[0].eventName).toBe('RestaurantStatusChanged');
+    expect(eventBus.publishedEvents).toHaveLength(1);
+    expect(eventBus.publishedEvents[0].eventName).toBe('RestaurantStatusChanged');
   });
 
   it('fails with NotFoundError when the restaurant does not exist', async () => {
@@ -60,6 +58,6 @@ describe('PauseRestaurant use-case', () => {
 
     expect(result.isFailure).toBe(true);
     expect(result.getError()).toBeInstanceOf(ValidationError);
-    expect(outboxStore.appended).toHaveLength(0);
+    expect(eventBus.publishedEvents).toHaveLength(0);
   });
 });

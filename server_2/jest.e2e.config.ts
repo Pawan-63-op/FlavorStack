@@ -5,7 +5,11 @@ const config: Config = {
   testEnvironment: 'node',
   rootDir: '.',
   roots: ['<rootDir>/src'],
-  testMatch: ['**/e2e/identity/**/*.e2e.test.ts'],
+  // Every e2e suite, not just identity's. Until Phase 9.3 this read `**/e2e/identity/**`, and
+  // `src/tests/e2e/engagement/` was matched by no config at all — an entire suite that no command
+  // ran. `jest.e2e.{catalog,commerce}.config.ts` existed for the same reason and were referenced by
+  // no script; they are gone, subsumed here. Do not narrow this back to a per-context glob.
+  testMatch: ['**/e2e/**/*.e2e.test.ts'],
   transform: {
     '^.+\\.tsx?$': ['ts-jest', { tsconfig: 'tsconfig.json' }],
   },

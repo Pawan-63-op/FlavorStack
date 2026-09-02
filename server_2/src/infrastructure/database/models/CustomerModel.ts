@@ -40,7 +40,6 @@ export interface CustomerDocument extends UserDocument {
   savedRestaurants: string[];
   dietaryPreferences: string[];
   defaultPaymentMethod: string | null;
-  fcmTokens: string[];
   notificationsEnabled: boolean;
 }
 
@@ -91,7 +90,6 @@ const CustomerSchema = new Schema<CustomerDocument>({
   savedRestaurants: { type: [String], default: [] },
   dietaryPreferences: { type: [String], default: [] },
   defaultPaymentMethod: { type: String, default: null },
-  fcmTokens: { type: [String], default: [] },
   notificationsEnabled: { type: Boolean, default: true },
 });
 

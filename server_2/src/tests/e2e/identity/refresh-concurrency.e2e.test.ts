@@ -10,6 +10,25 @@ import { startRedisContainer, StartedTestRedis } from '../../integration/redis/r
 
 jest.setTimeout(180000);
 
+/**
+ * Two notes for whoever reads this next, so neither is mistaken for a regression.
+ *
+ * **1. No explicit `createIndexes()`, deliberately.** Unlike the index-coverage integration
+ * suites, this test boots the real app through `bootstrap()` and relies on app-boot auto-indexing.
+ * That is correct here: nothing below asserts a query *plan*, only rotation behaviour, so the race
+ * being exercised does not depend on an index existing at any particular moment. Adding a
+ * `createIndexes()` await would slow the boot without changing a single assertion.
+ *
+ * **2. The single-flight gap is known and documented.** There is no server-side single-flight on
+ * `/refresh`: N concurrent requests carrying the same refresh cookie can all rotate, where a
+ * stricter implementation would let exactly one win and serve the rest the same new pair. This was
+ * root-caused during the concurrency-correctness pass and classified **Recommended, not Required**
+ * — the client already single-flights, and every rotation is individually consistent, so the
+ * failure mode is extra token churn rather than a security or correctness defect. If this suite
+ * ever goes intermittently red on the rotation-count assertion, that is this known gap resurfacing
+ * under load, not something Phase 9 introduced.
+ */
+
 const ORIGINAL_ENV = { ...process.env };
 
 function extractCookie(res: request.Response, name: string): string {
@@ -53,7 +72,6 @@ describe('Auth /refresh — concurrent rotation race (concurrency)', () => {
 
     app = await bootstrap();
     app.auth.emailProvider.sendVerification = jest.fn().mockResolvedValue(undefined);
-    app.auth.emailProvider.sendPasswordReset = jest.fn().mockResolvedValue(undefined);
     app.auth.emailProvider.sendNotification = jest.fn().mockResolvedValue(undefined);
 
     server = createApp(app);

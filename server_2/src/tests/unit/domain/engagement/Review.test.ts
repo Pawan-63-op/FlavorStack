@@ -1,6 +1,4 @@
 import { Review } from '../../../../domain/engagement/entities/Review';
-import { ReviewSubmitted } from '../../../../domain/engagement/events/ReviewSubmitted';
-import { ReviewModerated } from '../../../../domain/engagement/events/ReviewModerated';
 import { MODERATION_STATUS } from '../../../../domain/engagement/enums/moderation-status.enum';
 
 function validInput(overrides: Record<string, unknown> = {}) {
@@ -16,7 +14,9 @@ function validInput(overrides: Record<string, unknown> = {}) {
 }
 
 describe('Review.submit', () => {
-  it('creates a PENDING review and raises ReviewSubmitted', () => {
+  // Phase 6: `Review` raises no domain events — nothing subscribed to them once the rating
+  // read model was replaced by an aggregation over `reviews` (Phase 4).
+  it('creates a PENDING review and raises no domain event', () => {
     const result = Review.submit(validInput());
     expect(result.isSuccess).toBe(true);
 
@@ -26,16 +26,10 @@ describe('Review.submit', () => {
     expect(review.deliveryRating?.value).toBe(4);
     expect(review.comment?.value).toBe('Great food, fast delivery!');
 
-    const events = review.pullDomainEvents();
-    expect(events).toHaveLength(1);
-    const event = events[0] as ReviewSubmitted;
-    expect(event).toBeInstanceOf(ReviewSubmitted);
-    expect(event.aggregateId).toBe(review.id.toString());
-    expect(event.customerId).toBe('cust-1');
-    expect(event.restaurantId).toBe('rest-1');
-    expect(event.fulfillmentId).toBe('fulfillment-1');
-    expect(event.hasComment).toBe(true);
-    expect(event.moderationStatus).toBe(MODERATION_STATUS.PENDING);
+    expect(review.customerId).toBe('cust-1');
+    expect(review.restaurantId).toBe('rest-1');
+    expect(review.fulfillmentId).toBe('fulfillment-1');
+    expect(review.pullDomainEvents()).toEqual([]);
   });
 
   it('allows submitting without a delivery rating or comment', () => {
@@ -44,7 +38,6 @@ describe('Review.submit', () => {
     const review = result.getValue();
     expect(review.deliveryRating).toBeNull();
     expect(review.comment).toBeNull();
-    expect(review.pullDomainEvents()[0] as ReviewSubmitted).toMatchObject({ hasComment: false });
   });
 
   it.each([0, 6, -1])('rejects an out-of-range restaurantRating %i', (rating) => {
@@ -64,8 +57,6 @@ describe('Review.submit', () => {
     expect(result.isSuccess).toBe(true);
     const review = result.getValue();
     expect(review.moderationStatus.value).toBe(MODERATION_STATUS.AUTO_FLAGGED);
-    const event = review.pullDomainEvents()[0] as ReviewSubmitted;
-    expect(event.moderationStatus).toBe(MODERATION_STATUS.AUTO_FLAGGED);
   });
 });
 
@@ -85,33 +76,24 @@ describe('Review.editComment', () => {
 });
 
 describe('Review.approve / Review.reject', () => {
-  it('approve() transitions PENDING -> APPROVED and raises ReviewModerated', () => {
+  it('approve() transitions PENDING -> APPROVED, raising no domain event', () => {
     const review = Review.submit(validInput()).getValue();
-    review.pullDomainEvents();
 
     const result = review.approve('moderator-1');
     expect(result.isSuccess).toBe(true);
     expect(review.moderationStatus.value).toBe(MODERATION_STATUS.APPROVED);
     expect(review.moderatedBy).toBe('moderator-1');
     expect(review.moderatedAt).toBeInstanceOf(Date);
-
-    const event = review.pullDomainEvents()[0] as ReviewModerated;
-    expect(event).toBeInstanceOf(ReviewModerated);
-    expect(event.aggregateId).toBe(review.id.toString());
-    expect(event.status).toBe(MODERATION_STATUS.APPROVED);
-    expect(event.moderatorId).toBe('moderator-1');
+    expect(review.pullDomainEvents()).toEqual([]);
   });
 
-  it('reject() transitions PENDING -> REJECTED and raises ReviewModerated', () => {
+  it('reject() transitions PENDING -> REJECTED, raising no domain event', () => {
     const review = Review.submit(validInput()).getValue();
-    review.pullDomainEvents();
 
     const result = review.reject('moderator-1', 'spam content');
     expect(result.isSuccess).toBe(true);
     expect(review.moderationStatus.value).toBe(MODERATION_STATUS.REJECTED);
-
-    const event = review.pullDomainEvents()[0] as ReviewModerated;
-    expect(event.status).toBe(MODERATION_STATUS.REJECTED);
+    expect(review.pullDomainEvents()).toEqual([]);
   });
 
   it('cannot approve a review twice (terminal state)', () => {

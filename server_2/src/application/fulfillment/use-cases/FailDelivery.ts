@@ -2,7 +2,6 @@ import { Result } from '../../../domain/shared/Result';
 import { NotFoundError } from '../../../domain/shared/errors/NotFoundError';
 import { IFulfillmentRepository } from '../../../domain/fulfillment/repositories/IFulfillmentRepository';
 import { IUnitOfWork } from '../../shared/ports/IUnitOfWork';
-import { IOutboxStore } from '../../shared/outbox/IOutboxStore';
 import { IEventBus } from '../../shared/events/IEventBus';
 import { FailDeliveryDto } from '../dtos/FailDeliveryDto';
 import { FulfillmentResponse, toFulfillmentResponse } from '../responses/FulfillmentResponse';
@@ -11,7 +10,6 @@ export class FailDelivery {
   constructor(
     private readonly fulfillmentRepo: IFulfillmentRepository,
     private readonly unitOfWork: IUnitOfWork,
-    private readonly outboxStore: IOutboxStore,
     private readonly eventBus: IEventBus
   ) {}
 
@@ -24,9 +22,8 @@ export class FailDelivery {
 
     const events = fulfillment.pullDomainEvents();
 
-    await this.unitOfWork.runInTransaction(async (ctx) => {
+    await this.unitOfWork.runInTransaction(async () => {
       await this.fulfillmentRepo.update(fulfillment);
-      if (events.length > 0) await this.outboxStore.append(events, ctx);
     });
 
     await this.eventBus.publishAll(events);

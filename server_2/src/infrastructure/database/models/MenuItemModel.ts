@@ -105,7 +105,11 @@ const MenuItemSchema = new Schema<MenuItemDocument>(
   }
 );
 
-MenuItemSchema.index({ restaurantId: 1 });
+// Serves every "live items of a restaurant" read: `findByRestaurant` (cursor-paginated)
+// and the source-of-truth menu/cart queries. `{deletedAt: 1}` below is sparse and so
+// cannot cover `deletedAt: null` on its own. This also supersedes the former
+// single-field `{restaurantId: 1}` index, which it covers as a prefix.
+MenuItemSchema.index({ restaurantId: 1, deletedAt: 1 });
 MenuItemSchema.index({ categoryId: 1 });
 MenuItemSchema.index({ 'availability.isAvailable': 1 });
 MenuItemSchema.index({ deletedAt: 1 }, { sparse: true });

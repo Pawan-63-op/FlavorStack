@@ -2,7 +2,6 @@ import { AssignRole } from '../../../../application/identity/use-cases/AssignRol
 import { AssignRoleDto } from '../../../../application/identity/dtos/AssignRoleDto';
 import {
   InMemoryUserRepository,
-  InMemoryOutboxStore,
   InMemoryUnitOfWork,
 } from '../../../mocks/identity.mocks';
 import { createEventBusSpy, EventBusSpy } from '../../../mocks/shared.mocks';
@@ -60,16 +59,14 @@ function makeCustomer(): Customer {
 describe('AssignRole use-case', () => {
   let userRepo: InMemoryUserRepository;
   let unitOfWork: InMemoryUnitOfWork;
-  let outboxStore: InMemoryOutboxStore;
   let eventBus: EventBusSpy;
   let useCase: AssignRole;
 
   beforeEach(() => {
     userRepo = new InMemoryUserRepository();
     unitOfWork = new InMemoryUnitOfWork();
-    outboxStore = new InMemoryOutboxStore();
     eventBus = createEventBusSpy();
-    useCase = new AssignRole(userRepo, unitOfWork, outboxStore, eventBus);
+    useCase = new AssignRole(userRepo, unitOfWork, eventBus);
   });
 
   describe('success', () => {
@@ -91,7 +88,7 @@ describe('AssignRole use-case', () => {
       expect(updated!.role).toBe(USER_ROLE.DRIVER);
     });
 
-    it('appends RoleAssigned to the outbox with the target as aggregate and publishes it post-commit', async () => {
+    it('raises no domain event, so nothing is published', async () => {
       const admin = makeAdminWithUserUpdate();
       const target = makeCustomer();
       await userRepo.save(admin);
@@ -103,12 +100,9 @@ describe('AssignRole use-case', () => {
         role: USER_ROLE.DRIVER,
       });
 
-      expect(outboxStore.appended).toHaveLength(1);
-      expect(outboxStore.appended[0].eventName).toBe('RoleAssigned');
-      expect(outboxStore.appended[0].aggregateId).toBe(target._id);
-
-      expect(eventBus.publishedEvents).toHaveLength(1);
-      expect(eventBus.publishedEvents[0].eventName).toBe('RoleAssigned');
+      // Phase 6: this state change raises no domain event — it had no subscriber.
+      expect(eventBus.publishedEvents).toHaveLength(0);
+      expect(eventBus.publishedEvents).toHaveLength(0);
     });
 
     it('allows a super admin to assign the admin role', async () => {
@@ -192,7 +186,7 @@ describe('AssignRole use-case', () => {
 
       const updated = await userRepo.findById(target._id);
       expect(updated!.role).toBe(USER_ROLE.CUSTOMER);
-      expect(outboxStore.appended).toHaveLength(0);
+      expect(eventBus.publishedEvents).toHaveLength(0);
       expect(eventBus.publishedEvents).toHaveLength(0);
     });
 

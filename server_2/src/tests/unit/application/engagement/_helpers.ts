@@ -1,20 +1,19 @@
 import { IUnitOfWork } from '../../../../application/shared/ports/IUnitOfWork';
-import { IOutboxStore } from '../../../../application/shared/outbox/IOutboxStore';
 import { IEventBus } from '../../../../application/shared/events/IEventBus';
-import { IReviewRepository } from '../../../../domain/engagement/repositories/IReviewRepository';
-import { IReviewEligibilityRepository } from '../../../../domain/engagement/repositories/IReviewEligibilityRepository';
-import { IRestaurantRatingViewRepository } from '../../../../domain/engagement/repositories/IRestaurantRatingViewRepository';
+import {
+  IReviewRepository,
+  RestaurantRatingAggregate,
+} from '../../../../domain/engagement/repositories/IReviewRepository';
+import {
+  IFulfillmentGateway,
+  ReviewSubject,
+} from '../../../../domain/engagement/services/IFulfillmentGateway';
 import { INotificationRepository } from '../../../../domain/engagement/repositories/INotificationRepository';
 import { INotificationPreferenceRepository } from '../../../../domain/engagement/repositories/INotificationPreferenceRepository';
 import { INotificationTemplateRepository } from '../../../../domain/engagement/repositories/INotificationTemplateRepository';
-import { INotificationQueue } from '../../../../application/shared/queues/INotificationQueue';
 
 export function makeUnitOfWork(): IUnitOfWork {
   return { runInTransaction: jest.fn(<T>(work: (ctx: unknown) => Promise<T>) => work({})) };
-}
-
-export function makeOutbox(): jest.Mocked<IOutboxStore> {
-  return { append: jest.fn().mockResolvedValue(undefined) } as jest.Mocked<IOutboxStore>;
 }
 
 export function makeEventBus(): jest.Mocked<IEventBus> {
@@ -34,29 +33,40 @@ export function makeReviewRepo(overrides: Partial<IReviewRepository> = {}): jest
     findByRestaurant: jest.fn().mockResolvedValue([]),
     findByCustomer: jest.fn().mockResolvedValue([]),
     findByModerationStatus: jest.fn().mockResolvedValue([]),
+    aggregateRating: jest.fn().mockResolvedValue(zeroRating('rest-1')),
     ...overrides,
   } as jest.Mocked<IReviewRepository>;
 }
 
-export function makeEligibilityRepo(
-  overrides: Partial<IReviewEligibilityRepository> = {}
-): jest.Mocked<IReviewEligibilityRepository> {
+/** The all-zero aggregate a restaurant with no APPROVED reviews resolves to. */
+export function zeroRating(restaurantId: string): RestaurantRatingAggregate {
   return {
-    findByFulfillmentId: jest.fn().mockResolvedValue(null),
-    upsert: jest.fn().mockResolvedValue(undefined),
-    markReviewed: jest.fn().mockResolvedValue(undefined),
-    ...overrides,
-  } as jest.Mocked<IReviewEligibilityRepository>;
+    restaurantId,
+    avgRating: 0,
+    reviewCount: 0,
+    distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
+  };
 }
 
-export function makeRatingViewRepo(
-  overrides: Partial<IRestaurantRatingViewRepository> = {}
-): jest.Mocked<IRestaurantRatingViewRepository> {
+/** A delivered, reviewable fulfillment by default; pass `null` for "no such fulfillment". */
+export function makeFulfillmentGateway(
+  subject: Partial<ReviewSubject> | null = {}
+): jest.Mocked<IFulfillmentGateway> {
   return {
-    findByRestaurantId: jest.fn().mockResolvedValue(null),
-    upsert: jest.fn().mockResolvedValue(undefined),
+    getForReview: jest
+      .fn()
+      .mockResolvedValue(subject === null ? null : reviewSubject(subject)),
+  } as jest.Mocked<IFulfillmentGateway>;
+}
+
+export function reviewSubject(overrides: Partial<ReviewSubject> = {}): ReviewSubject {
+  return {
+    fulfillmentId: 'ful-1',
+    customerId: 'cust-1',
+    restaurantId: 'rest-1',
+    deliveredAt: new Date('2026-01-01T00:00:00Z'),
     ...overrides,
-  } as jest.Mocked<IRestaurantRatingViewRepository>;
+  };
 }
 
 export function makeNotificationRepo(
@@ -91,14 +101,4 @@ export function makeTemplateRepo(
     findByKeyChannelLocale: jest.fn().mockResolvedValue(null),
     ...overrides,
   } as jest.Mocked<INotificationTemplateRepository>;
-}
-
-export function makeNotificationQueue(
-  overrides: Partial<INotificationQueue> = {}
-): jest.Mocked<INotificationQueue> {
-  return {
-    enqueue: jest.fn().mockResolvedValue(undefined),
-    close: jest.fn().mockResolvedValue(undefined),
-    ...overrides,
-  } as jest.Mocked<INotificationQueue>;
 }

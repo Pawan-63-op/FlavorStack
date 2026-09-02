@@ -22,9 +22,21 @@ export function metricKey(name: string, labels?: MetricLabels): string {
   return `${name}{${parts.join(',')}}`;
 }
 
+/**
+ * Running aggregate for one histogram series. Deliberately *not* the raw observations:
+ * a `number[]` grows without bound for the lifetime of the process, and every consumer
+ * (`HistogramSnapshot`) only ever needs count/sum/min/max/avg — all foldable in O(1).
+ */
+interface HistogramState {
+  count: number;
+  sum: number;
+  min: number;
+  max: number;
+}
+
 export class MetricsRegistry {
   private readonly counters = new Map<string, number>();
-  private readonly histograms = new Map<string, number[]>();
+  private readonly histograms = new Map<string, HistogramState>();
 
   increment(name: string, labels?: MetricLabels, by = 1): void {
     const key = metricKey(name, labels);
@@ -33,9 +45,15 @@ export class MetricsRegistry {
 
   observe(name: string, value: number, labels?: MetricLabels): void {
     const key = metricKey(name, labels);
-    const series = this.histograms.get(key);
-    if (series) series.push(value);
-    else this.histograms.set(key, [value]);
+    const state = this.histograms.get(key);
+    if (!state) {
+      this.histograms.set(key, { count: 1, sum: value, min: value, max: value });
+      return;
+    }
+    state.count += 1;
+    state.sum += value;
+    if (value < state.min) state.min = value;
+    if (value > state.max) state.max = value;
   }
 
   getCounter(name: string, labels?: MetricLabels): number {
@@ -43,16 +61,16 @@ export class MetricsRegistry {
   }
 
   getHistogram(name: string, labels?: MetricLabels): HistogramSnapshot | undefined {
-    const series = this.histograms.get(metricKey(name, labels));
-    if (!series || series.length === 0) return undefined;
-    return summarize(series);
+    const state = this.histograms.get(metricKey(name, labels));
+    if (!state || state.count === 0) return undefined;
+    return summarize(state);
   }
 
   snapshot(): MetricsSnapshot {
     const counters: Record<string, number> = {};
     for (const [k, v] of this.counters) counters[k] = v;
     const histograms: Record<string, HistogramSnapshot> = {};
-    for (const [k, series] of this.histograms) histograms[k] = summarize(series);
+    for (const [k, state] of this.histograms) histograms[k] = summarize(state);
     return { counters, histograms };
   }
 
@@ -63,16 +81,9 @@ export class MetricsRegistry {
   }
 }
 
-function summarize(series: number[]): HistogramSnapshot {
-  let sum = 0;
-  let min = series[0];
-  let max = series[0];
-  for (const v of series) {
-    sum += v;
-    if (v < min) min = v;
-    if (v > max) max = v;
-  }
-  return { count: series.length, sum, min, max, avg: sum / series.length };
+/** Pure projection of the running aggregate onto the public snapshot shape. */
+function summarize(state: HistogramState): HistogramSnapshot {
+  return { ...state, avg: state.sum / state.count };
 }
 
 /** Process-wide registry shared by the telemetry layer. */

@@ -19,6 +19,7 @@ function makeRepo(drivers: Driver[]): jest.Mocked<IDriverRepository> {
   return {
     findNearby: jest.fn().mockResolvedValue([]),
     findAvailable: jest.fn().mockResolvedValue(drivers),
+    findByStatus: jest.fn().mockResolvedValue([]),
   } as jest.Mocked<IDriverRepository>;
 }
 

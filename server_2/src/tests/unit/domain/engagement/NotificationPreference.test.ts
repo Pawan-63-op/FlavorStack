@@ -7,11 +7,11 @@ describe('NotificationPreference.createDefault', () => {
     const pref = NotificationPreference.createDefault('user-1');
 
     expect(pref.userId).toBe('user-1');
-    expect(pref.isEnabled(NOTIFICATION_CATEGORY.ORDER_UPDATES, NOTIFICATION_CHANNEL.PUSH)).toBe(true);
+    expect(pref.isEnabled(NOTIFICATION_CATEGORY.ORDER_UPDATES, NOTIFICATION_CHANNEL.INBOX)).toBe(true);
     expect(pref.isEnabled(NOTIFICATION_CATEGORY.ORDER_UPDATES, NOTIFICATION_CHANNEL.EMAIL)).toBe(true);
-    expect(pref.isEnabled(NOTIFICATION_CATEGORY.DELIVERY, NOTIFICATION_CHANNEL.PUSH)).toBe(true);
+    expect(pref.isEnabled(NOTIFICATION_CATEGORY.DELIVERY, NOTIFICATION_CHANNEL.INBOX)).toBe(true);
     expect(pref.isEnabled(NOTIFICATION_CATEGORY.SECURITY, NOTIFICATION_CHANNEL.EMAIL)).toBe(true);
-    expect(pref.isEnabled(NOTIFICATION_CATEGORY.PROMOTIONS, NOTIFICATION_CHANNEL.PUSH)).toBe(true);
+    expect(pref.isEnabled(NOTIFICATION_CATEGORY.PROMOTIONS, NOTIFICATION_CHANNEL.INBOX)).toBe(true);
     expect(pref.isEnabled(NOTIFICATION_CATEGORY.PROMOTIONS, NOTIFICATION_CHANNEL.EMAIL)).toBe(false);
   });
 });
@@ -23,24 +23,24 @@ describe('NotificationPreference.setChannel / isEnabled', () => {
 
     expect(result.isSuccess).toBe(true);
     expect(pref.isEnabled(NOTIFICATION_CATEGORY.ORDER_UPDATES, NOTIFICATION_CHANNEL.EMAIL)).toBe(false);
-    expect(pref.isEnabled(NOTIFICATION_CATEGORY.ORDER_UPDATES, NOTIFICATION_CHANNEL.PUSH)).toBe(true);
+    expect(pref.isEnabled(NOTIFICATION_CATEGORY.ORDER_UPDATES, NOTIFICATION_CHANNEL.INBOX)).toBe(true);
   });
 
   it('bumps updatedAt on change', () => {
     const pref = NotificationPreference.createDefault('user-1');
     const before = pref.updatedAt;
-    pref.setChannel(NOTIFICATION_CATEGORY.DELIVERY, NOTIFICATION_CHANNEL.PUSH, false);
+    pref.setChannel(NOTIFICATION_CATEGORY.DELIVERY, NOTIFICATION_CHANNEL.INBOX, false);
     expect(pref.updatedAt.getTime()).toBeGreaterThanOrEqual(before.getTime());
   });
 
   it('default-allows a category that has no stored toggle', () => {
     const pref = NotificationPreference.createDefault('user-1');
-    expect(pref.isEnabled('UNKNOWN_CATEGORY' as any, NOTIFICATION_CHANNEL.PUSH)).toBe(true);
+    expect(pref.isEnabled('UNKNOWN_CATEGORY' as any, NOTIFICATION_CHANNEL.INBOX)).toBe(true);
   });
 
   it('rejects an invalid category on setChannel', () => {
     const pref = NotificationPreference.createDefault('user-1');
-    const result = pref.setChannel('BOGUS' as any, NOTIFICATION_CHANNEL.PUSH, true);
+    const result = pref.setChannel('BOGUS' as any, NOTIFICATION_CHANNEL.INBOX, true);
     expect(result.isFailure).toBe(true);
   });
 

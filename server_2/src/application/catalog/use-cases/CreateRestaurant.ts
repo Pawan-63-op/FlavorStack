@@ -4,7 +4,6 @@ import { GeoPoint } from '../../../domain/identity/value-objects/GeoPoint.vo';
 import { Restaurant } from '../../../domain/catalog/entities/Restaurant';
 import { IRestaurantRepository } from '../../../domain/catalog/repositories/IRestaurantRepository';
 import { IUnitOfWork } from '../../shared/ports/IUnitOfWork';
-import { IOutboxStore } from '../../shared/outbox/IOutboxStore';
 import { IEventBus } from '../../shared/events/IEventBus';
 import { CreateRestaurantDto } from '../dtos/CreateRestaurantDto';
 import { RestaurantResponse } from '../responses/RestaurantResponse';
@@ -18,7 +17,6 @@ export class CreateRestaurant {
   constructor(
     private restaurantRepo: IRestaurantRepository,
     private unitOfWork: IUnitOfWork,
-    private outboxStore: IOutboxStore,
     private eventBus: IEventBus
   ) {}
 
@@ -55,11 +53,8 @@ export class CreateRestaurant {
     const restaurant = restaurantResult.getValue();
     const events = restaurant.pullDomainEvents();
 
-    await this.unitOfWork.runInTransaction(async (ctx) => {
+    await this.unitOfWork.runInTransaction(async () => {
       await this.restaurantRepo.save(restaurant);
-      if (events.length > 0) {
-        await this.outboxStore.append(events, ctx);
-      }
     });
 
     await this.eventBus.publishAll(events);

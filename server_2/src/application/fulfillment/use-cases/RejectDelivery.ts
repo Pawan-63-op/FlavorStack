@@ -2,7 +2,6 @@ import { Result } from '../../../domain/shared/Result';
 import { NotFoundError } from '../../../domain/shared/errors/NotFoundError';
 import { IFulfillmentRepository } from '../../../domain/fulfillment/repositories/IFulfillmentRepository';
 import { IUnitOfWork } from '../../shared/ports/IUnitOfWork';
-import { IOutboxStore } from '../../shared/outbox/IOutboxStore';
 import { IEventBus } from '../../shared/events/IEventBus';
 import { RejectDeliveryDto } from '../dtos/RejectDeliveryDto';
 import { FulfillmentResponse, toFulfillmentResponse } from '../responses/FulfillmentResponse';
@@ -13,7 +12,6 @@ export class RejectDelivery {
   constructor(
     private readonly fulfillmentRepo: IFulfillmentRepository,
     private readonly unitOfWork: IUnitOfWork,
-    private readonly outboxStore: IOutboxStore,
     private readonly eventBus: IEventBus,
     private readonly offerRiderAssignment: OfferRiderAssignment
   ) {}
@@ -27,9 +25,8 @@ export class RejectDelivery {
 
     const events = fulfillment.pullDomainEvents(); // reject raises none, but keep the shape uniform
 
-    await this.unitOfWork.runInTransaction(async (ctx) => {
+    await this.unitOfWork.runInTransaction(async () => {
       await this.fulfillmentRepo.update(fulfillment);
-      if (events.length > 0) await this.outboxStore.append(events, ctx);
     });
 
     if (events.length > 0) await this.eventBus.publishAll(events);

@@ -29,7 +29,6 @@ import { DeliveryCompleted } from '../events/DeliveryCompleted';
 import { FulfillmentCancelled } from '../events/FulfillmentCancelled';
 import { DeliveryFailed } from '../events/DeliveryFailed';
 import { RiderReassigned } from '../events/RiderReassigned';
-import { RiderAssignmentExpired } from '../events/RiderAssignmentExpired';
 
 export interface FulfillmentProps {
   orderRequestId: string;
@@ -608,8 +607,9 @@ export class Fulfillment extends AggregateRoot<FulfillmentProps> {
 
   /**
    * Phase 5B: expire the live offer whose TTL has lapsed. OFFERED → EXPIRED, swept into history; the
-   * active slot frees for a re-offer. Raises RiderAssignmentExpired. Driven by the assignment-timeout
-   * job — guarded so a replayed/stale job is a no-op (Result.fail) rather than an illegal transition.
+   * active slot frees for a re-offer. Driven by the assignment-timeout job — guarded so a replayed or
+   * stale job is a no-op (Result.fail) rather than an illegal transition. Raises no domain event
+   * (Phase 6): the expiry had no subscriber, and `assignmentHistory` is the record of it.
    */
   public expireCurrentOffer(): Result<void> {
     const assignment = this.props.currentAssignment;
@@ -627,14 +627,6 @@ export class Fulfillment extends AggregateRoot<FulfillmentProps> {
     this.props.currentAssignment = null;
     this.props.updatedAt = new Date();
     this.props.version += 1;
-
-    this.addDomainEvent(
-      new RiderAssignmentExpired({
-        fulfillmentId: this.id.toString(),
-        riderId: assignment.riderId,
-        attempt: assignment.attempt,
-      })
-    );
 
     return Result.ok<void>(undefined);
   }

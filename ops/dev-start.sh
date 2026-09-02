@@ -25,7 +25,7 @@ head "Backend stack (docker compose: base + dev override)"
 docker compose \
   -f "$SERVER_DIR/docker-compose.yml" \
   -f "$SERVER_DIR/docker-compose.dev.yml" \
-  up -d --build
+  up -d --build --remove-orphans
 log "compose up -d issued"
 
 head "Waiting for Mongo replica set rs0"

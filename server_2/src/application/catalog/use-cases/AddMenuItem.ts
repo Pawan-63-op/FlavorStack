@@ -5,7 +5,6 @@ import { MenuItem } from '../../../domain/catalog/entities/MenuItem';
 import { IRestaurantRepository } from '../../../domain/catalog/repositories/IRestaurantRepository';
 import { IMenuItemRepository } from '../../../domain/catalog/repositories/IMenuItemRepository';
 import { IUnitOfWork } from '../../shared/ports/IUnitOfWork';
-import { IOutboxStore } from '../../shared/outbox/IOutboxStore';
 import { IEventBus } from '../../shared/events/IEventBus';
 import { AddMenuItemDto } from '../dtos/AddMenuItemDto';
 import { MenuItemResponse } from '../responses/MenuItemResponse';
@@ -18,7 +17,6 @@ export class AddMenuItem {
     private restaurantRepo: IRestaurantRepository,
     private menuItemRepo: IMenuItemRepository,
     private unitOfWork: IUnitOfWork,
-    private outboxStore: IOutboxStore,
     private eventBus: IEventBus
   ) {}
 
@@ -50,11 +48,8 @@ export class AddMenuItem {
     const menuItem = menuItemResult.getValue();
     const events = menuItem.pullDomainEvents();
 
-    await this.unitOfWork.runInTransaction(async (ctx) => {
+    await this.unitOfWork.runInTransaction(async () => {
       await this.menuItemRepo.save(menuItem);
-      if (events.length > 0) {
-        await this.outboxStore.append(events, ctx);
-      }
     });
 
     await this.eventBus.publishAll(events);

@@ -1,13 +1,13 @@
 import { Result } from '../../../domain/shared/Result';
-import { IRestaurantRatingViewRepository } from '../../../domain/engagement/repositories/IRestaurantRatingViewRepository';
+import { IReviewRepository } from '../../../domain/engagement/repositories/IReviewRepository';
 import { GetRestaurantRatingDto } from '../dtos/ReviewDtos';
 import { RestaurantRatingResponse, toRestaurantRatingResponse } from '../responses/RestaurantRatingResponse';
 
 export class GetRestaurantRating {
-  constructor(private readonly ratingViewRepo: IRestaurantRatingViewRepository) {}
+  constructor(private readonly reviewRepo: IReviewRepository) {}
 
   async execute(dto: GetRestaurantRatingDto): Promise<Result<RestaurantRatingResponse>> {
-    const view = await this.ratingViewRepo.findByRestaurantId(dto.restaurantId);
-    return Result.ok(toRestaurantRatingResponse(dto.restaurantId, view));
+    const rating = await this.reviewRepo.aggregateRating(dto.restaurantId);
+    return Result.ok(toRestaurantRatingResponse(rating));
   }
 }

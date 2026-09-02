@@ -9,8 +9,6 @@ import { CreateAdminInput } from '../types/CreateAdminInput'
 
 import { ForbiddenError } from '../../shared/errors/ForbiddenError';
 import { UserRegistered } from '../events/UserRegistered';
-import { RoleAssigned } from '../events/RoleAssigned';
-import { PermissionGranted } from '../events/PermissionGranted';
 
 export class Admin extends BaseUser {
     department: string
@@ -62,7 +60,6 @@ export class Admin extends BaseUser {
         const exists = this.permissions.some(ep => ep.matches(p.resource, p.action))
         if (!exists) {
             this.permissions.push(p)
-            this.addDomainEvent(new PermissionGranted(this._id, p.resource, p.action, p.scope))
         }
     }
 
@@ -80,12 +77,12 @@ export class Admin extends BaseUser {
         }
     }
 
-    assignRole(targetUserId: string, targetRole: UserRole): void {
+    /** Authorises the actor to move a user onto `targetRole`; the caller applies the change. */
+    assignRole(targetRole: UserRole): void {
         this.assertPermission(PERMISSION_RESOURCE.USER, PERMISSION_ACTION.UPDATE);
         if (targetRole === USER_ROLE.ADMIN && !this.isSuperAdmin) {
             throw new ForbiddenError('Only super admins can assign the admin role');
         }
-        this.addDomainEvent(new RoleAssigned(targetUserId, targetRole, this._id));
     }
 
     enable2FA(secret: string) {

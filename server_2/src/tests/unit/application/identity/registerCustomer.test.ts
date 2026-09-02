@@ -5,7 +5,6 @@ import {
   InMemoryCustomerRepository,
   FakePasswordHasher,
   InMemoryUnitOfWork,
-  InMemoryOutboxStore,
 } from '../../../mocks/identity.mocks';
 import { createEventBusSpy } from '../../../mocks/shared.mocks';
 import { Customer } from '../../../../domain/identity/entities/Customer';
@@ -17,7 +16,6 @@ describe('RegisterCustomer use-case', () => {
   let customerRepo: InMemoryCustomerRepository;
   let passwordHasher: FakePasswordHasher;
   let unitOfWork: InMemoryUnitOfWork;
-  let outboxStore: InMemoryOutboxStore;
   let eventBus: ReturnType<typeof createEventBusSpy>;
   let useCase: RegisterCustomer;
 
@@ -33,14 +31,12 @@ describe('RegisterCustomer use-case', () => {
     customerRepo = new InMemoryCustomerRepository(userRepo);
     passwordHasher = new FakePasswordHasher();
     unitOfWork = new InMemoryUnitOfWork();
-    outboxStore = new InMemoryOutboxStore();
     eventBus = createEventBusSpy();
     useCase = new RegisterCustomer(
       userRepo,
       customerRepo,
       passwordHasher,
       unitOfWork,
-      outboxStore,
       eventBus,
     );
   });
@@ -71,10 +67,10 @@ describe('RegisterCustomer use-case', () => {
       expect((saved as Customer).email).toBe(validDto.email);
     });
 
-    it('appends UserRegistered to outbox', async () => {
+    it('publishes UserRegistered', async () => {
       await useCase.execute(validDto);
-      expect(outboxStore.appended.length).toBe(1);
-      expect(outboxStore.appended[0].eventName).toBe('UserRegistered');
+      expect(eventBus.publishedEvents.length).toBe(1);
+      expect(eventBus.publishedEvents[0].eventName).toBe('UserRegistered');
     });
 
     it('publishes UserRegistered via event bus', async () => {

@@ -93,7 +93,7 @@ describe('FulfillmentJobHandler', () => {
     expect(sla.execute).toHaveBeenCalledWith({ fulfillmentId: 'f1', stage: 'READY_FOR_PICKUP' });
   });
 
-  it('throws when a handler use case fails (so BullMQ retries / DLQs)', async () => {
+  it('throws when a handler use case fails (so BullMQ retries, then retains the job)', async () => {
     const assignment = {
       execute: jest.fn().mockResolvedValue(Result.fail<void>(new ValidationError('boom'))),
     } as unknown as HandleAssignmentTimeout;

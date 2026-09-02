@@ -6,8 +6,10 @@ MONGO_CONTAINER="${MONGO_CONTAINER:-server_2-mongo-1}"
 REDIS_CONTAINER="${REDIS_CONTAINER:-server_2-redis-1}"
 MONGO_DB="${MONGO_DB:-flavorstack}"
 
-QUEUES=(email-queue notification-queue dead-letter-queue commerce-queue \
-        fulfillment-queue search-reindex-queue ordering-queue payments-queue)
+# Two queues, one reason each: outbound HTTP that must retry (email), and delayed execution
+# with no alternative (fulfillment — rider-offer expiry / SLA timeouts). Phase 8 removed
+# dead-letter-queue; commerce/search-reindex/ordering/payments never existed in code.
+QUEUES=(email-queue fulfillment-queue)
 
 head() { printf '\n=== %s ===\n' "$*"; }
 log()  { printf '  • %s\n' "$*"; }
@@ -32,7 +34,9 @@ else
   log "Redis not responding"
 fi
 
-head "BullMQ queue depths (waiting / active / delayed / failed)"
+# f= is the dead-letter queue's replacement: `removeOnFail: false` retains an exhausted job in
+# bull:<queue>:failed with its payload and failedReason. A non-zero f= is what to investigate.
+head "BullMQ queue depths (waiting / active / delayed / failed-retained)"
 for q in "${QUEUES[@]}"; do
   waiting=$(docker exec "$REDIS_CONTAINER" redis-cli LLEN "bull:$q:wait" 2>/dev/null || echo '?')
   active=$(docker exec "$REDIS_CONTAINER" redis-cli LLEN "bull:$q:active" 2>/dev/null || echo '?')
@@ -41,7 +45,21 @@ for q in "${QUEUES[@]}"; do
   printf '  • %-24s w=%s a=%s d=%s f=%s\n' "$q" "$waiting" "$active" "$delayed" "$failed"
 done
 
+# Since Phase 7.3 the relay is the *only* delivery path for `OrderRequested`, so a growing PENDING
+# backlog means orders are not reaching restaurants — the single most informative number here.
+# PROCESSING counts rows the relay has claimed; a non-zero count that does not drain means a relay
+# died mid-batch (reclaimStale returns them to PENDING on the next boot). The oldest PENDING
+# createdAt is the actual customer-visible lag; a count alone cannot tell a burst from a stall.
 head "Outbox backlog (outbox collection)"
-PENDING=$(docker exec "$MONGO_CONTAINER" mongosh "$MONGO_DB" --quiet --eval \
-  'try { db.outbox.countDocuments({status:"PENDING"}) } catch(e){ print("n/a") }' 2>/dev/null || echo 'n/a')
-log "PENDING rows awaiting relay: $PENDING"
+mongo_eval() {
+  docker exec "$MONGO_CONTAINER" mongosh "$MONGO_DB" --quiet --eval "$1" 2>/dev/null || echo 'n/a'
+}
+PENDING=$(mongo_eval 'try { db.outbox.countDocuments({status:"PENDING"}) } catch(e){ print("n/a") }')
+PROCESSING=$(mongo_eval 'try { db.outbox.countDocuments({status:"PROCESSING"}) } catch(e){ print("n/a") }')
+OLDEST=$(mongo_eval 'try {
+  const r = db.outbox.find({status:"PENDING"}).sort({createdAt:1}).limit(1).toArray()[0];
+  print(r ? r.createdAt.toISOString() + " (" + Math.round((Date.now() - r.createdAt.getTime())/1000) + "s ago)" : "none");
+} catch(e){ print("n/a") }')
+log "PENDING rows awaiting relay:   $PENDING"
+log "PROCESSING (claimed by relay): $PROCESSING"
+log "oldest PENDING createdAt:      $OLDEST"

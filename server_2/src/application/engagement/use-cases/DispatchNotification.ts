@@ -5,11 +5,8 @@ import { INotificationRepository } from '../../../domain/engagement/repositories
 import { INotificationPreferenceRepository } from '../../../domain/engagement/repositories/INotificationPreferenceRepository';
 import { INotificationTemplateRepository } from '../../../domain/engagement/repositories/INotificationTemplateRepository';
 import { IUnitOfWork } from '../../shared/ports/IUnitOfWork';
-import { IOutboxStore } from '../../shared/outbox/IOutboxStore';
-import { IEventBus } from '../../shared/events/IEventBus';
-import { INotificationQueue } from '../../shared/queues/INotificationQueue';
 import { DispatchNotificationDto, DispatchNotificationResponse } from '../dtos/DispatchNotificationDto';
-import { buildDedupeKey, dedupeKeyToJobId } from './DedupeKeyBuilder';
+import { buildDedupeKey } from './DedupeKeyBuilder';
 
 const DEFAULT_LOCALE = 'en';
 
@@ -18,10 +15,7 @@ export class DispatchNotification {
     private readonly notificationRepo: INotificationRepository,
     private readonly preferenceRepo: INotificationPreferenceRepository,
     private readonly templateRepo: INotificationTemplateRepository,
-    private readonly unitOfWork: IUnitOfWork,
-    private readonly outboxStore: IOutboxStore,
-    private readonly eventBus: IEventBus,
-    private readonly notificationQueue: INotificationQueue
+    private readonly unitOfWork: IUnitOfWork
   ) {}
 
   async execute(dto: DispatchNotificationDto): Promise<Result<DispatchNotificationResponse>> {
@@ -46,7 +40,7 @@ export class DispatchNotification {
     }
     const { title, body } = tmpl.render(dto.vars ?? {});
 
-    const notificationResult = Notification.queue({
+    const input = {
       recipientUserId: dto.recipientUserId,
       category: dto.category,
       channel: dto.channel,
@@ -54,23 +48,22 @@ export class DispatchNotification {
       renderedTitle: title,
       renderedBody: body,
       dedupeKey,
-    });
+    };
+
+    // The Mongo row *is* the delivery: the notification is born SENT, inside the transaction below.
+    // There is no queue, no provider, and no failure mode (Phase 5 Batch 4 deleted the tier).
+    const notificationResult = Notification.deliver(input);
     if (notificationResult.isFailure) return Result.fail(notificationResult.getError());
 
     const notification = notificationResult.getValue();
-    const events = notification.pullDomainEvents();
 
-    await this.unitOfWork.runInTransaction(async (ctx) => {
+    // `Notification` raises no domain events — nothing downstream reacts to a delivered
+    // notification — so there is no outbox append and nothing to publish. The transaction
+    // is kept because the dedupe-key unique index is what makes a concurrent double-dispatch
+    // fail loudly rather than insert twice.
+    await this.unitOfWork.runInTransaction(async () => {
       await this.notificationRepo.save(notification);
-      if (events.length > 0) await this.outboxStore.append(events, ctx);
     });
-
-    await this.eventBus.publishAll(events);
-
-    await this.notificationQueue.enqueue(
-      { type: 'engagement', notificationId: notification.id.toString(), channel: dto.channel },
-      { jobId: dedupeKeyToJobId(dedupeKey) }
-    );
 
     return Result.ok({ outcome: 'DISPATCHED', dedupeKey, notificationId: notification.id.toString() });
   }

@@ -1,6 +1,6 @@
 import { CreateRestaurant } from '../../../../application/catalog/use-cases/CreateRestaurant';
 import { InMemoryRestaurantRepository } from '../../../mocks/catalog.mocks';
-import { InMemoryUnitOfWork, InMemoryOutboxStore } from '../../../mocks/identity.mocks';
+import { InMemoryUnitOfWork } from '../../../mocks/identity.mocks';
 import { createEventBusSpy, EventBusSpy } from '../../../mocks/shared.mocks';
 import { CreateRestaurantDto } from '../../../../application/catalog/dtos/CreateRestaurantDto';
 import { RESTAURANT_STATUS } from '../../../../domain/catalog/enums/restaurant-status.enum';
@@ -28,16 +28,14 @@ function dto(overrides: Partial<CreateRestaurantDto> = {}): CreateRestaurantDto 
 describe('CreateRestaurant use-case', () => {
   let restaurantRepo: InMemoryRestaurantRepository;
   let unitOfWork: InMemoryUnitOfWork;
-  let outboxStore: InMemoryOutboxStore;
   let eventBus: EventBusSpy;
   let useCase: CreateRestaurant;
 
   beforeEach(() => {
     restaurantRepo = new InMemoryRestaurantRepository();
     unitOfWork = new InMemoryUnitOfWork();
-    outboxStore = new InMemoryOutboxStore();
     eventBus = createEventBusSpy();
-    useCase = new CreateRestaurant(restaurantRepo, unitOfWork, outboxStore, eventBus);
+    useCase = new CreateRestaurant(restaurantRepo, unitOfWork, eventBus);
   });
 
   it('creates a DRAFT/HIDDEN restaurant owned by the actor and emits RestaurantCreated', async () => {
@@ -51,8 +49,8 @@ describe('CreateRestaurant use-case', () => {
     const saved = await restaurantRepo.findById(response.id);
     expect(saved!.ownerId).toBe('owner-1'); // ownerId from actor, not body
 
-    expect(outboxStore.appended).toHaveLength(1);
-    expect(outboxStore.appended[0].eventName).toBe('RestaurantCreated');
+    expect(eventBus.publishedEvents).toHaveLength(1);
+    expect(eventBus.publishedEvents[0].eventName).toBe('RestaurantCreated');
     expect(eventBus.publishedEvents).toHaveLength(1);
   });
 
@@ -67,7 +65,7 @@ describe('CreateRestaurant use-case', () => {
     const result = await useCase.execute(dto({ location: { lat: 999, lng: 77.59 } }));
 
     expect(result.isFailure).toBe(true);
-    expect(outboxStore.appended).toHaveLength(0);
+    expect(eventBus.publishedEvents).toHaveLength(0);
     expect(eventBus.publishedEvents).toHaveLength(0);
   });
 
@@ -85,6 +83,6 @@ describe('CreateRestaurant use-case', () => {
     );
 
     expect(result.isFailure).toBe(true);
-    expect(outboxStore.appended).toHaveLength(0);
+    expect(eventBus.publishedEvents).toHaveLength(0);
   });
 });

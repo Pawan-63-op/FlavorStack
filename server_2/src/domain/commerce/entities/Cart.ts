@@ -11,8 +11,6 @@ import { CartItem } from './CartItem';
 import { LineItemSelection } from '../value-objects/LineItemSelection';
 import { Quantity } from '../value-objects/Quantity';
 import { AppliedPromotion } from '../value-objects/AppliedPromotion';
-import { CartItemAdded } from '../events/CartItemAdded';
-import { CartCleared } from '../events/CartCleared';
 
 export interface CartProps {
   customerId: string;
@@ -159,7 +157,6 @@ export class Cart extends AggregateRoot<CartProps> {
     this.props.currency = unitPrice.currency;
     this.props.appliedPromotion = null;
     this.touch();
-    this.addDomainEvent(new CartItemAdded(this.id.toString(), selection.menuItemId, selection.quantity.value));
     return Result.ok<void>();
   }
 
@@ -258,7 +255,6 @@ export class Cart extends AggregateRoot<CartProps> {
     this.props.currency = null;
     this.props.appliedPromotion = null;
     this.touch();
-    this.addDomainEvent(new CartCleared(this.id.toString()));
     return Result.ok<void>();
   }
 }

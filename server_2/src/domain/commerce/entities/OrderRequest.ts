@@ -13,7 +13,6 @@ import { moneyToJSON } from '../value-objects/snapshots/snapshot-serialization';
 import { ORDER_REQUEST_STATUS, OrderRequestStatus } from '../enums/order-request-status.enum';
 import { COMMERCE_SNAPSHOT_SCHEMA_VERSION } from '../constants/snapshot-schema-version';
 import { OrderRequested, OrderRequestedAddress, OrderRequestedLine } from '../events/OrderRequested';
-import { CheckoutReadyForPayment } from '../events/CheckoutReadyForPayment';
 import { Address } from '../../identity/value-objects/Address.vo';
 
 export interface OrderRequestProps {
@@ -152,14 +151,6 @@ export class OrderRequest extends AggregateRoot<OrderRequestProps> {
     );
 
     order.addDomainEvent(new OrderRequested(order.toOrderRequestedPayload()));
-    order.addDomainEvent(
-      new CheckoutReadyForPayment({
-        orderRequestId: order.id.toString(),
-        customerId: order.props.customerId,
-        amount: moneyToJSON(order.props.pricing.total),
-        paymentMethod: order.props.paymentIntent.method,
-      })
-    );
 
     return Result.ok<OrderRequest>(order);
   }

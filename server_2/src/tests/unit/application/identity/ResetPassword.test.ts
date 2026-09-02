@@ -3,7 +3,6 @@ import { ResetPasswordDto } from '../../../../application/identity/dtos/ResetPas
 import { passwordResetOtpKey } from '../../../../application/identity/otp-keys';
 import {
   InMemoryUserRepository,
-  InMemoryOutboxStore,
   InMemoryUnitOfWork,
   InMemorySessionStore,
   InMemoryOtpStore,
@@ -34,7 +33,6 @@ describe('ResetPassword use-case', () => {
   let sessionStore: InMemorySessionStore;
   let otpStore: InMemoryOtpStore;
   let unitOfWork: InMemoryUnitOfWork;
-  let outboxStore: InMemoryOutboxStore;
   let eventBus: EventBusSpy;
   let useCase: ResetPassword;
 
@@ -44,9 +42,8 @@ describe('ResetPassword use-case', () => {
     sessionStore = new InMemorySessionStore();
     otpStore = new InMemoryOtpStore();
     unitOfWork = new InMemoryUnitOfWork();
-    outboxStore = new InMemoryOutboxStore();
     eventBus = createEventBusSpy();
-    useCase = new ResetPassword(userRepo, otpStore, passwordHasher, sessionStore, unitOfWork, outboxStore, eventBus);
+    useCase = new ResetPassword(userRepo, otpStore, passwordHasher, sessionStore, unitOfWork, eventBus);
   });
 
   describe('success', () => {
@@ -83,19 +80,16 @@ describe('ResetPassword use-case', () => {
       expect(sessions).toHaveLength(0);
     });
 
-    it('appends PasswordResetCompleted to the outbox and publishes it post-commit', async () => {
+    it('raises no domain event, so nothing is published', async () => {
       const customer = makeCustomer();
       await userRepo.save(customer);
       await otpStore.issue(passwordResetOtpKey(customer._id), VALID_CODE, 900);
 
       await useCase.execute({ email: customer.email, code: VALID_CODE, newPassword: NEW_PASSWORD });
 
-      expect(outboxStore.appended).toHaveLength(1);
-      expect(outboxStore.appended[0].eventName).toBe('PasswordResetCompleted');
-      expect(outboxStore.appended[0].aggregateId).toBe(customer._id);
-
-      expect(eventBus.publishedEvents).toHaveLength(1);
-      expect(eventBus.publishedEvents[0].eventName).toBe('PasswordResetCompleted');
+      // Phase 6: this state change raises no domain event — it had no subscriber.
+      expect(eventBus.publishedEvents).toHaveLength(0);
+      expect(eventBus.publishedEvents).toHaveLength(0);
     });
 
     it('consumes the OTP so it cannot be reused', async () => {
@@ -127,7 +121,7 @@ describe('ResetPassword use-case', () => {
       expect(result.isFailure).toBe(true);
       const updated = await userRepo.findById(customer._id);
       expect(updated!.passwordHash).toBe('hashed:OldPassword1!');
-      expect(outboxStore.appended).toHaveLength(0);
+      expect(eventBus.publishedEvents).toHaveLength(0);
       expect(eventBus.publishedEvents).toHaveLength(0);
     });
 

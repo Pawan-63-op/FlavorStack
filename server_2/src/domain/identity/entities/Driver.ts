@@ -10,8 +10,6 @@ import { DomainError } from '../../shared/errors/DomainError';
 import { ValidationError } from '../../shared/errors/ValidationError';
 import { ForbiddenError } from '../../shared/errors/ForbiddenError';
 import { UserRegistered } from '../events/UserRegistered';
-import { DriverVerified } from '../events/DriverVerified';
-import { DriverSuspended } from '../events/DriverSuspended';
 
 export class Driver extends BaseUser {
     driverStatus: DriverStatus
@@ -27,7 +25,6 @@ export class Driver extends BaseUser {
     averageRating: number
     totalDeliveries: number
     totalRatings: number
-    fcmTokens: string[]
 
     constructor(data: Partial<Driver>) {
         super(data)
@@ -41,7 +38,6 @@ export class Driver extends BaseUser {
         this.averageRating = data.averageRating ?? 0
         this.totalDeliveries = data.totalDeliveries ?? 0
         this.totalRatings = data.totalRatings ?? 0
-        this.fcmTokens = data.fcmTokens ?? []
         this.activeOrderId = data.activeOrderId ?? null
         this.currentLocation = data.currentLocation ?? null
         this.stripeAccountId = data.stripeAccountId ?? null
@@ -127,14 +123,12 @@ export class Driver extends BaseUser {
             this.driverStatus === DRIVER_STATUS.SUSPENDED
         ) {
             this.driverStatus = DRIVER_STATUS.OFFLINE;
-            this.addDomainEvent(new DriverVerified(this._id, new Date()));
         }
     }
 
-    suspendDriver(reason: string): void {
+    suspendDriver(): void {
         this.driverStatus = DRIVER_STATUS.SUSPENDED;
         this.isAvailable = false;
-        this.addDomainEvent(new DriverSuspended(this._id, reason, new Date()));
     }
 
     creditEarnings(amount: number) {
@@ -159,14 +153,6 @@ export class Driver extends BaseUser {
         this.averageRating = ((this.averageRating * (this.totalRatings - 1)) + rating) / this.totalRatings
     }
 
-    registerFcmToken(token: string) {
-        if (!this.fcmTokens.includes(token)) this.fcmTokens.push(token)
-    }
-
-    removeFcmToken(token: string) {
-        this.fcmTokens = this.fcmTokens.filter(t => t !== token)
-    }
-
     static create(input: CreateDriverInput): Driver {
         const driver = new Driver({
             ...input,
@@ -182,7 +168,6 @@ export class Driver extends BaseUser {
             averageRating: 0,
             totalDeliveries: 0,
             totalRatings: 0,
-            fcmTokens: [],
         });
 
         driver.addDomainEvent(

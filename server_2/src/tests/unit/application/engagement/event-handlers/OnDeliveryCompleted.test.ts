@@ -4,7 +4,7 @@ import { NOTIFICATION_CHANNEL } from '../../../../../domain/engagement/enums/not
 import { DispatchNotificationDto } from '../../../../../application/engagement/dtos/DispatchNotificationDto';
 import { Result } from '../../../../../domain/shared/Result';
 import { logger } from '../../../../../infrastructure/observability/logger';
-import { makeDispatch, asDispatch, makeEligibilityRepo, busEvent } from './_handler-helpers';
+import { makeDispatch, asDispatch, makeFulfillmentGateway, busEvent } from './_handler-helpers';
 
 const deliveredAt = new Date('2026-06-17T10:00:00Z');
 
@@ -18,97 +18,71 @@ function deliveryCompleted(overrides: Record<string, unknown> = {}) {
   });
 }
 
-const seeded = {
-  fulfillmentId: 'ful-1',
-  customerId: 'cust-1',
-  restaurantId: 'rest-1',
-  deliveredAt: null,
-  reviewed: false,
-};
-
 describe('OnDeliveryCompleted', () => {
-  it('resolves customer/restaurant from eligibility (NOT the event payload, which lacks them)', async () => {
+  it('resolves the customer via the fulfillment gateway (the event payload lacks it)', async () => {
     const dispatch = makeDispatch();
-    const repo = makeEligibilityRepo({ findByFulfillmentId: jest.fn().mockResolvedValue(seeded) });
-    const handler = new OnDeliveryCompleted(asDispatch(dispatch), repo);
+    const gateway = makeFulfillmentGateway();
+    const handler = new OnDeliveryCompleted(asDispatch(dispatch), gateway);
 
     await handler.handle(deliveryCompleted());
 
-    expect(repo.findByFulfillmentId).toHaveBeenCalledWith('ful-1');
+    expect(gateway.getForReview).toHaveBeenCalledWith('ful-1');
     const dto = dispatch.execute.mock.calls[0][0] as DispatchNotificationDto;
     expect(dto.recipientUserId).toBe('cust-1');
   });
 
-  it('marks the eligibility delivered (sets deliveredAt, preserves customer/restaurant, keeps reviewed=false)', async () => {
+  it('writes nothing — review eligibility is derived from the fulfillment, not stamped here', async () => {
     const dispatch = makeDispatch();
-    const repo = makeEligibilityRepo({ findByFulfillmentId: jest.fn().mockResolvedValue(seeded) });
-    const handler = new OnDeliveryCompleted(asDispatch(dispatch), repo);
+    const gateway = makeFulfillmentGateway();
+    const handler = new OnDeliveryCompleted(asDispatch(dispatch), gateway);
 
     await handler.handle(deliveryCompleted());
 
-    expect(repo.upsert).toHaveBeenCalledTimes(1);
-    expect(repo.upsert).toHaveBeenCalledWith({
-      fulfillmentId: 'ful-1',
-      customerId: 'cust-1',
-      restaurantId: 'rest-1',
-      deliveredAt,
-      reviewed: false,
-    });
-  });
-
-  it('falls back to now() when the event omits deliveredAt (order still becomes reviewable)', async () => {
-    const dispatch = makeDispatch();
-    const repo = makeEligibilityRepo({ findByFulfillmentId: jest.fn().mockResolvedValue(seeded) });
-    const handler = new OnDeliveryCompleted(asDispatch(dispatch), repo);
-    const before = Date.now();
-
-    await handler.handle(deliveryCompleted({ deliveredAt: undefined }));
-
-    expect(repo.upsert).toHaveBeenCalledTimes(1);
-    const written = repo.upsert.mock.calls[0][0];
-    expect(written.deliveredAt).toBeInstanceOf(Date);
-    expect(written.deliveredAt!.getTime()).toBeGreaterThanOrEqual(before);
+    // The gateway is read-only: `getForReview` is its entire surface, so there is no
+    // deliveredAt write-back to assert absent.
+    expect(Object.keys(gateway)).toEqual(['getForReview']);
+    expect(dispatch.execute).toHaveBeenCalledTimes(1);
   });
 
   it('dispatches the delivered notification (DELIVERY/PUSH) to the resolved customer', async () => {
     const dispatch = makeDispatch();
-    const repo = makeEligibilityRepo({ findByFulfillmentId: jest.fn().mockResolvedValue(seeded) });
-    const handler = new OnDeliveryCompleted(asDispatch(dispatch), repo);
+    const handler = new OnDeliveryCompleted(asDispatch(dispatch), makeFulfillmentGateway());
 
     await handler.handle(deliveryCompleted());
 
     const dto = dispatch.execute.mock.calls[0][0] as DispatchNotificationDto;
     expect(dto.templateKey).toBe('delivered');
     expect(dto.category).toBe(NOTIFICATION_CATEGORY.DELIVERY);
-    expect(dto.channel).toBe(NOTIFICATION_CHANNEL.PUSH);
+    expect(dto.channel).toBe(NOTIFICATION_CHANNEL.INBOX);
     expect(dto.sourceEventId).toBe('evt-1');
   });
 
-  it('skips and logs (no mark-delivered, no dispatch) when eligibility is missing', async () => {
+  it('skips and logs (no dispatch) when the fulfillment cannot be found', async () => {
     const dispatch = makeDispatch();
     const warnSpy = jest.spyOn(logger, 'warn').mockImplementation(() => logger);
-    const repo = makeEligibilityRepo({ findByFulfillmentId: jest.fn().mockResolvedValue(null) });
-    const handler = new OnDeliveryCompleted(asDispatch(dispatch), repo);
+    const handler = new OnDeliveryCompleted(asDispatch(dispatch), makeFulfillmentGateway(null));
 
     await handler.handle(deliveryCompleted());
 
-    expect(repo.upsert).not.toHaveBeenCalled();
     expect(dispatch.execute).not.toHaveBeenCalled();
     expect(warnSpy).toHaveBeenCalled();
     warnSpy.mockRestore();
   });
 
-  it('is idempotent across redelivery of the same eventId', async () => {
+  // Phase 6 removed the per-handler in-memory `processedEventIds` set. The durable guard is
+  // `DispatchNotification`'s dedupe key (a unique index on `notifications`), which turns a
+  // redelivery into a SKIPPED/duplicate outcome instead of a second inbox row.
+  it('delegates every redelivery — de-duplication belongs to DispatchNotification', async () => {
     const dispatch = makeDispatch();
-    const repo = makeEligibilityRepo({ findByFulfillmentId: jest.fn().mockResolvedValue(seeded) });
-    const handler = new OnDeliveryCompleted(asDispatch(dispatch), repo);
+    const gateway = makeFulfillmentGateway();
+    const handler = new OnDeliveryCompleted(asDispatch(dispatch), gateway);
 
     const event = deliveryCompleted();
     await handler.handle(event);
     await handler.handle(event);
 
-    expect(repo.upsert).toHaveBeenCalledTimes(1);
-    expect(dispatch.execute).toHaveBeenCalledTimes(1);
+    expect(gateway.getForReview).toHaveBeenCalledTimes(2);
+    expect(dispatch.execute).toHaveBeenCalledTimes(2);
   });
 
   it('does not dedupe a failed dispatch — a redelivery re-attempts', async () => {
@@ -117,8 +91,7 @@ describe('OnDeliveryCompleted', () => {
       .mockResolvedValueOnce(Result.fail('boom'))
       .mockResolvedValueOnce(Result.ok({ outcome: 'DISPATCHED', dedupeKey: 'k' }));
     const errorSpy = jest.spyOn(logger, 'error').mockImplementation(() => logger);
-    const repo = makeEligibilityRepo({ findByFulfillmentId: jest.fn().mockResolvedValue(seeded) });
-    const handler = new OnDeliveryCompleted(asDispatch(dispatch), repo);
+    const handler = new OnDeliveryCompleted(asDispatch(dispatch), makeFulfillmentGateway());
 
     const event = deliveryCompleted();
     await handler.handle(event);

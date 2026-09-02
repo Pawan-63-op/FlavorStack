@@ -22,7 +22,12 @@ function makeEvent(aggregateId: string, eventName = 'UserRegistered'): DomainEve
   };
 }
 
-describe('Outbox persistence (Batch 6)', () => {
+/**
+ * Store + repository semantics for the outbox. Since Phase 7 the only production writer is
+ * `Checkout` (one event, `OrderRequested`), so rows carry a fixed `order_request` aggregate
+ * type; these cases exercise the store/relay mechanics rather than any one context's events.
+ */
+describe('Outbox persistence', () => {
   let txContext: TransactionContext;
   let uow: MongoUnitOfWork;
   let store: MongoOutboxStore;
@@ -54,7 +59,7 @@ describe('Outbox persistence (Batch 6)', () => {
       const reg = rows.find((r) => r.eventName === 'UserRegistered')!;
       expect(reg.eventId).toBe(events[0].eventId);
       expect(reg.aggregateId).toBe(aggId);
-      expect(reg.aggregateType).toBe('user');
+      expect(reg.aggregateType).toBe('order_request');
       expect(reg.status).toBe(OUTBOX_STATUS.PENDING);
       expect(reg.retryCount).toBe(0);
       expect(reg.processedAt).toBeNull();
@@ -111,19 +116,6 @@ describe('Outbox persistence (Batch 6)', () => {
     });
   });
 
-  describe('MongoOutboxRepository.save', () => {
-    it('persists a single PENDING row for an event', async () => {
-      const event = makeEvent(randomUUID());
-
-      await repo.save(event);
-
-      const row = await OutboxEventModel.findOne({ eventId: event.eventId }).lean();
-      expect(row).not.toBeNull();
-      expect(row!.status).toBe(OUTBOX_STATUS.PENDING);
-      expect(row!.aggregateType).toBe('user');
-    });
-  });
-
   describe('MongoOutboxRepository.findPending', () => {
     it('returns only PENDING rows, oldest first, up to the limit', async () => {
       const base = Date.now();
@@ -142,20 +134,21 @@ describe('Outbox persistence (Batch 6)', () => {
   });
 
   describe('MongoOutboxRepository status transitions', () => {
-    it('markProcessing transitions a PENDING row to PROCESSING', async () => {
+    it('claim transitions a PENDING row to PROCESSING and stamps the lease', async () => {
       const event = makeEvent(randomUUID());
-      await repo.save(event);
+      await store.append([event], undefined);
       const row = await OutboxEventModel.findOne({ eventId: event.eventId }).lean();
 
-      await repo.markProcessing(String(row!._id));
+      await expect(repo.claim(String(row!._id))).resolves.toBe(true);
 
       const updated = await OutboxEventModel.findById(row!._id).lean();
       expect(updated!.status).toBe(OUTBOX_STATUS.PROCESSING);
+      expect(updated!.lockedAt).toBeInstanceOf(Date);
     });
 
     it('markProcessed sets PROCESSED status and a processedAt timestamp', async () => {
       const event = makeEvent(randomUUID());
-      await repo.save(event);
+      await store.append([event], undefined);
       const row = await OutboxEventModel.findOne({ eventId: event.eventId }).lean();
 
       await repo.markProcessed(String(row!._id));

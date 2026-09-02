@@ -4,6 +4,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import { AppContainer } from './container';
 import { createApiRouter } from './api/v1/routes';
+import { createHealthRoutes } from './api/v1/routes/health.routes';
 import { requestId } from './api/v1/middleware/requestId';
 import { sanitize } from './api/v1/middleware/sanitize';
 import { notFound } from './api/v1/middleware/notFound';
@@ -25,6 +26,12 @@ export function createApp(app: AppContainer): Express {
   expressApp.use(sanitize);
 
   expressApp.use('/api/v1', createApiRouter(app));
+
+  // The only root-level routes in the app — operational surface, outside the versioned API.
+  // Mounted after `requestId` so a failing probe still carries one.
+  expressApp.use(
+    createHealthRoutes({ connection: app.connection, redisClient: app.redisClient }),
+  );
 
   expressApp.use(notFound);
   expressApp.use(errorHandler);

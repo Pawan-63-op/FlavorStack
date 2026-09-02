@@ -31,7 +31,15 @@ test.describe("order history (Phase 7, Batch 7.2) @regression", () => {
     await expect(page.getByText(restaurantB.name, { exact: false })).toBeVisible({
       timeout: 15_000,
     });
-    await expect(page.getByText("Order placed")).toBeVisible();
+    // Assert the SETTLED status, not the transient one.
+    //
+    // "Order placed" is the pre-fulfillment `REQUESTED` badge, shown only while the order has no
+    // `lastKnownStatus` — i.e. before it appears in server-truth `GET /me/orders`, which is
+    // seeded from the fulfillment. Since Phase 7 the fulfillment is created asynchronously by the
+    // outbox relay, so that badge is a window roughly one poll interval wide and racing it made
+    // this assertion flaky. "Order received" (`CREATED`) is the state the order settles into, and
+    // status only moves forward, so this is stable — Playwright just retries until the relay lands.
+    await expect(page.getByText("Order received").first()).toBeVisible({ timeout: 20_000 });
     await expect(page.getByRole("button", { name: /Track Order/i }).first()).toBeVisible();
 
     await page.getByRole("button", { name: /Details/i }).first().click();

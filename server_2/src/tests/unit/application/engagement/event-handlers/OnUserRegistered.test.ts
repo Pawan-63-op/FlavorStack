@@ -1,10 +1,6 @@
 import { OnUserRegistered } from '../../../../../application/engagement/event-handlers/OnUserRegistered';
-import { NOTIFICATION_CATEGORY } from '../../../../../domain/engagement/enums/notification-category.enum';
-import { NOTIFICATION_CHANNEL } from '../../../../../domain/engagement/enums/notification-channel.enum';
-import { DispatchNotificationDto } from '../../../../../application/engagement/dtos/DispatchNotificationDto';
-import { Result } from '../../../../../domain/shared/Result';
-import { logger } from '../../../../../infrastructure/observability/logger';
-import { makeDispatch, asDispatch, makePreferenceRepo, busEvent } from './_handler-helpers';
+import { NotificationPreference } from '../../../../../domain/engagement/entities/NotificationPreference';
+import { makePreferenceRepo, busEvent } from './_handler-helpers';
 
 function userRegistered(overrides: Record<string, unknown> = {}) {
   return busEvent({
@@ -17,11 +13,14 @@ function userRegistered(overrides: Record<string, unknown> = {}) {
   });
 }
 
-describe('OnUserRegistered', () => {
-  it('creates default preferences when the user has none, then dispatches the welcome notification', async () => {
-    const dispatch = makeDispatch();
+/**
+ * Engagement's `OnUserRegistered` seeds default notification preferences and nothing else.
+ * The welcome *email* moved to Identity's handler in Phase 5 Batch 3.
+ */
+describe('OnUserRegistered (engagement)', () => {
+  it('creates default preferences when the user has none', async () => {
     const preferenceRepo = makePreferenceRepo();
-    const handler = new OnUserRegistered(asDispatch(dispatch), preferenceRepo);
+    const handler = new OnUserRegistered(preferenceRepo);
 
     await handler.handle(userRegistered());
 
@@ -29,56 +28,33 @@ describe('OnUserRegistered', () => {
     expect(preferenceRepo.save).toHaveBeenCalledTimes(1);
     const saved = preferenceRepo.save.mock.calls[0][0];
     expect(saved.userId).toBe('user-1');
-
-    expect(dispatch.execute).toHaveBeenCalledTimes(1);
-    const dto = dispatch.execute.mock.calls[0][0] as DispatchNotificationDto;
-    expect(dto.recipientUserId).toBe('user-1');
-    expect(dto.templateKey).toBe('welcome');
-    expect(dto.category).toBe(NOTIFICATION_CATEGORY.SECURITY);
-    expect(dto.channel).toBe(NOTIFICATION_CHANNEL.EMAIL);
-    expect(dto.sourceEventId).toBe('evt-1');
-    expect(dto.vars).toMatchObject({ name: 'Jane' });
   });
 
   it('does not recreate preferences when the user already has them', async () => {
-    const dispatch = makeDispatch();
     const preferenceRepo = makePreferenceRepo({
       findByUserId: jest.fn().mockResolvedValue({ userId: 'user-1' }),
     });
-    const handler = new OnUserRegistered(asDispatch(dispatch), preferenceRepo);
+    const handler = new OnUserRegistered(preferenceRepo);
 
     await handler.handle(userRegistered());
 
     expect(preferenceRepo.save).not.toHaveBeenCalled();
-    expect(dispatch.execute).toHaveBeenCalledTimes(1);
   });
 
-  it('is idempotent across redelivery of the same eventId', async () => {
-    const dispatch = makeDispatch();
+  // Phase 6 removed the per-handler in-memory `processedEventIds` set. The handler re-reads on
+  // every delivery; the guard against a second write is the `findByUserId` existence check.
+  it('re-checks on redelivery but does not write preferences twice', async () => {
     const preferenceRepo = makePreferenceRepo();
-    const handler = new OnUserRegistered(asDispatch(dispatch), preferenceRepo);
+    preferenceRepo.findByUserId
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(NotificationPreference.createDefault('user-1'));
+    const handler = new OnUserRegistered(preferenceRepo);
 
     const event = userRegistered();
     await handler.handle(event);
     await handler.handle(event);
 
-    expect(dispatch.execute).toHaveBeenCalledTimes(1);
-  });
-
-  it('logs and does not dedupe when dispatch fails (allows retry)', async () => {
-    const dispatch = makeDispatch();
-    dispatch.execute
-      .mockResolvedValueOnce(Result.fail('boom'))
-      .mockResolvedValueOnce(Result.ok({ outcome: 'DISPATCHED', dedupeKey: 'k' }));
-    const errorSpy = jest.spyOn(logger, 'error').mockImplementation(() => logger);
-    const handler = new OnUserRegistered(asDispatch(dispatch), makePreferenceRepo());
-
-    const event = userRegistered();
-    await handler.handle(event);
-    await handler.handle(event);
-
-    expect(dispatch.execute).toHaveBeenCalledTimes(2);
-    expect(errorSpy).toHaveBeenCalled();
-    errorSpy.mockRestore();
+    expect(preferenceRepo.findByUserId).toHaveBeenCalledTimes(2);
+    expect(preferenceRepo.save).toHaveBeenCalledTimes(1);
   });
 });

@@ -8,36 +8,17 @@ import {
   OUTBOX_STATUS,
 } from './models/OutboxEventModel';
 
-export const DEFAULT_AGGREGATE_TYPE = 'user';
-
-export const AGGREGATE_TYPE_BY_EVENT: Record<string, string> = {
-  RestaurantCreated: 'restaurant',
-  RestaurantUpdated: 'restaurant',
-  RestaurantStatusChanged: 'restaurant',
-  CategoryAdded: 'restaurant',
-  CategoryUpdated: 'restaurant',
-  DeliveryZoneChanged: 'restaurant',
-  MenuItemCreated: 'menu_item',
-  MenuItemUpdated: 'menu_item',
-  MenuItemAvailabilityChanged: 'menu_item',
-  FulfillmentCreated: 'fulfillment',
-};
-
-/** Resolve the aggregate type for an event name, defaulting to `'user'`. */
-export function resolveAggregateType(eventName: string): string {
-  return AGGREGATE_TYPE_BY_EVENT[eventName] ?? DEFAULT_AGGREGATE_TYPE;
-}
-
-/** Map a domain event to a fresh PENDING outbox row. */
-export function toOutboxRow(
-  event: DomainEvent,
-  aggregateType: string = resolveAggregateType(event.eventName),
-): Omit<OutboxEventDocument, '_id'> {
+/**
+ * Map a domain event to a fresh PENDING outbox row. Since Phase 7 the outbox carries
+ * exactly one event — `OrderRequested`, appended by `Checkout` — so the aggregate type
+ * is fixed rather than resolved from a lookup table.
+ */
+export function toOutboxRow(event: DomainEvent): Omit<OutboxEventDocument, '_id'> {
   return {
     eventId: event.eventId,
     eventName: event.eventName,
     aggregateId: event.aggregateId,
-    aggregateType,
+    aggregateType: 'order_request',
     payload: JSON.parse(JSON.stringify(event)) as Record<string, unknown>,
     status: OUTBOX_STATUS.PENDING,
     retryCount: 0,
@@ -45,6 +26,7 @@ export function toOutboxRow(
     processedAt: null,
     nextAttemptAt: new Date(),
     lastError: null,
+    lockedAt: null,
   };
 }
 

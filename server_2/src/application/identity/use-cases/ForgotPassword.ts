@@ -4,10 +4,12 @@ import { IUserRepository } from '../../../domain/identity/repositories/IUserRepo
 import { IOtpGenerator } from '../../../domain/identity/services/IOtpGenerator';
 import { IOtpStore } from '../../../domain/identity/services/IOtpStore';
 import { IUnitOfWork } from '../../shared/ports/IUnitOfWork';
-import { IOutboxStore } from '../../shared/outbox/IOutboxStore';
 import { IEventBus } from '../../shared/events/IEventBus';
+import { IEmailQueue } from '../../shared/queues/IEmailQueue';
+import { IEmailComposer } from '../../../domain/identity/services/IEmailComposer';
 import { ForgotPasswordDto } from '../dtos/ForgotPasswordDto';
 import { passwordResetOtpKey, OTP_TTL_SECONDS } from '../otp-keys';
+import { logger } from '../../../infrastructure/observability/logger';
 
 export class ForgotPassword {
   constructor(
@@ -15,8 +17,10 @@ export class ForgotPassword {
     private otpGenerator: IOtpGenerator,
     private otpStore: IOtpStore,
     private unitOfWork: IUnitOfWork,
-    private outboxStore: IOutboxStore,
     private eventBus: IEventBus,
+    private emailQueue: IEmailQueue,
+    private emailComposer: IEmailComposer,
+    private appBaseUrl: string,
   ) {}
 
   async execute(dto: ForgotPasswordDto): Promise<Result<void>> {
@@ -28,19 +32,37 @@ export class ForgotPassword {
     if (!user) return Result.ok();
 
     const code = this.otpGenerator.generate();
+    const issuedAtMs = Date.now();
     await this.otpStore.issue(passwordResetOtpKey(user._id), code, OTP_TTL_SECONDS.PASSWORD_RESET);
-
-    user.requestPasswordReset();
 
     const events = user.pullDomainEvents();
 
-    await this.unitOfWork.runInTransaction(async (ctx) => {
+    await this.unitOfWork.runInTransaction(async () => {
       await this.userRepo.update(user);
-      await this.outboxStore.append(events, ctx);
     });
 
     await this.eventBus.publishAll(events);
 
+    // The reset code never becomes a domain event: an event is persisted to the `outbox`
+    // collection, and no plaintext OTP may be written there. The code lives only in Redis —
+    // the OTP store and the BullMQ job payload are the same store.
+    await this.sendResetEmail(user._id, email.value, code, issuedAtMs);
+
     return Result.ok();
+  }
+
+  private async sendResetEmail(userId: string, email: string, code: string, issuedAtMs: number): Promise<void> {
+    const resetUrl = `${this.appBaseUrl}/reset-password?email=${encodeURIComponent(email)}`;
+
+    const composed = await this.emailComposer.compose('password_reset', { code, email, resetUrl });
+    if (!composed) {
+      logger.error({ userId, templateKey: 'password_reset' }, '[ForgotPassword] no active email template — reset email not sent');
+      return;
+    }
+
+    await this.emailQueue.enqueue(
+      { type: 'notification', to: email, subject: composed.subject, body: composed.body },
+      { jobId: `pwreset-${userId}-${issuedAtMs}` },
+    );
   }
 }

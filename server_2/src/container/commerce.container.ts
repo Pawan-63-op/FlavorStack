@@ -1,15 +1,14 @@
 import type { Connection } from 'mongoose';
 import { ICartRepository } from '../domain/commerce/repositories/ICartRepository';
 import { IOrderRequestRepository } from '../domain/commerce/repositories/IOrderRequestRepository';
-import { ICommerceCatalogReadRepository } from '../domain/commerce/repositories/ICommerceCatalogReadRepository';
 import { ICartValidator } from '../domain/commerce/services/ICartValidator';
 import { ICatalogGateway } from '../domain/commerce/services/ICatalogGateway';
 import { ICatalogReadRepository } from '../domain/catalog/repositories/ICatalogReadRepository';
+import { ICatalogQueryRepository } from '../domain/catalog/repositories/ICatalogQueryRepository';
 import { IOpeningHoursService } from '../domain/catalog/services/IOpeningHoursService';
 import { CatalogGateway, ICatalogServiceabilityQuery } from '../infrastructure/services/CatalogGateway';
 import { MongoCartRepository } from '../infrastructure/repositories/CartRepository';
 import { MongoOrderRequestRepository } from '../infrastructure/repositories/OrderRequestRepository';
-import { CommerceCatalogReadRepository } from '../infrastructure/repositories/CommerceCatalogReadRepository';
 import { CartValidator } from '../infrastructure/services/CartValidator';
 import { PromotionService } from '../infrastructure/services/PromotionService';
 import { buildDefaultCommerceCoupons } from '../infrastructure/services/CommerceCouponCatalog';
@@ -18,8 +17,6 @@ import { PricingCalculator } from '../infrastructure/services/PricingCalculator'
 import { IPromotionService } from '../domain/commerce/services/IPromotionService';
 import { IPricingCalculator } from '../domain/commerce/services/IPricingCalculator';
 import { CheckoutContextAssembler } from '../application/commerce/services/CheckoutContextAssembler';
-import { MongoRestaurantRepository } from '../infrastructure/repositories/RestaurantRepository';
-import { MongoMenuItemRepository } from '../infrastructure/repositories/MenuItemRepository';
 import { MongoUnitOfWork } from '../infrastructure/database/MongoUnitOfWork';
 import { MongoOutboxStore } from '../infrastructure/database/MongoOutboxStore';
 import { TransactionContext } from '../infrastructure/database/TransactionContext';
@@ -40,8 +37,6 @@ import { ValidatePromotion } from '../application/commerce/use-cases/ValidatePro
 import { PreviewCheckout } from '../application/commerce/use-cases/PreviewCheckout';
 import { Checkout } from '../application/commerce/use-cases/Checkout';
 import { GetOrderRequest } from '../application/commerce/use-cases/GetOrderRequest';
-import { CommerceCatalogProjector } from '../application/commerce/handlers/CommerceCatalogProjector';
-import { registerCommerceCatalogProjector } from '../application/commerce/handlers/CommerceProjectionRegistry';
 import { CommerceTelemetry } from '../application/commerce/observability/CommerceTelemetry';
 import { PinoTelemetry } from '../infrastructure/observability/PinoTelemetry';
 
@@ -67,8 +62,6 @@ export interface CommerceContainer {
   unitOfWork: IUnitOfWork;
   outboxStore: IOutboxStore;
   txContext: TransactionContext;
-  catalogReadRepository: ICommerceCatalogReadRepository;
-  catalogProjector: CommerceCatalogProjector;
   cartValidator: ICartValidator;
   promotionService: IPromotionService;
   catalogGateway: ICatalogGateway;
@@ -82,6 +75,7 @@ export interface CommerceCatalogGatewayDeps {
   readRepository: ICatalogReadRepository;
   serviceabilityQuery: ICatalogServiceabilityQuery;
   openingHoursService: IOpeningHoursService;
+  queryRepository: ICatalogQueryRepository;
 }
 
 export function createCommerceContainer(
@@ -97,13 +91,6 @@ export function createCommerceContainer(
   const unitOfWork = new MongoUnitOfWork(connection, txContext);
   const outboxStore = new MongoOutboxStore(txContext);
 
-  const catalogTxContext = new TransactionContext();
-  const restaurantRepo = new MongoRestaurantRepository(catalogTxContext);
-  const menuItemRepo = new MongoMenuItemRepository(catalogTxContext);
-  const catalogReadRepository = new CommerceCatalogReadRepository();
-  const catalogProjector = new CommerceCatalogProjector(restaurantRepo, menuItemRepo, catalogReadRepository, telemetry);
-  registerCommerceCatalogProjector(eventBus, catalogProjector);
-
   const cartValidator = new CartValidator();
 
   const promotionService = new PromotionService(buildDefaultCommerceCoupons());
@@ -111,13 +98,13 @@ export function createCommerceContainer(
   const catalogGateway = new CatalogGateway(
     catalogGatewayDeps.readRepository,
     catalogGatewayDeps.serviceabilityQuery,
-    catalogGatewayDeps.openingHoursService
+    catalogGatewayDeps.openingHoursService,
+    catalogGatewayDeps.queryRepository
   );
 
   const pricingCalculator = new PricingCalculator();
   const checkoutAssembler = new CheckoutContextAssembler(
     catalogGateway,
-    catalogReadRepository,
     promotionService,
     buildDefaultCommercePricingPolicy()
   );
@@ -128,8 +115,6 @@ export function createCommerceContainer(
     unitOfWork,
     outboxStore,
     txContext,
-    catalogReadRepository,
-    catalogProjector,
     cartValidator,
     promotionService,
     catalogGateway,
@@ -138,7 +123,7 @@ export function createCommerceContainer(
     telemetry,
     commands: {
       createCart: new CreateCart(cartRepository, unitOfWork),
-      getCart: new GetCart(cartRepository, catalogReadRepository, cartValidator, telemetry),
+      getCart: new GetCart(cartRepository, catalogGateway, cartValidator, telemetry),
       getCartSummary: new GetCartSummary(cartRepository),
       addToCart: new AddToCart(cartRepository, unitOfWork, eventBus, telemetry),
       removeFromCart: new RemoveFromCart(cartRepository, unitOfWork),
@@ -155,7 +140,6 @@ export function createCommerceContainer(
         pricingCalculator,
         unitOfWork,
         outboxStore,
-        eventBus,
         telemetry
       ),
       getOrderRequest: new GetOrderRequest(orderRequestRepository),

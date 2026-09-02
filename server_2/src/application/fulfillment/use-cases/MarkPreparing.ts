@@ -4,7 +4,6 @@ import { ForbiddenError } from '../../../domain/shared/errors/ForbiddenError';
 import { IFulfillmentRepository } from '../../../domain/fulfillment/repositories/IFulfillmentRepository';
 import { IRestaurantDirectory } from '../ports/IRestaurantDirectory';
 import { IUnitOfWork } from '../../shared/ports/IUnitOfWork';
-import { IOutboxStore } from '../../shared/outbox/IOutboxStore';
 import { IEventBus } from '../../shared/events/IEventBus';
 import { MarkPreparingDto } from '../dtos/MarkPreparingDto';
 import { FulfillmentResponse, toFulfillmentResponse } from '../responses/FulfillmentResponse';
@@ -14,7 +13,6 @@ export class MarkPreparing {
     private readonly fulfillmentRepo: IFulfillmentRepository,
     private readonly restaurantDirectory: IRestaurantDirectory,
     private readonly unitOfWork: IUnitOfWork,
-    private readonly outboxStore: IOutboxStore,
     private readonly eventBus: IEventBus
   ) {}
 
@@ -32,9 +30,8 @@ export class MarkPreparing {
 
     const events = fulfillment.pullDomainEvents();
 
-    await this.unitOfWork.runInTransaction(async (ctx) => {
+    await this.unitOfWork.runInTransaction(async () => {
       await this.fulfillmentRepo.update(fulfillment);
-      if (events.length > 0) await this.outboxStore.append(events, ctx);
     });
 
     await this.eventBus.publishAll(events);

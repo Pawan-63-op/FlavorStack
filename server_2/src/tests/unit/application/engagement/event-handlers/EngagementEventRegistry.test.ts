@@ -19,8 +19,6 @@ function handlerStubs(): EngagementEventHandlers {
   const make = () => ({ handle: jest.fn().mockResolvedValue(undefined) });
   return {
     onUserRegistered: make(),
-    onPasswordChanged: make(),
-    onPasswordResetRequested: make(),
     onFulfillmentCreated: make(),
     onReadyForPickup: make(),
     onRiderAssigned: make(),
@@ -32,8 +30,6 @@ function handlerStubs(): EngagementEventHandlers {
 
 const EXPECTED_EVENTS = [
   'UserRegistered',
-  'PasswordChanged',
-  'PasswordResetRequested',
   'FulfillmentCreated',
   'ReadyForPickup',
   'RiderAssigned',
@@ -43,7 +39,7 @@ const EXPECTED_EVENTS = [
 ];
 
 describe('registerEngagementEventHandlers', () => {
-  it('subscribes exactly the nine consumed cross-context events', () => {
+  it('subscribes exactly the seven consumed cross-context events', () => {
     const { bus, subs } = fakeBus();
 
     registerEngagementEventHandlers(bus, handlerStubs());

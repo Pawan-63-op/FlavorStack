@@ -1,4 +1,4 @@
-import { RiderDeliveryHistoryView } from '../../../domain/fulfillment/repositories/IFulfillmentProjectionRepository';
+import { RiderDeliveryHistoryView } from '../../../domain/fulfillment/repositories/IFulfillmentQueryRepository';
 
 /**
  * Rider payout model (demo/COD scope): a flat base per completed delivery plus a

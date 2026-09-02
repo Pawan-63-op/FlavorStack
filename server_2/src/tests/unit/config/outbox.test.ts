@@ -12,12 +12,14 @@ describe('getOutboxConfig', () => {
     delete process.env.OUTBOX_BATCH_SIZE;
     delete process.env.OUTBOX_MAX_RETRIES;
     delete process.env.OUTBOX_BACKOFF_BASE_MS;
+    delete process.env.OUTBOX_LEASE_MS;
 
     expect(getOutboxConfig()).toEqual({
       pollIntervalMs: 2000,
       batchSize: 100,
       maxRetries: 5,
       backoffBaseMs: 1000,
+      leaseMs: 60000,
     });
   });
 
@@ -26,12 +28,14 @@ describe('getOutboxConfig', () => {
     process.env.OUTBOX_BATCH_SIZE = '50';
     process.env.OUTBOX_MAX_RETRIES = '3';
     process.env.OUTBOX_BACKOFF_BASE_MS = '500';
+    process.env.OUTBOX_LEASE_MS = '15000';
 
     expect(getOutboxConfig()).toEqual({
       pollIntervalMs: 5000,
       batchSize: 50,
       maxRetries: 3,
       backoffBaseMs: 500,
+      leaseMs: 15000,
     });
   });
 });

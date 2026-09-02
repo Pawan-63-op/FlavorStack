@@ -1,6 +1,6 @@
 import { SetItemVariants } from '../../../../application/catalog/use-cases/SetItemVariants';
 import { InMemoryRestaurantRepository, InMemoryMenuItemRepository } from '../../../mocks/catalog.mocks';
-import { InMemoryUnitOfWork, InMemoryOutboxStore } from '../../../mocks/identity.mocks';
+import { InMemoryUnitOfWork } from '../../../mocks/identity.mocks';
 import { createEventBusSpy, EventBusSpy } from '../../../mocks/shared.mocks';
 import { buildRestaurant, buildMenuItem } from './helpers';
 import { VARIANT_SELECTION_TYPE } from '../../../../domain/catalog/enums/variant-selection-type.enum';
@@ -12,7 +12,6 @@ describe('SetItemVariants use-case', () => {
   let restaurantRepo: InMemoryRestaurantRepository;
   let menuItemRepo: InMemoryMenuItemRepository;
   let unitOfWork: InMemoryUnitOfWork;
-  let outboxStore: InMemoryOutboxStore;
   let eventBus: EventBusSpy;
   let useCase: SetItemVariants;
 
@@ -20,9 +19,8 @@ describe('SetItemVariants use-case', () => {
     restaurantRepo = new InMemoryRestaurantRepository();
     menuItemRepo = new InMemoryMenuItemRepository();
     unitOfWork = new InMemoryUnitOfWork();
-    outboxStore = new InMemoryOutboxStore();
     eventBus = createEventBusSpy();
-    useCase = new SetItemVariants(restaurantRepo, menuItemRepo, unitOfWork, outboxStore, eventBus);
+    useCase = new SetItemVariants(restaurantRepo, menuItemRepo, unitOfWork, eventBus);
   });
 
   async function seed() {
@@ -60,8 +58,8 @@ describe('SetItemVariants use-case', () => {
     expect(result.getValue().variantGroups[0].options).toHaveLength(2);
     expect(result.getValue().variantGroups[0].options[1].priceDelta.amount).toBe(5000);
 
-    expect(outboxStore.appended).toHaveLength(1);
-    expect(outboxStore.appended[0].eventName).toBe('MenuItemUpdated');
+    expect(eventBus.publishedEvents).toHaveLength(1);
+    expect(eventBus.publishedEvents[0].eventName).toBe('MenuItemUpdated');
     expect(eventBus.publishedEvents).toHaveLength(1);
   });
 
@@ -100,7 +98,7 @@ describe('SetItemVariants use-case', () => {
 
     expect(result.isFailure).toBe(true);
     expect(result.getError()).toBeInstanceOf(ValidationError);
-    expect(outboxStore.appended).toHaveLength(0);
+    expect(eventBus.publishedEvents).toHaveLength(0);
     expect(eventBus.publishedEvents).toHaveLength(0);
   });
 
@@ -124,7 +122,7 @@ describe('SetItemVariants use-case', () => {
 
     expect(result.isFailure).toBe(true);
     expect(result.getError()).toBeInstanceOf(ValidationError);
-    expect(outboxStore.appended).toHaveLength(0);
+    expect(eventBus.publishedEvents).toHaveLength(0);
     expect(eventBus.publishedEvents).toHaveLength(0);
   });
 });

@@ -1,7 +1,13 @@
 import { Schema, model } from 'mongoose';
 
+/**
+ * `push` is the pre-Phase-5 field name, kept optional so a document written before the
+ * `channels.*.push → channels.*.inbox` `$rename` still reads (see NotificationPreferenceMapper).
+ * Writes always emit `inbox`.
+ */
 export interface ChannelToggleDocument {
-  push: boolean;
+  inbox?: boolean;
+  push?: boolean;
   email: boolean;
 }
 

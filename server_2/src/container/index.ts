@@ -1,13 +1,13 @@
 import type { Connection } from 'mongoose';
 
-import { assertRequiredConfig, getOutboxConfig } from '../config';
+import { assertRequiredConfig, assertWorkerConfig, getOutboxConfig } from '../config';
 import { connectDB, disconnectDB } from '../infrastructure/database/connection';
 import { RedisClient } from '../infrastructure/redis/client';
 import { CacheStore } from '../infrastructure/redis/CacheStore';
-import { CatalogCache } from '../infrastructure/redis/catalog/CatalogCache';
 import { FulfillmentCache } from '../infrastructure/redis/fulfillment/FulfillmentCache';
 import { getFulfillmentConfig } from '../config/fulfillment';
 import { OutboxProcessor } from '../infrastructure/outbox/OutboxProcessor';
+import { OutboxDispatcher } from '../application/shared/outbox/OutboxDispatcher';
 
 import { createIdentityContainer, IdentityContainer } from './identity.container';
 import { createAuthContainer, AuthContainer } from './auth.container';
@@ -26,8 +26,8 @@ import { logger } from '../infrastructure/observability/logger';
 import { TransactionContext } from '../infrastructure/database/TransactionContext';
 import { IEmailQueue } from '../application/shared/queues/IEmailQueue';
 import { EmailQueue } from '../infrastructure/workers/email/EmailQueue';
-import { INotificationQueue } from '../application/shared/queues/INotificationQueue';
-import { NotifyQueue } from '../infrastructure/workers/notification/NotifyQueue';
+import { TemplateEmailComposer } from '../infrastructure/services/TemplateEmailComposer';
+import { getEmailConfig } from '../config/email';
 import { IFulfillmentJobScheduler } from '../application/fulfillment/jobs/FulfillmentJob';
 import { FulfillmentJobQueue } from '../infrastructure/workers/fulfillment/FulfillmentJobQueue';
 import { getRealtimeConfig } from '../config/realtime';
@@ -110,36 +110,65 @@ export interface BootstrapOptions {
   startOutboxProcessor?: boolean;
 }
 
-export interface AppContainer {
+/**
+ * Which process is being built. The profile gates the api-only tail of `bootstrap()` —
+ * `runSeeds`, the auth/catalog/commerce slices, the email queue and the 31 identity use
+ * cases — while every process shares the same core wiring below.
+ */
+export type BootstrapProfile = 'api' | 'relay' | 'jobs';
+
+/**
+ * Everything a background process needs: Mongo, Redis, the event bus, and the two contexts
+ * that react to `FulfillmentCreated` on the worker's own bus.
+ *
+ * Since Phase 7.3 `CreateFulfillment` runs *inside the relay*, so its post-commit
+ * `publishAll([FulfillmentCreated])` fans out on the relay's bus to the fulfillment projector
+ * (writes `customer_tracking_views`) and the engagement `OnFulfillmentCreated` notifier (writes
+ * the `order_confirmed` INBOX row). Both are wired through **optional** constructor parameters
+ * of `createFulfillmentContainer` / `createEngagementContainer`, so dropping one is a silent
+ * runtime regression rather than a compile error — `worker-event-subscriptions.test.ts` guards it.
+ */
+export interface WorkerContainer {
   connection: Connection;
   redisClient: RedisClient;
+  /** outboxRepository + driverRepository — the only identity pieces a worker touches. */
   identity: IdentityContainer;
-  auth: AuthContainer;
   event: EventContainer;
-  catalogRead: CatalogReadContainer;
-  catalogWrite: CatalogWriteContainer;
-  commerce: CommerceContainer;
   fulfillment: FulfillmentContainer;
   engagement: EngagementContainer;
   outboxProcessor: OutboxProcessor;
-  emailQueue: IEmailQueue;
-  notificationQueue: INotificationQueue;
   fulfillmentJobScheduler: IFulfillmentJobScheduler;
   /** Phase 7 — late-bound realtime broadcaster; `server.ts` attaches the Socket.IO namespace. */
   trackingBroadcaster: SocketTrackingBroadcaster;
+}
+
+export interface AppContainer extends WorkerContainer {
+  auth: AuthContainer;
+  catalogRead: CatalogReadContainer;
+  catalogWrite: CatalogWriteContainer;
+  commerce: CommerceContainer;
+  emailQueue: IEmailQueue;
   useCases: IdentityUseCases;
 }
 
 /**
- * Build and start the full Identity application graph. Resolves to a fully-populated
- * `AppContainer` (every one of the 20 `useCases.*` is a constructed instance) given
- * valid env vars and reachable Mongo + Redis. If a step after the DB connects throws,
- * the DB connection is closed before the error is re-thrown so nothing is left dangling.
+ * The shared prefix of every process's composition root: Mongo, Redis, the event bus, the
+ * fulfillment + engagement contexts and the outbox relay pair (constructed, not started).
+ *
+ * Deliberately **identical for all three profiles** — every optional parameter passed to
+ * `createFulfillmentContainer` / `createEngagementContainer` here is what keeps the projector
+ * and the inbox notifier subscribed inside the relay, where `CreateFulfillment` now runs.
+ * If a step after the DB connects throws, the DB connection is closed before the error is
+ * re-thrown so nothing is left dangling.
  */
-export async function bootstrap(opts: BootstrapOptions = {}): Promise<AppContainer> {
-  const startOutboxProcessor = opts.startOutboxProcessor ?? true;
-
-  assertRequiredConfig();
+async function buildWorkerCore(profile: BootstrapProfile): Promise<WorkerContainer> {
+  if (profile === 'api') {
+    assertRequiredConfig();
+  } else {
+    // Workers never mint or verify tokens, so the JWT key pair `assertRequiredConfig()`
+    // demands would be an over-assert; they need storage only.
+    assertWorkerConfig();
+  }
 
   const connection = await connectDB();
 
@@ -149,29 +178,12 @@ export async function bootstrap(opts: BootstrapOptions = {}): Promise<AppContain
 
     const identity = createIdentityContainer(connection);
 
-    const auth = createAuthContainer(redisClient);
-
     const event = createEventContainer();
-
-    const catalogCache = new CatalogCache(new CacheStore(redisClient));
-    const catalogRead = createCatalogReadContainer(
-      event.eventBus,
-      new TransactionContext(),
-      catalogCache,
-    );
-    const catalogWrite = createCatalogWriteContainer(connection, event.eventBus);
-
-    const commerce = createCommerceContainer(connection, event.eventBus, {
-      readRepository: catalogRead.readRepository,
-      serviceabilityQuery: catalogRead.queries.checkServiceability,
-      openingHoursService: catalogRead.openingHoursService,
-    });
 
     const fulfillmentJobScheduler = new FulfillmentJobQueue();
 
     const { trackingLatestTtlSeconds } = getRealtimeConfig();
     const trackingBroadcaster = new SocketTrackingBroadcaster();
-    const notificationQueue = new NotifyQueue();
     const { trackingCacheTtlSeconds, dashboardCacheTtlSeconds } = getFulfillmentConfig();
     const fulfillmentCache = new FulfillmentCache(new CacheStore(redisClient), {
       trackingSeconds: trackingCacheTtlSeconds,
@@ -189,13 +201,83 @@ export async function bootstrap(opts: BootstrapOptions = {}): Promise<AppContain
         deliveryTrackingStore: new MongoDeliveryTrackingStore(),
         broadcaster: trackingBroadcaster,
       },
-      notificationQueue,
       fulfillmentCache,
       restaurantDirectory,
       availableRidersProvider
     );
 
-    const engagement = createEngagementContainer(connection, event.eventBus, notificationQueue);
+    // Built after Fulfillment so Engagement can read the fulfillment aggregate through a
+    // gateway over its query repository, rather than keeping a `review_eligibility` copy.
+    const engagement = createEngagementContainer(
+      connection,
+      event.eventBus,
+      fulfillment.queryRepository
+    );
+
+    // The relay delivers to handlers directly instead of republishing on the
+    // in-process bus — every use case already publishes its own events post-commit,
+    // so a republish was pure duplication. Unrouted names settle as no-ops.
+    const outboxDispatcher = new OutboxDispatcher({
+      OrderRequested: (e) => fulfillment.onOrderRequested.handle(e),
+    });
+    const outboxProcessor = new OutboxProcessor(
+      identity.outboxRepository,
+      outboxDispatcher,
+      getOutboxConfig(),
+    );
+
+    return {
+      connection,
+      redisClient,
+      identity,
+      event,
+      fulfillment,
+      engagement,
+      outboxProcessor,
+      fulfillmentJobScheduler,
+      trackingBroadcaster,
+    };
+  } catch (err) {
+    await disconnectDB();
+    throw err;
+  }
+}
+
+/**
+ * Build the composition root for a background process: `buildWorkerCore` and nothing else.
+ *
+ * Explicitly **no `runSeeds`**. The api process seeds on every boot and is always present, so
+ * a worker seeding as well only ever races it — the `ConflictError`-downgrade in `bootstrap()`
+ * below exists solely because three processes used to contend for `notification_templates`.
+ */
+export async function bootstrapWorker(profile: 'relay' | 'jobs'): Promise<WorkerContainer> {
+  return buildWorkerCore(profile);
+}
+
+/**
+ * Build and start the full Identity application graph. Resolves to a fully-populated
+ * `AppContainer` (every one of the 20 `useCases.*` is a constructed instance) given
+ * valid env vars and reachable Mongo + Redis. If a step after the DB connects throws,
+ * the DB connection is closed before the error is re-thrown so nothing is left dangling.
+ */
+export async function bootstrap(opts: BootstrapOptions = {}): Promise<AppContainer> {
+  const startOutboxProcessor = opts.startOutboxProcessor ?? true;
+
+  const core = await buildWorkerCore('api');
+  const { connection, redisClient, identity, event, engagement, outboxProcessor } = core;
+
+  try {
+    const auth = createAuthContainer(redisClient);
+
+    const catalogRead = createCatalogReadContainer(event.eventBus, new TransactionContext());
+    const catalogWrite = createCatalogWriteContainer(connection, event.eventBus);
+
+    const commerce = createCommerceContainer(connection, event.eventBus, {
+      readRepository: catalogRead.readRepository,
+      serviceabilityQuery: catalogRead.queries.checkServiceability,
+      openingHoursService: catalogRead.openingHoursService,
+      queryRepository: catalogRead.queryRepository,
+    });
 
     try {
       const { notificationTemplatesCreated } = await runSeeds({
@@ -214,13 +296,15 @@ export async function bootstrap(opts: BootstrapOptions = {}): Promise<AppContain
     }
 
     const emailQueue = new EmailQueue();
-    wireIdentityEventHandlers(event.eventBus, emailQueue);
+    // Identity renders its own copy from the Engagement-owned template store through a port,
+    // so the email worker stays a dumb transport (Phase 5 Batch 3).
+    const emailComposer = new TemplateEmailComposer(engagement.templateRepository);
+    wireIdentityEventHandlers(event.eventBus, {
+      emailQueue,
+      emailComposer,
+      userRepository: identity.userRepository,
+    });
 
-    const outboxProcessor = new OutboxProcessor(
-      identity.outboxRepository,
-      event.eventBus,
-      getOutboxConfig(),
-    );
     if (startOutboxProcessor) {
       outboxProcessor.start();
     }
@@ -230,14 +314,12 @@ export async function bootstrap(opts: BootstrapOptions = {}): Promise<AppContain
       identity.customerRepository,
       auth.passwordHasher,
       identity.unitOfWork,
-      identity.outboxStore,
       event.eventBus,
     );
     const registerDriver = new RegisterDriver(
       identity.userRepository,
       auth.passwordHasher,
       identity.unitOfWork,
-      identity.outboxStore,
       event.eventBus,
     );
 
@@ -263,7 +345,6 @@ export async function bootstrap(opts: BootstrapOptions = {}): Promise<AppContain
         identity.userRepository,
         auth.sessionStore,
         identity.unitOfWork,
-        identity.outboxStore,
         event.eventBus,
       ),
       getActiveSessions: new GetActiveSessions(auth.sessionStore),
@@ -271,7 +352,6 @@ export async function bootstrap(opts: BootstrapOptions = {}): Promise<AppContain
         identity.userRepository,
         auth.otpStore,
         identity.unitOfWork,
-        identity.outboxStore,
         event.eventBus,
       ),
       forgotPassword: new ForgotPassword(
@@ -279,8 +359,10 @@ export async function bootstrap(opts: BootstrapOptions = {}): Promise<AppContain
         auth.otpGenerator,
         auth.otpStore,
         identity.unitOfWork,
-        identity.outboxStore,
         event.eventBus,
+        emailQueue,
+        emailComposer,
+        getEmailConfig().appBaseUrl,
       ),
       resetPassword: new ResetPassword(
         identity.userRepository,
@@ -288,7 +370,6 @@ export async function bootstrap(opts: BootstrapOptions = {}): Promise<AppContain
         auth.passwordHasher,
         auth.sessionStore,
         identity.unitOfWork,
-        identity.outboxStore,
         event.eventBus,
       ),
       changePassword: new ChangePassword(
@@ -296,7 +377,6 @@ export async function bootstrap(opts: BootstrapOptions = {}): Promise<AppContain
         auth.passwordHasher,
         auth.sessionStore,
         identity.unitOfWork,
-        identity.outboxStore,
         event.eventBus,
       ),
       sendEmailOtp: new SendEmailOtp(
@@ -316,26 +396,22 @@ export async function bootstrap(opts: BootstrapOptions = {}): Promise<AppContain
       assignRole: new AssignRole(
         identity.userRepository,
         identity.unitOfWork,
-        identity.outboxStore,
         event.eventBus,
       ),
       grantPermission: new GrantPermission(
         identity.userRepository,
         identity.unitOfWork,
-        identity.outboxStore,
         event.eventBus,
       ),
       banUser: new BanUser(
         identity.userRepository,
         auth.sessionStore,
         identity.unitOfWork,
-        identity.outboxStore,
         event.eventBus,
       ),
       unbanUser: new UnbanUser(
         identity.userRepository,
         identity.unitOfWork,
-        identity.outboxStore,
         event.eventBus,
       ),
       getProfile: new GetProfile(identity.userRepository),
@@ -349,7 +425,6 @@ export async function bootstrap(opts: BootstrapOptions = {}): Promise<AppContain
       verifyDriver: new VerifyDriver(
         identity.userRepository,
         identity.unitOfWork,
-        identity.outboxStore,
         event.eventBus,
       ),
       listDrivers: new ListDrivers(identity.driverRepository),
@@ -357,21 +432,12 @@ export async function bootstrap(opts: BootstrapOptions = {}): Promise<AppContain
     };
 
     return {
-      connection,
-      redisClient,
-      identity,
+      ...core,
       auth,
-      event,
       catalogRead,
       catalogWrite,
       commerce,
-      fulfillment,
-      engagement,
-      outboxProcessor,
       emailQueue,
-      notificationQueue,
-      fulfillmentJobScheduler,
-      trackingBroadcaster,
       useCases,
     };
   } catch (err) {
@@ -382,12 +448,14 @@ export async function bootstrap(opts: BootstrapOptions = {}): Promise<AppContain
 
 /**
  * Graceful teardown in reverse order of bootstrap: stop the outbox poller (drains the
- * in-flight batch), close the email + notification queues, close Redis, then disconnect Mongo.
+ * in-flight batch), close the email + fulfillment queues, close Redis, then disconnect Mongo.
+ * The email queue is api-only, so it is closed only when the container actually owns one.
  */
-export async function shutdown(app: AppContainer): Promise<void> {
+export async function shutdown(app: WorkerContainer): Promise<void> {
   await app.outboxProcessor.stop();
-  await app.emailQueue.close();
-  await app.notificationQueue.close();
+  if ('emailQueue' in app) {
+    await (app as AppContainer).emailQueue.close();
+  }
   await app.fulfillmentJobScheduler.close();
   await app.redisClient.shutdown();
   await disconnectDB();

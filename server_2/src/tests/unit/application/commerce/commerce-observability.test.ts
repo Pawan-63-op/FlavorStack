@@ -22,14 +22,12 @@ import { ICartRepository } from '../../../../domain/commerce/repositories/ICartR
 import { IOrderRequestRepository } from '../../../../domain/commerce/repositories/IOrderRequestRepository';
 import { ICatalogGateway } from '../../../../domain/commerce/services/ICatalogGateway';
 import { ICartValidator } from '../../../../domain/commerce/services/ICartValidator';
-import { ICommerceCatalogReadRepository } from '../../../../domain/commerce/repositories/ICommerceCatalogReadRepository';
 import { IUnitOfWork } from '../../../../application/shared/ports/IUnitOfWork';
 import { IOutboxStore } from '../../../../application/shared/outbox/IOutboxStore';
-import { IEventBus } from '../../../../application/shared/events/IEventBus';
 import { ValidationReport, VALIDATION_ISSUE_CODE, VALIDATION_SEVERITY } from '../../../../domain/commerce/types/ValidationReport';
 import { COMMERCE_RESTAURANT_STATUS } from '../../../../domain/commerce/enums/restaurant-status.enum';
 import { PAYMENT_METHOD } from '../../../../domain/commerce/enums/payment-method.enum';
-import { CommerceCatalogMenuItemView } from '../../../../domain/commerce/types/CommerceCatalogView';
+import { CartMenuItemView } from '../../../../domain/commerce/types/CatalogGatewayRead';
 import { CheckoutRequestDto } from '../../../../application/commerce/dtos/CheckoutRequestDto';
 import { IdempotencyKey } from '../../../../domain/commerce/value-objects/IdempotencyKey';
 
@@ -64,13 +62,14 @@ describe('GetCart observability', () => {
   function fakeValidator(report: ValidationReport): ICartValidator {
     return { validate: () => Result.ok(report) };
   }
-  const noProjection: ICommerceCatalogReadRepository = {
-    findRestaurantView: async () => null,
-    findMenuItemViews: async () => [],
-    upsertRestaurantView: async () => undefined,
-    removeRestaurantView: async () => undefined,
-    markEventProcessed: async () => true,
-  };
+  const noCatalog = {
+    getRestaurantForCart: async () => Result.ok(null),
+    getItemsForCart: async () => Result.ok([]),
+    getRestaurantForCheckout: async () => Result.fail('unused'),
+    getItemsSnapshot: async () => Result.ok([]),
+    checkServiceability: async () => Result.fail('unused'),
+    isRestaurantOpen: async () => Result.ok(false),
+  } as unknown as ICatalogGateway;
 
   function cartWithItem(): ICartRepository {
     const cart = Cart.create('c1').getValue();
@@ -93,7 +92,7 @@ describe('GetCart observability', () => {
         { code: VALIDATION_ISSUE_CODE.MIN_ORDER_NOT_MET, severity: VALIDATION_SEVERITY.WARNING, message: 'y' },
       ],
     };
-    const useCase = new GetCart(cartWithItem(), noProjection, fakeValidator(report), new CommerceTelemetry(rec));
+    const useCase = new GetCart(cartWithItem(), noCatalog, fakeValidator(report), new CommerceTelemetry(rec));
 
     const result = await useCase.execute({ customerId: 'c1' });
 
@@ -116,10 +115,14 @@ describe('Checkout observability', () => {
     getItemsSnapshot: async () => Result.ok([{ menuItemId: 'menu-1', restaurantId: 'rest-1', name: 'Margherita', categoryId: 'cat-1', basePrice: money(1000), isAvailable: true }]),
     checkServiceability: async () => Result.ok({ serviceable: true, distanceMeters: 3000, deliveryFee: money(4000), minOrder: money(2000) }),
     isRestaurantOpen: async () => Result.ok(true),
+    // Variant option groups for checkout option resolution.
+    getRestaurantForCart: async () => Result.ok(null),
+    getItemsForCart: async () => Result.ok([variantView]),
   };
 
-  const projectionView: CommerceCatalogMenuItemView = {
+  const variantView: CartMenuItemView = {
     menuItemId: 'menu-1',
+    restaurantId: 'rest-1',
     categoryId: 'cat-1',
     name: 'Margherita',
     basePriceAmount: 1000,
@@ -133,14 +136,6 @@ describe('Checkout observability', () => {
       },
     ],
   };
-  const projection: ICommerceCatalogReadRepository = {
-    findRestaurantView: async () => null,
-    findMenuItemViews: async () => [projectionView],
-    upsertRestaurantView: async () => undefined,
-    removeRestaurantView: async () => undefined,
-    markEventProcessed: async () => true,
-  };
-
   function orderRepo(existing: OrderRequest | null): IOrderRequestRepository {
     return {
       findById: async () => null,
@@ -153,10 +148,9 @@ describe('Checkout observability', () => {
   }
   const uow: IUnitOfWork = { runInTransaction: async (work) => work({ session: 'fake' } as never) };
   const outbox: IOutboxStore = { append: async (_e: DomainEvent[]) => undefined };
-  const bus: IEventBus = { subscribe: () => undefined, publish: async () => undefined, publishAll: async () => undefined };
 
   function build(rec: RecordingTelemetry, opts: { cart?: Cart | null; existing?: OrderRequest | null } = {}): Checkout {
-    const assembler = new CheckoutContextAssembler(fakeGateway, projection, new PromotionService(buildDefaultCommerceCoupons()), buildDefaultCommercePricingPolicy());
+    const assembler = new CheckoutContextAssembler(fakeGateway, new PromotionService(buildDefaultCommerceCoupons()), buildDefaultCommercePricingPolicy());
     return new Checkout(
       cartRepo(opts.cart === undefined ? buildCart() : opts.cart),
       orderRepo(opts.existing ?? null),
@@ -164,7 +158,6 @@ describe('Checkout observability', () => {
       new PricingCalculator(),
       uow,
       outbox,
-      bus,
       new CommerceTelemetry(rec)
     );
   }

@@ -3,7 +3,6 @@ import { VerifyEmailDto } from '../../../../application/identity/dtos/VerifyEmai
 import { emailVerificationOtpKey } from '../../../../application/identity/otp-keys';
 import {
   InMemoryUserRepository,
-  InMemoryOutboxStore,
   InMemoryUnitOfWork,
   InMemoryOtpStore,
 } from '../../../mocks/identity.mocks';
@@ -31,7 +30,6 @@ describe('VerifyEmail use-case', () => {
   let userRepo: InMemoryUserRepository;
   let otpStore: InMemoryOtpStore;
   let unitOfWork: InMemoryUnitOfWork;
-  let outboxStore: InMemoryOutboxStore;
   let eventBus: EventBusSpy;
   let useCase: VerifyEmail;
 
@@ -39,9 +37,8 @@ describe('VerifyEmail use-case', () => {
     userRepo = new InMemoryUserRepository();
     otpStore = new InMemoryOtpStore();
     unitOfWork = new InMemoryUnitOfWork();
-    outboxStore = new InMemoryOutboxStore();
     eventBus = createEventBusSpy();
-    useCase = new VerifyEmail(userRepo, otpStore, unitOfWork, outboxStore, eventBus);
+    useCase = new VerifyEmail(userRepo, otpStore, unitOfWork, eventBus);
   });
 
   describe('success', () => {
@@ -62,19 +59,16 @@ describe('VerifyEmail use-case', () => {
       expect(updated!.isEmailVerified).toBe(true);
     });
 
-    it('appends UserVerified to the outbox and publishes it post-commit', async () => {
+    it('raises no domain event, so nothing is published', async () => {
       const customer = makeCustomer();
       await userRepo.save(customer);
       await otpStore.issue(emailVerificationOtpKey(customer._id), VALID_CODE, 900);
 
       await useCase.execute({ email: customer.email, code: VALID_CODE });
 
-      expect(outboxStore.appended).toHaveLength(1);
-      expect(outboxStore.appended[0].eventName).toBe('UserVerified');
-      expect(outboxStore.appended[0].aggregateId).toBe(customer._id);
-
-      expect(eventBus.publishedEvents).toHaveLength(1);
-      expect(eventBus.publishedEvents[0].eventName).toBe('UserVerified');
+      // Phase 6: this state change raises no domain event — it had no subscriber.
+      expect(eventBus.publishedEvents).toHaveLength(0);
+      expect(eventBus.publishedEvents).toHaveLength(0);
     });
 
     it('consumes the OTP so it cannot be reused', async () => {
@@ -111,7 +105,7 @@ describe('VerifyEmail use-case', () => {
       expect(result.isFailure).toBe(true);
       const updated = await userRepo.findById(customer._id);
       expect(updated!.isEmailVerified).toBe(false);
-      expect(outboxStore.appended).toHaveLength(0);
+      expect(eventBus.publishedEvents).toHaveLength(0);
       expect(eventBus.publishedEvents).toHaveLength(0);
     });
 

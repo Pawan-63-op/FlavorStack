@@ -1,23 +1,9 @@
-export type EmailJob =
-  | { type: 'welcome'; to: string; name: string }
-  | { type: 'password-reset'; to: string }
-  | { type: 'verification'; to: string; token: string }
-  | { type: 'notification'; to: string; subject: string; body: string };
+/**
+ * Email is a dumb transport as of Phase 5 Batch 3: copy is rendered from `notification_templates`
+ * in the API process (`IEmailComposer`) and the worker only ships `subject` + `body`.
+ */
+export type EmailJob = { type: 'notification'; to: string; subject: string; body: string };
 
 export interface EnqueueOptions {
   jobId?: string;
 }
-
-export type NotificationJob =
-  | {
-      type: 'push';
-      token: string;
-      title: string;
-      body: string;
-      data?: Record<string, string>;
-    }
-  | {
-      type: 'engagement';
-      notificationId: string;
-      channel: 'PUSH' | 'EMAIL';
-    };

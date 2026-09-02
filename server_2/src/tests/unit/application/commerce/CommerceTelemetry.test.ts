@@ -53,11 +53,6 @@ describe('CommerceTelemetry', () => {
     expect(log?.fields?.orderRequestId).toBe('o1');
   });
 
-  it('recordProjectionLag observes the projection-lag histogram', () => {
-    telemetry.recordProjectionLag(250);
-    expect(rec.observed(COMMERCE_METRICS.projectionLagMs).map((o) => o.value)).toEqual([250]);
-  });
-
   it('startCheckoutSpan opens the documented checkout span', () => {
     telemetry.startCheckoutSpan({ customerId: 'c1' });
     expect(rec.spans[0].name).toBe(COMMERCE_CHECKOUT_SPAN);

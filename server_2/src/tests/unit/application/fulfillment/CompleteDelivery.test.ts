@@ -2,7 +2,7 @@ import { CompleteDelivery } from '../../../../application/fulfillment/use-cases/
 import { NotFoundError } from '../../../../domain/shared/errors/NotFoundError';
 import { FULFILLMENT_STATUS } from '../../../../domain/fulfillment/enums/fulfillment-status.enum';
 import { Fulfillment } from '../../../../domain/fulfillment/entities/Fulfillment';
-import { buildReadyFulfillment, makeRepo, makeUnitOfWork, makeOutbox, makeEventBus } from './assignment-uc-fixtures';
+import { buildReadyFulfillment, makeRepo, makeUnitOfWork, makeEventBus } from './assignment-uc-fixtures';
 
 function outForDelivery(riderId = 'rider-1'): Fulfillment {
   const f = buildReadyFulfillment();
@@ -18,16 +18,15 @@ describe('CompleteDelivery', () => {
   it('completes delivery by the assigned rider, appends DeliveryCompleted, publishes', async () => {
     const f = outForDelivery('rider-1');
     const repo = makeRepo({ findById: jest.fn().mockResolvedValue(f) });
-    const outbox = makeOutbox();
     const bus = makeEventBus();
-    const uc = new CompleteDelivery(repo, makeUnitOfWork(), outbox, bus);
+    const uc = new CompleteDelivery(repo, makeUnitOfWork(), bus);
 
     const result = await uc.execute({ fulfillmentId: f.id.toString(), riderId: 'rider-1' });
 
     expect(result.isSuccess).toBe(true);
     expect(result.getValue().status).toBe(FULFILLMENT_STATUS.DELIVERED);
     expect(repo.update).toHaveBeenCalledTimes(1);
-    const events = outbox.append.mock.calls[0][0];
+    const events = bus.publishAll.mock.calls[0][0];
     expect(events).toHaveLength(1);
     expect(events[0].eventName).toBe('DeliveryCompleted');
     expect(bus.publishAll).toHaveBeenCalledTimes(1);
@@ -40,8 +39,8 @@ describe('CompleteDelivery', () => {
     f.confirmPickup('rider-1');
     f.pullDomainEvents();
     const repo = makeRepo({ findById: jest.fn().mockResolvedValue(f) });
-    const outbox = makeOutbox();
-    const uc = new CompleteDelivery(repo, makeUnitOfWork(), outbox, makeEventBus());
+    const bus = makeEventBus();
+    const uc = new CompleteDelivery(repo, makeUnitOfWork(), bus);
 
     const result = await uc.execute({ fulfillmentId: f.id.toString(), riderId: 'rider-1' });
 
@@ -51,7 +50,7 @@ describe('CompleteDelivery', () => {
 
   it('returns NotFoundError for an unknown fulfillment', async () => {
     const repo = makeRepo({ findById: jest.fn().mockResolvedValue(null) });
-    const uc = new CompleteDelivery(repo, makeUnitOfWork(), makeOutbox(), makeEventBus());
+    const uc = new CompleteDelivery(repo, makeUnitOfWork(), makeEventBus());
 
     const result = await uc.execute({ fulfillmentId: 'nope', riderId: 'r' });
 
