@@ -5,10 +5,12 @@ import { Input } from "./ui/input";
 import { Badge } from "./ui/badge";
 import { motion } from "motion/react";
 import { useRouter } from "next/navigation";
-import { Search, MapPin, UtensilsCrossed, Home, User, Receipt, Clock, Star, TrendingUp } from "lucide-react";
+import { Search, MapPin, UtensilsCrossed, Home, User, Receipt, TrendingUp } from "lucide-react";
 import { useState } from "react";
 import { ImageWithFallback } from "@/figma/ImageWithFallback";
 import { useAddressStore } from "@/store/addressStore";
+import { useRestaurantList } from "@/lib/api/hooks/useCatalog";
+import { cuisineLabel, type CuisineType } from "@/lib/api/adapters/restaurant";
 import { useHydrateAddresses } from "@/lib/api/hooks/useHydrateAddresses";
 import { NearbyRestaurants } from "./NearbyRestaurants";
 import Link from "next/link";
@@ -33,44 +35,52 @@ router.push(`/search?q=${encodeURIComponent(searchQuery)}`);
     }
   };
 
-  const popularCuisines = [
-    { name: "Italian", icon: "🍝", count: 24 },
-    { name: "Japanese", icon: "🍣", count: 18 },
-    { name: "Mexican", icon: "🌮", count: 15 },
-    { name: "Indian", icon: "🍛", count: 21 },
-    { name: "Chinese", icon: "🥡", count: 19 },
-    { name: "American", icon: "🍔", count: 32 }
-  ];
+  /**
+   * Cuisine tiles are derived from the catalog for the same reason the featured cards are.
+   *
+   * The previous literal was wrong three ways: the counts were invented ("24 places" against a
+   * single Italian restaurant); "Japanese", "Indian" and "American" are not members of the
+   * server's `CuisineType` enum at all, so those tiles could never match anything; and the
+   * `?cuisine=` value was a display label rather than the enum value the API filters on.
+   */
+  const CUISINE_ICONS: Partial<Record<CuisineType, string>> = {
+    NORTH_INDIAN: "🍛", SOUTH_INDIAN: "🥘", CHINESE: "🥡", ITALIAN: "🍝",
+    MEXICAN: "🌮", CONTINENTAL: "🍽️", FAST_FOOD: "🍔", BAKERY: "🧁",
+    DESSERTS: "🍰", BEVERAGES: "🥤", SEAFOOD: "🦐", STREET_FOOD: "🌯",
+  };
+  const { data: cuisinePages } = useRestaurantList({ limit: 50 });
+  const popularCuisines = Object.entries(
+    (cuisinePages?.pages.flatMap((p) => p.items) ?? []).reduce<Record<string, number>>(
+      (acc, r) => {
+        for (const c of r.cuisineTypes) acc[c] = (acc[c] ?? 0) + 1;
+        return acc;
+      },
+      {},
+    ),
+  )
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6)
+    .map(([type, count]) => ({
+      type: type as CuisineType,
+      name: cuisineLabel(type as CuisineType),
+      icon: CUISINE_ICONS[type as CuisineType] ?? "🍴",
+      count,
+    }));
 
-  const featuredRestaurants = [
-    {
-      id: "6901962bcd549a1d6fd87e24",
-      name: "La Tavola Italiana",
-      cuisine: "Italian",
-      rating: 4.8,
-      deliveryTime: "25-35 min",
-      image: "https://images.unsplash.com/photo-1559339352-11d035aa65de?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxyZXN0YXVyYW50JTIwZXh0ZXJpb3J8ZW58MXx8fHwxNzYwMTI1MjU1fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-      city: "Rome"
-    },
-    {
-      id: "6901962bcd549a1d6fd87e22",
-      name: "Tokyo Sushi Bar",
-      cuisine: "Japanese",
-      rating: 4.9,
-      deliveryTime: "30-40 min",
-      image: "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxpdGFsaWFuJTIwcmVzdGF1cmFudCUyMGludGVyaW9yfGVufDF8fHx8MTc2MDEyNTI1NXww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-      city: "San Francisco"
-    },
-    {
-      id: "6901962bcd549a1d6fd87e29",
-      name: "Paris Pastry House",
-      cuisine: "French",
-      rating: 4.7,
-      deliveryTime: "20-30 min",
-      image: "https://images.unsplash.com/photo-1552566626-52f8b828add9?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtZXhpY2FuJTIwZm9vZCUyMHJlc3RhdXJhbnR8ZW58MXx8fHwxNzYwMTI1MjU2fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-      city: "Paris"
-    }
-  ];
+  /**
+   * Featured restaurants come from the catalog, not a literal.
+   *
+   * This block used to be three hardcoded entries whose `id`s were stale Mongo ObjectIds
+   * (`6901962bcd549a1d6fd87e24`) left over from an older dataset — the catalog keys on UUIDs,
+   * so every card 404'd on `/restaurants/:id`. Reading the real list is what stops that from
+   * silently rotting again.
+   *
+   * Only fields the server actually returns are rendered: `restaurantAdapter` documents that
+   * rating / deliveryTime / city are NOT on the summary DTO and must never be fabricated, so
+   * the cards show cuisine and open/closed instead of the invented "4.8 ★ / 25-35 min / Rome".
+   */
+  const { data: featuredPages, isLoading: featuredLoading } = useRestaurantList({ limit: 3 });
+  const featuredRestaurants = (featuredPages?.pages[0]?.items ?? []).slice(0, 3);
 
   return (
     <div className="w-full max-w-7xl mx-auto space-y-8">
@@ -298,7 +308,7 @@ router.push(`/search?q=${encodeURIComponent(searchQuery)}`);
               <Card
                 className="border-2 shadow-md hover:shadow-lg transition-all cursor-pointer group"
                 onClick={() =>  router.push(
-  `/search?cuisine=${encodeURIComponent(cuisine.name)}`)
+  `/search?cuisine=${encodeURIComponent(cuisine.type)}`)
              
               }
                
@@ -330,49 +340,70 @@ router.push(`/search?q=${encodeURIComponent(searchQuery)}`);
             View All
           </Button>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {featuredRestaurants.map((restaurant, index) => (
-            <motion.div
-              key={restaurant.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5 + index * 0.1 }}
-            >
-              <Card
-                className="overflow-hidden border-2 shadow-lg hover:shadow-xl transition-all cursor-pointer group"
-                // onClick={() => onNavigate("restaurant", { id: restaurant.id })}
-               onClick={() => router.push(`/restaurants/${restaurant.id}`)}
-              >
-                <div className="relative h-48 overflow-hidden">
-                  <ImageWithFallback
-                    src={restaurant.image}
-                    alt={restaurant.name}
-                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                  />
-                  <Badge className="absolute top-3 right-3 bg-white/90 text-foreground hover:bg-white">
-                    <Star className="h-3 w-3 mr-1 fill-yellow-400 text-yellow-400" />
-                    {restaurant.rating}
-                  </Badge>
-                </div>
+        {featuredLoading && featuredRestaurants.length === 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[0, 1, 2].map((i) => (
+              <Card key={i} className="overflow-hidden border-2 shadow-lg">
+                <div className="h-48 bg-muted animate-pulse" />
                 <CardContent className="pt-4 space-y-3">
-                  <div>
-                    <h3 className="mb-1">{restaurant.name}</h3>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <span>{restaurant.cuisine}</span>
-                      <span>•</span>
-                      <MapPin className="h-3 w-3" />
-                      <span>{restaurant.city}</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm">
-                    <Clock className="h-4 w-4 text-muted-foreground" />
-                    <span>{restaurant.deliveryTime}</span>
-                  </div>
+                  <div className="h-4 w-2/3 rounded bg-muted animate-pulse" />
+                  <div className="h-3 w-1/3 rounded bg-muted animate-pulse" />
                 </CardContent>
               </Card>
-            </motion.div>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : featuredRestaurants.length === 0 ? (
+          <Card className="border-2 border-dashed">
+            <CardContent className="py-10 text-center text-muted-foreground">
+              <UtensilsCrossed className="h-8 w-8 mx-auto mb-3 opacity-50" />
+              <p>No restaurants are published yet.</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {featuredRestaurants.map((restaurant, index) => (
+              <motion.div
+                key={restaurant.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.5 + index * 0.1 }}
+              >
+                <Card
+                  className="overflow-hidden border-2 shadow-lg hover:shadow-xl transition-all cursor-pointer group"
+                  onClick={() => router.push(`/restaurants/${restaurant.id}`)}
+                >
+                  <div className="relative h-48 overflow-hidden">
+                    <ImageWithFallback
+                      src={restaurant.imageUrl ?? ""}
+                      alt={restaurant.name}
+                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                    />
+                    <Badge
+                      className={`absolute top-3 right-3 ${
+                        restaurant.isOpen
+                          ? "bg-white/90 text-foreground hover:bg-white"
+                          : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {restaurant.isOpen ? "Open now" : "Closed"}
+                    </Badge>
+                  </div>
+                  <CardContent className="pt-4 space-y-3">
+                    <div>
+                      <h3 className="mb-1">{restaurant.name}</h3>
+                      {restaurant.cuisine ? (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <UtensilsCrossed className="h-3 w-3" />
+                          <span>{restaurant.cuisine}</span>
+                        </div>
+                      ) : null}
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ))}
+          </div>
+        )}
       </motion.div>
     </div>
   );

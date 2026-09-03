@@ -57,7 +57,14 @@ export function DynamicSearch() {
   const [query, setQuery] = useState(searchParams.get("q") || "");
   const [debouncedQuery, setDebouncedQuery] = useState(query.trim());
   const [tab, setTab] = useState<Tab>("restaurants");
-  const [selectedCuisine, setSelectedCuisine] = useState<CuisineType | "All">("All");
+  // Seeded from `?cuisine=` so the Home page's cuisine tiles actually land on a filtered
+  // list. Previously only `?q=` was read, so those tiles navigated here and the parameter
+  // was silently dropped — every tile showed the same unfiltered results. Validated against
+  // CUISINE_TYPES because the value is user-editable in the URL.
+  const cuisineParam = searchParams.get("cuisine");
+  const [selectedCuisine, setSelectedCuisine] = useState<CuisineType | "All">(
+    CUISINE_TYPES.includes(cuisineParam as CuisineType) ? (cuisineParam as CuisineType) : "All",
+  );
   const [selectedDietary, setSelectedDietary] = useState<(typeof DIETARY_TAGS)[number] | "All">(
     "All",
   );

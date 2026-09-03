@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter,usePathname } from "next/navigation";
 import { useAuthStore } from "../store/authStore";
 import { useCartSummary } from "@/lib/api/hooks/useCart";
+import { useOwnerRestaurants } from "@/lib/api/hooks/useOwnerCatalog";
 import { useThemeStore } from "../store/themeStore";
 // import { useAuthStore } from "@/store/authStore";
 // import { UseBoundStore } from ""
@@ -37,6 +38,20 @@ export function Layout_comp({ children }: LayoutProps) {
   // const navigate = useNavigate();
   // const navigate = useRouter().push;
   const user = useAuthStore((state) => state.user);
+
+  /**
+   * Who gets the Admin entry.
+   *
+   * `/admin` is two surfaces in one: the OWNER CONSOLE (catalog + order queue, gated by
+   * restaurant ownership) and the PLATFORM ADMIN tabs (review moderation + fulfillment
+   * dashboard, gated by `user.isAdmin`) — see the naming note in `lib/config/featureFlags.ts`.
+   * So the link belongs to owners AND platform admins, and the page decides which tabs render.
+   *
+   * This was previously `!user?.isAdmin`, which showed the entry to everyone EXCEPT the
+   * platform admin — the one account guaranteed to have something to do there.
+   */
+  const { data: ownedRestaurants } = useOwnerRestaurants();
+  const canSeeAdmin = Boolean(user?.isAdmin) || (ownedRestaurants?.length ?? 0) > 0;
   const logout = useAuthStore((state) => state.logout);
   const { data: cartSummary } = useCartSummary();
   const theme = useThemeStore((state) => state.theme);
@@ -113,7 +128,7 @@ const handleLogout = async() => {
                 <Link href="/orders">Orders</Link>
               </Button>
 
-              {!user?.isAdmin && (
+              {canSeeAdmin && (
                 <Button
                   variant={pathname === "/admin" ? "default" : "ghost"}
                   asChild
@@ -145,7 +160,7 @@ const handleLogout = async() => {
                   <DropdownMenuItem asChild>
                     <Link href="/orders">Orders</Link>
                   </DropdownMenuItem>
-                  {!user?.isAdmin && (
+                  {canSeeAdmin && (
                     <>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem asChild>

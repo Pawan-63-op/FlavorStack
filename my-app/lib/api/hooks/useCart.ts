@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useAuthStore } from "../../../store/authStore";
@@ -7,6 +8,7 @@ import { ApiError } from "../errors/ApiError";
 import { queryKeys } from "../queryKeys";
 import type { CartViewModel } from "../adapters/cart";
 import { cartService, type AddCartItemInput } from "../services/cart";
+import { useRestaurantMenu } from "./useCatalog";
 
 /**
  * Cart query + mutation hooks — thin TanStack wrappers over `cartService`
@@ -44,13 +46,20 @@ export function useCartSummary() {
 }
 
 /**
- * Shared success handler: the mutation's returned cart is authoritative, so we
- * seed it into the cache and invalidate the derived summary badge.
+ * Shared success handler: seed the mutation's cart for an instant quantity/total update,
+ * then refetch so the displayed lines carry item names.
+ *
+ * The mutation response is authoritative for cart STATE but not for display: only
+ * `GetCart` passes a `CartCatalogView` into `toCartResponse`, so `AddToCart` and
+ * `UpdateCartItem` return lines with no `enrichment` block at all — `name` comes back
+ * null and the cart rendered every line as the literal "Item". Invalidating
+ * `cart.current` lets the enriched `GET /cart` replace the bare payload.
  */
 function useCartCacheSync(): (cart: CartViewModel) => void {
   const queryClient = useQueryClient();
   return (cart) => {
     queryClient.setQueryData(queryKeys.cart.current(), cart);
+    void queryClient.invalidateQueries({ queryKey: queryKeys.cart.current() });
     void queryClient.invalidateQueries({ queryKey: queryKeys.cart.summary() });
   };
 }
@@ -97,4 +106,26 @@ export function useClearCart() {
     onSuccess: sync,
     onError: (error) => toastError(error, "Could not clear the cart"),
   });
+}
+
+/**
+ * `menuItemId -> imageUrl` for the cart's restaurant.
+ *
+ * The cart response carries no image: `CartMenuItemView` (the server's cart projection) has
+ * `name`, price and availability but no `imageUrl`, so both cart surfaces were passing
+ * `src={undefined}` to `ImageWithFallback` and every line rendered the fallback. Rather than
+ * widen that server contract, the picture is read from the restaurant's menu — already a
+ * cached query for anyone who just added an item from it.
+ */
+export function useCartItemImages(restaurantId: string | null | undefined): Map<string, string> {
+  const { data: menu } = useRestaurantMenu(restaurantId ?? "");
+  return useMemo(() => {
+    const byId = new Map<string, string>();
+    for (const category of menu?.categories ?? []) {
+      for (const item of category.items) {
+        if (item.imageUrl) byId.set(item.id, item.imageUrl);
+      }
+    }
+    return byId;
+  }, [menu]);
 }

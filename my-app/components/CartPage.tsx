@@ -9,7 +9,7 @@ import { ScrollArea } from "./ui/scroll-area";
 import { Badge } from "./ui/badge";
 import { Minus, Plus, Trash2, ShoppingBag, Loader2, Tag, X, LogIn } from "lucide-react";
 import { motion } from "motion/react";
-import { useCart, useUpdateCartItem, useRemoveCartItem, useClearCart } from "@/lib/api/hooks/useCart";
+import { useCart, useUpdateCartItem, useRemoveCartItem, useClearCart, useCartItemImages } from "@/lib/api/hooks/useCart";
 import { useApplyPromotion, useRemovePromotion, useValidatePromotion } from "@/lib/api/hooks/usePromotion";
 import { promotionAdapter } from "@/lib/api/adapters/cart";
 import { ApiError } from "@/lib/api/errors/ApiError";
@@ -170,6 +170,7 @@ export default function CartPage() {
   const router = useRouter();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const { data: cart, isLoading, isError, error } = useCart();
+  const itemImages = useCartItemImages(cart?.restaurantId);
   const updateItem = useUpdateCartItem();
   const removeItem = useRemoveCartItem();
   const clearCart = useClearCart();
@@ -287,7 +288,7 @@ export default function CartPage() {
                   {/* Image (server cart has no image → fallback) */}
                   <div className="w-24 h-24 flex-shrink-0 overflow-hidden rounded-lg border">
                     <ImageWithFallback
-                      src={undefined}
+                      src={itemImages.get(item.menuItemId)}
                       alt={item.name ?? "Item"}
                       className="w-full h-full object-cover"
                     />

@@ -27,13 +27,29 @@ export interface RateLimitResult {
   retryAfter: number;
 }
 
+/**
+ * Reads `RATE_LIMIT_<ACTION>_MAX` / `_WINDOW_SECONDS` (action upper-snake-cased), falling back
+ * to the built-in rule. Deployments differ in how many callers share an address — a public demo
+ * where one visitor legitimately signs in as four different roles needs a looser login rule than
+ * a real tenant — and that is a deployment decision, not a code change.
+ */
+function rule(action: RateLimitAction, windowSeconds: number, max: number): RateLimitRule {
+  const key = action.toUpperCase().replace(/-/g, '_');
+  const envWindow = Number(process.env[`RATE_LIMIT_${key}_WINDOW_SECONDS`]);
+  const envMax = Number(process.env[`RATE_LIMIT_${key}_MAX`]);
+  return {
+    windowSeconds: Number.isFinite(envWindow) && envWindow > 0 ? envWindow : windowSeconds,
+    max: Number.isFinite(envMax) && envMax > 0 ? envMax : max,
+  };
+}
+
 /** Default per-action rules; override via the constructor for tests or tuning. */
 export const DEFAULT_RATE_LIMITS: Record<RateLimitAction, RateLimitRule> = {
-  login: { windowSeconds: 900, max: 5 },
-  'otp-generation': { windowSeconds: 600, max: 3 },
-  'otp-verification': { windowSeconds: 600, max: 5 },
-  'password-reset': { windowSeconds: 3600, max: 3 },
-  'catalog-search': { windowSeconds: 60, max: 60 },
+  login: rule('login', 900, 5),
+  'otp-generation': rule('otp-generation', 600, 3),
+  'otp-verification': rule('otp-verification', 600, 5),
+  'password-reset': rule('password-reset', 3600, 3),
+  'catalog-search': rule('catalog-search', 60, 60),
 };
 
 export class RateLimiter {

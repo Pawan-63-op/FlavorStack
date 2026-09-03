@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { CheckCircle, Loader2, MapPin, Package, XCircle } from "lucide-react";
+import { CheckCircle, Loader2, MapPin, Navigation, Package, XCircle } from "lucide-react";
 import { Card, CardContent } from "./ui/card";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
@@ -31,8 +31,8 @@ function Shell({ children }: { children: React.ReactNode }) {
  * Static order confirmation (Batch 6.4) rendered from `OrderRequestSummaryResponse`.
  * The order is usually already in the `orderRequests.detail` cache (seeded by the
  * place-order mutation in Batch 6.3); this query falls back to `GET /order-requests/:id`
- * on a cold load / refresh. Phase 6 ends at `REQUESTED` — live fulfillment tracking
- * is Phase 7, surfaced here only as a flag-gated placeholder.
+ * on a cold load / refresh. Phase 6 ends at `REQUESTED`; live fulfillment tracking (Phase 7)
+ * is linked from here behind the `tracking` flag.
  */
 export function OrderConfirmation({ orderRequestId }: { orderRequestId: string }) {
   const router = useRouter();
@@ -161,11 +161,23 @@ export function OrderConfirmation({ orderRequestId }: { orderRequestId: string }
             </div>
           </div>
 
-          {/* ── Tracking placeholder (Phase 7, flag-gated) ── */}
+          {/* ── Tracking (Phase 7, flag-gated) ──
+              This was a "coming soon" placeholder long after tracking actually shipped: the
+              `/order-processing` page was reachable from a notification deep-link but from
+              nowhere in the post-checkout flow, which is exactly when a customer wants it.
+              Same route and query param `OrderHistory` uses for its Track action. */}
           {isEnabled("tracking") && (
-            <div className="text-center p-4 bg-accent/50 rounded-xl border">
-              <p className="text-sm text-muted-foreground">Live order tracking is coming soon.</p>
-            </div>
+            <Button
+              className="w-full gap-2"
+              onClick={() =>
+                router.push(
+                  `/order-processing?orderRequestId=${encodeURIComponent(orderRequestId)}`,
+                )
+              }
+            >
+              <Navigation className="h-4 w-4" />
+              Track this order
+            </Button>
           )}
 
           {/* ── Actions ── */}
@@ -173,7 +185,7 @@ export function OrderConfirmation({ orderRequestId }: { orderRequestId: string }
             <Button variant="outline" className="flex-1" onClick={() => router.push("/orders")}>
               View All Orders
             </Button>
-            <Button className="flex-1" onClick={() => router.push("/restaurants")}>
+            <Button variant="outline" className="flex-1" onClick={() => router.push("/restaurants")}>
               Order More
             </Button>
           </div>

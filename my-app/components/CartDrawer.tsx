@@ -13,7 +13,7 @@ import { Separator } from "./ui/separator";
 import { motion } from "motion/react";
 import { useRouter } from "next/navigation";
 import { Minus, Plus, Trash2, ShoppingBag, Loader2, LogIn } from "lucide-react";
-import { useCart, useUpdateCartItem, useRemoveCartItem } from "@/lib/api/hooks/useCart";
+import { useCart, useUpdateCartItem, useRemoveCartItem, useCartItemImages } from "@/lib/api/hooks/useCart";
 import { formatMoney } from "@/lib/api/format/money";
 import { useAuthStore } from "@/store/authStore";
 import { guestLineKey, useGuestCartStore } from "@/store/guestCartStore";
@@ -134,6 +134,7 @@ function GuestCartDrawerBody({ onClose }: { onClose: () => void }) {
 export function CartDrawer({ open, onClose, onCheckout }: CartDrawerProps) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const { data: cart, isLoading } = useCart();
+  const itemImages = useCartItemImages(cart?.restaurantId);
   const updateItem = useUpdateCartItem();
   const removeItem = useRemoveCartItem();
 
@@ -204,7 +205,7 @@ export function CartDrawer({ open, onClose, onCheckout }: CartDrawerProps) {
                       {/* IMAGE (server cart has no image → fallback) */}
                       <div className="w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden">
                         <ImageWithFallback
-                          src={undefined}
+                          src={itemImages.get(item.menuItemId)}
                           alt={item.name ?? "Item"}
                           className="w-full h-full object-cover"
                         />
