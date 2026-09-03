@@ -1,6 +1,10 @@
 set -euo pipefail
 
 API_BASE="${API_BASE:-http://localhost:3000}"
+# Mongo access for the 7 privileged mutations the HTTP API deliberately does not expose.
+# Set MONGO_URI (e.g. an Atlas `mongodb+srv://…/flavorstack` string) to talk to a remote
+# cluster directly; unset, the script falls back to `docker exec` against the local stack.
+MONGO_URI="${MONGO_URI:-}"
 MONGO_CONTAINER="${MONGO_CONTAINER:-server_2-mongo-1}"
 MONGO_DB="${MONGO_DB:-flavorstack}"
 
@@ -31,10 +35,22 @@ require() {
   done
   [ "$missing" -eq 0 ] || { echo "Install the missing tool(s) and re-run." >&2; exit 1; }
 }
-require curl jq docker
+# `docker` is only needed for the local fallback; a MONGO_URI run needs `mongosh` on PATH.
+if [ -n "$MONGO_URI" ]; then
+  require curl jq mongosh
+else
+  require curl jq docker
+fi
 
+# The single chokepoint for every privileged mutation below — the only thing that has to
+# change to point the seed at a managed cluster instead of the local compose container.
+# MONGO_URI is expected to carry the database name in its path.
 mongo_eval() {
-  docker exec "$MONGO_CONTAINER" mongosh "$MONGO_DB" --quiet --eval "$1"
+  if [ -n "$MONGO_URI" ]; then
+    mongosh "$MONGO_URI" --quiet --eval "$1"
+  else
+    docker exec "$MONGO_CONTAINER" mongosh "$MONGO_DB" --quiet --eval "$1"
+  fi
 }
 
 api_post() {

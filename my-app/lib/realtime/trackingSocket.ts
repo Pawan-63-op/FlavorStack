@@ -54,10 +54,10 @@ export interface TrackingLocationEvent {
 const NAMESPACE = "/tracking";
 
 /**
- * Full URL for the `/tracking` namespace. `NEXT_PUBLIC_SOCKET_URL` points at the
- * server_2 origin (e.g. `http://localhost:3000`) because the Next dev rewrite
- * only proxies `/api/v1/*`, not the Socket.IO `/socket.io` path — the WS must
- * connect directly. Empty → same-origin (page origin).
+ * Full URL for the `/tracking` namespace. Set `NEXT_PUBLIC_SOCKET_URL` to the
+ * server_2 origin (e.g. `http://localhost:3000`) to connect directly, bypassing
+ * the Next server. Empty → same-origin (page origin), which `next.config.ts`
+ * rewrites `/socket.io/*` through to the api — the deployed configuration.
  */
 export function trackingSocketUrl(): string {
   const base = (process.env.NEXT_PUBLIC_SOCKET_URL ?? "").replace(/\/+$/, "");
@@ -75,7 +75,11 @@ export function getTrackingSocket(): Socket {
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionAttempts: 5,
-      transports: ["websocket"],
+      // `polling` first, then upgrade. Behind a proxy that cannot carry a WebSocket
+      // upgrade (Vercel rewrites cannot), a websocket-only client never connects at
+      // all; with both, it settles on long-polling instead. nginx does pass the
+      // upgrade, so the same-origin Docker topology still lands on `websocket`.
+      transports: ["polling", "websocket"],
     });
   }
   return socketInstance;

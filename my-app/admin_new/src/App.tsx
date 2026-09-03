@@ -1,3 +1,9 @@
+// Dead Vite entry, kept only for reference: the Next app imports `AdminDashboard`
+// directly (`app/admin/page.tsx`), never this file. The whole component below is
+// commented out, which leaves the file a global script rather than a module — this
+// empty export makes it a module so `isolatedModules` cannot reject it (TS1208).
+export {};
+
 // import { AdminDashboard } from "./components/AdminDashboard";
 // import { Toaster } from "./components/ui/sonner";
 // import { useInitializeStores } from "./hooks/useInitializeStores";
