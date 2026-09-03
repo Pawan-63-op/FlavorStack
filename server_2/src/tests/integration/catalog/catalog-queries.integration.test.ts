@@ -25,6 +25,7 @@ import { GetRestaurantMenu } from '../../../application/catalog/use-cases/GetRes
 import { GetMenuItem } from '../../../application/catalog/use-cases/GetMenuItem';
 import { GetItemsSnapshot } from '../../../application/catalog/use-cases/GetItemsSnapshot';
 import { CheckServiceability } from '../../../application/catalog/use-cases/CheckServiceability';
+import { ListDeliverableRestaurants } from '../../../application/catalog/use-cases/ListDeliverableRestaurants';
 import { buildRestaurant, buildMenuItem } from './catalog-fixtures';
 
 function uniqueSlug(): string {
@@ -84,6 +85,7 @@ describe('Catalog query use-cases (projection-driven)', () => {
     withZone?: boolean;
     centerLat?: number;
     centerLng?: number;
+    withVariants?: boolean;
   }
 
   async function seed(opts: SeedOpts = {}): Promise<{ restaurant: Restaurant; item: MenuItem }> {
@@ -106,6 +108,7 @@ describe('Catalog query use-cases (projection-driven)', () => {
     const item = buildMenuItem({
       restaurantId: restaurant.id.toString(),
       categoryId: restaurant.categories[0].id.toString(),
+      withVariants: opts.withVariants,
     });
     await menuItemRepo.save(item);
     await bus.publishAll(item.pullDomainEvents());
@@ -135,7 +138,7 @@ describe('Catalog query use-cases (projection-driven)', () => {
       await seed({ visibility: CATALOG_VISIBILITY.HIDDEN });
       await seed({ pause: true });
 
-      const result = await new ListRestaurants(readRepo).execute({ limit: 50 });
+      const result = await new ListRestaurants(readRepo, deliveryZoneRepo, queryRepo).execute({ limit: 50 });
       const ids = result.getValue().items.map((r) => r.id);
       expect(ids).toContain(visible.restaurant.id.toString());
       expect(result.getValue().items).toHaveLength(1);
@@ -143,9 +146,9 @@ describe('Catalog query use-cases (projection-driven)', () => {
 
     it('filters by isOpen=false (derived) for a closed restaurant', async () => {
       await seed({ closed: true });
-      const open = await new ListRestaurants(readRepo).execute({ isOpen: true, limit: 50 });
+      const open = await new ListRestaurants(readRepo, deliveryZoneRepo, queryRepo).execute({ isOpen: true, limit: 50 });
       expect(open.getValue().items).toHaveLength(0);
-      const closed = await new ListRestaurants(readRepo).execute({ isOpen: false, limit: 50 });
+      const closed = await new ListRestaurants(readRepo, deliveryZoneRepo, queryRepo).execute({ isOpen: false, limit: 50 });
       expect(closed.getValue().items).toHaveLength(1);
     });
   });
@@ -180,6 +183,59 @@ describe('Catalog query use-cases (projection-driven)', () => {
       const { item } = await seed({ visibility: CATALOG_VISIBILITY.HIDDEN });
       const result = await new GetMenuItem(readRepo).execute({ itemId: item.id.toString() });
       expect(result.isFailure).toBe(true);
+    });
+  });
+
+  /**
+   * Phase 10-4.3. The picker needs two things the customer API did not expose:
+   * `hasVariants` on the list views (so the menu knows to open a dialog) and the
+   * groups themselves on the single-item read. Variant groups are NOT projected into
+   * `menu_item_search`, so the detail read pulls them from the source of truth.
+   */
+  describe('variant exposure (customer picker)', () => {
+    it('returns variantGroups with option ids and price deltas on the item detail read', async () => {
+      const { item } = await seed({ withVariants: true });
+
+      const result = await new GetMenuItem(readRepo).execute({ itemId: item.id.toString() });
+
+      expect(result.isSuccess).toBe(true);
+      const detail = result.getValue();
+      expect(detail.hasVariants).toBe(true);
+      expect(detail.variantGroups).toHaveLength(1);
+
+      const group = detail.variantGroups[0];
+      expect(group.label).toBe('Size');
+      expect(group.selectionType).toBe('SINGLE');
+      expect(group.required).toBe(true);
+      expect(group.minSelect).toBe(1);
+      expect(group.maxSelect).toBe(1);
+      expect(group.options.map((o) => [o.label, o.priceDeltaAmount, o.isDefault])).toEqual([
+        ['Half', 0, true],
+        ['Full', 10000, false],
+      ]);
+      // The ids are what the client posts as `selectedOptionIds`, so they must be real.
+      expect(group.options.every((o) => o.id.length > 0)).toBe(true);
+    });
+
+    it('returns an empty variantGroups list for an item without variants', async () => {
+      const { item } = await seed();
+      const result = await new GetMenuItem(readRepo).execute({ itemId: item.id.toString() });
+      expect(result.getValue().hasVariants).toBe(false);
+      expect(result.getValue().variantGroups).toEqual([]);
+    });
+
+    it('flags hasVariants on the restaurant menu list so the picker can be offered', async () => {
+      const { restaurant } = await seed({ withVariants: true });
+      const menu = await new GetRestaurantMenu(readRepo).execute({
+        restaurantId: restaurant.id.toString(),
+      });
+      expect(menu.getValue().categories[0].items[0].hasVariants).toBe(true);
+    });
+
+    it('projects hasVariants onto menu_item_search so search results agree', async () => {
+      const { item } = await seed({ withVariants: true });
+      const doc = await MenuItemSearchModel.findOne({ _id: item.id.toString() }).lean();
+      expect(doc?.hasVariants).toBe(true);
     });
   });
 
@@ -262,6 +318,84 @@ describe('Catalog query use-cases (projection-driven)', () => {
         subtotalAmount: 60000, // ≥ freeAboveSubtotal (50000)
       });
       expect(result.getValue()[0].deliveryFee.amount).toBe(0);
+    });
+  });
+
+  /**
+   * The reachability half, split out in Phase 10.4.1. These mirror the publish-gate cases
+   * above one-for-one: `/catalog/deliverable` and `/catalog/serviceability` share
+   * `findServiceableZones`, so an exclusion that holds for one must hold for the other.
+   */
+  describe('ListDeliverableRestaurants', () => {
+    const deliverable = () => new ListDeliverableRestaurants(deliveryZoneRepo, queryRepo);
+
+    it('returns the restaurant id for a point inside its delivery zone', async () => {
+      const { restaurant } = await seed({ withZone: true, centerLat: 19.0, centerLng: 73.0 });
+      const result = await deliverable().execute({ lat: 19.0, lng: 73.0 });
+      expect(result.isSuccess).toBe(true);
+      expect(result.getValue().restaurantIds).toEqual([restaurant.id.toString()]);
+    });
+
+    it('returns empty for a point outside any delivery zone', async () => {
+      await seed({ withZone: true, centerLat: 19.0, centerLng: 73.0 });
+      const result = await deliverable().execute({ lat: 1.0, lng: 1.0 });
+      expect(result.getValue().restaurantIds).toEqual([]);
+    });
+
+    it('excludes a zone whose restaurant is not PUBLIC', async () => {
+      await seed({
+        withZone: true,
+        centerLat: 19.0,
+        centerLng: 73.0,
+        visibility: CATALOG_VISIBILITY.HIDDEN,
+      });
+      const result = await deliverable().execute({ lat: 19.0, lng: 73.0 });
+      expect(result.getValue().restaurantIds).toEqual([]);
+    });
+
+    it('excludes a zone whose restaurant is unpublished (DRAFT)', async () => {
+      await seed({ withZone: true, centerLat: 19.0, centerLng: 73.0, publish: false });
+      const result = await deliverable().execute({ lat: 19.0, lng: 73.0 });
+      expect(result.getValue().restaurantIds).toEqual([]);
+    });
+
+    it('excludes a zone whose restaurant is paused (INACTIVE)', async () => {
+      await seed({ withZone: true, centerLat: 19.0, centerLng: 73.0, pause: true });
+      const result = await deliverable().execute({ lat: 19.0, lng: 73.0 });
+      expect(result.getValue().restaurantIds).toEqual([]);
+    });
+
+    it('agrees with CheckServiceability on the same point', async () => {
+      await seed({ withZone: true, centerLat: 19.0, centerLng: 73.0 });
+      await seed({ withZone: true, centerLat: 19.0, centerLng: 73.0 });
+      await seed({ withZone: true, centerLat: 19.0, centerLng: 73.0, pause: true });
+
+      const ids = (await deliverable().execute({ lat: 19.0, lng: 73.0 })).getValue().restaurantIds;
+      const serviceable = await new CheckServiceability(deliveryZoneRepo, queryRepo).execute({
+        lat: 19.0,
+        lng: 73.0,
+      });
+
+      expect(ids).toHaveLength(2);
+      expect([...ids].sort()).toEqual(serviceable.getValue().map((v) => v.restaurantId).sort());
+    });
+
+    it('restricts browse to deliverable restaurants when deliverableOnly is set', async () => {
+      const inZone = await seed({ withZone: true, centerLat: 19.0, centerLng: 73.0 });
+      await seed(); // published, but no delivery zone covering the point
+
+      const all = await new ListRestaurants(readRepo, deliveryZoneRepo, queryRepo).execute({
+        limit: 50,
+      });
+      expect(all.getValue().items.length).toBe(2);
+
+      const only = await new ListRestaurants(readRepo, deliveryZoneRepo, queryRepo).execute({
+        limit: 50,
+        deliverableOnly: true,
+        lat: 19.0,
+        lng: 73.0,
+      });
+      expect(only.getValue().items.map((r) => r.id)).toEqual([inZone.restaurant.id.toString()]);
     });
   });
 });

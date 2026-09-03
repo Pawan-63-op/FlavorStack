@@ -282,14 +282,17 @@ export class Fulfillment extends AggregateRoot<FulfillmentProps> {
       return Result.fail<void>(new ForbiddenError('Only the offered rider can accept this delivery'));
     }
 
+    // Validate first: `transitionTo` returns a new VO and mutates nothing, so proving the delivery
+    // leg can move before touching the assignment keeps a failure from leaving the aggregate with an
+    // ACCEPTED assignment and an UNASSIGNED delivery.
+    const deliveryTransition = this.props.deliveryStatus.transitionTo(DELIVERY_STATUS.ASSIGNED);
+    if (deliveryTransition.isFailure) return Result.fail<void>(deliveryTransition.getError());
+
     const now = new Date();
     const accepted = assignment.accept(now);
     if (accepted.isFailure) return Result.fail<void>(accepted.getError());
 
-    const deliveryTransition = this.props.deliveryStatus.transitionTo(DELIVERY_STATUS.ASSIGNED);
-    if (deliveryTransition.isFailure) return Result.fail<void>(deliveryTransition.getError());
     this.props.deliveryStatus = deliveryTransition.getValue();
-
     this.props.updatedAt = now;
     this.props.version += 1;
 
@@ -427,12 +430,13 @@ export class Fulfillment extends AggregateRoot<FulfillmentProps> {
       return Result.fail<void>(new ForbiddenError('Only the offered rider can reject this delivery'));
     }
 
-    const rejected = assignment.reject(new Date());
+    const now = new Date();
+    const rejected = assignment.reject(now);
     if (rejected.isFailure) return Result.fail<void>(rejected.getError());
 
     this.props.assignmentHistory.push(assignment);
     this.props.currentAssignment = null;
-    this.props.updatedAt = new Date();
+    this.props.updatedAt = now;
     this.props.version += 1;
 
     return Result.ok<void>(undefined);
@@ -541,15 +545,24 @@ export class Fulfillment extends AggregateRoot<FulfillmentProps> {
    * Phase 5B: hand a pre-pickup delivery from the current ACCEPTED rider to a new rider in one atomic
    * mutation (the folded reassign() + acceptByRider() of §6.1). The dropped attempt moves to history
    * as REASSIGNED; the delivery sub-state cycles ASSIGNED → UNASSIGNED → ASSIGNED; the new rider is
-   * recorded as a fresh ACCEPTED attempt. Raises RiderReassigned(previousRiderId, newRiderId, attempt).
+   * recorded as a fresh ACCEPTED attempt. Raises **both** RiderReassigned(previousRiderId,
+   * newRiderId, attempt) and RiderAssigned(newRiderId) — see the commit block for why.
    *
    * Guards: the fulfillment must not be terminal; there must be an ACCEPTED current assignment whose
    * delivery is still ASSIGNED (i.e. before pickup — after pickup use failDelivery, §3.2); and the
    * new rider must differ from the dropped one.
+   *
+   * Structured validate-then-commit: every fallible step runs before the first mutation the
+   * aggregate keeps, so a failure returns `Result.fail` on an aggregate that is exactly as it was.
    */
   public reassign(newRiderId: string, expiresAt: Date): Result<void> {
+    // ---- validate: nothing below this line touches aggregate state ----
     const riderIdCheck = Guard.againstEmptyString(newRiderId, 'NewRiderId');
     if (riderIdCheck.isFailure) return Result.fail<void>(riderIdCheck.getError());
+
+    if (this.props.fulfillmentStatus.isTerminal()) {
+      return Result.fail<void>(new ConflictError('Cannot reassign a rider on a terminal fulfillment'));
+    }
 
     const assignment = this.props.currentAssignment;
     if (!assignment || assignment.status.value !== RIDER_ASSIGNMENT_STATUS.ACCEPTED) {
@@ -566,18 +579,18 @@ export class Fulfillment extends AggregateRoot<FulfillmentProps> {
       return Result.fail<void>(new ValidationError('Cannot reassign a delivery to the same rider'));
     }
 
-    const now = new Date();
-
-    const reassigned = assignment.reassign(now);
-    if (reassigned.isFailure) return Result.fail<void>(reassigned.getError());
-    this.props.assignmentHistory.push(assignment);
-    this.props.currentAssignment = null;
-
+    // `DeliveryStatus` is immutable — `transitionTo` returns a new VO — so both legs of the
+    // ASSIGNED → UNASSIGNED → ASSIGNED cycle can be proven legal without assigning either.
     const toUnassigned = this.props.deliveryStatus.transitionTo(DELIVERY_STATUS.UNASSIGNED);
     if (toUnassigned.isFailure) return Result.fail<void>(toUnassigned.getError());
-    this.props.deliveryStatus = toUnassigned.getValue();
+    const toAssigned = toUnassigned.getValue().transitionTo(DELIVERY_STATUS.ASSIGNED);
+    if (toAssigned.isFailure) return Result.fail<void>(toAssigned.getError());
 
-    const attempt = this.props.assignmentHistory.length + 1;
+    const now = new Date();
+
+    // The replacement is built and accepted in isolation; it is not reachable from the aggregate
+    // until the commit block below, so a failure here leaves nothing behind.
+    const attempt = assignment.attempt + 1;
     const offerResult = RiderAssignment.offer({ riderId: newRiderId, attempt, expiresAt, offeredAt: now });
     if (offerResult.isFailure) return Result.fail<void>(offerResult.getError());
     const newAssignment = offerResult.getValue();
@@ -585,11 +598,16 @@ export class Fulfillment extends AggregateRoot<FulfillmentProps> {
     const accepted = newAssignment.accept(now);
     if (accepted.isFailure) return Result.fail<void>(accepted.getError());
 
-    const toAssigned = this.props.deliveryStatus.transitionTo(DELIVERY_STATUS.ASSIGNED);
-    if (toAssigned.isFailure) return Result.fail<void>(toAssigned.getError());
-    this.props.deliveryStatus = toAssigned.getValue();
+    // The last fallible step, and the first that mutates anything the aggregate owns: the dropped
+    // assignment's own ACCEPTED → REASSIGNED transition. It cannot fail here (the status was checked
+    // above) and it fails before mutating if it ever does.
+    const reassigned = assignment.reassign(now);
+    if (reassigned.isFailure) return Result.fail<void>(reassigned.getError());
 
+    // ---- commit: every step below is infallible ----
+    this.props.assignmentHistory.push(assignment);
     this.props.currentAssignment = newAssignment;
+    this.props.deliveryStatus = toAssigned.getValue();
     this.props.updatedAt = now;
     this.props.version += 1;
 
@@ -599,6 +617,17 @@ export class Fulfillment extends AggregateRoot<FulfillmentProps> {
         previousRiderId,
         newRiderId,
         attempt,
+      })
+    );
+
+    // Raised alongside the audit record on purpose. `RiderReassigned` says *what changed*;
+    // `RiderAssigned` says *a rider is on it*, and it is the only event the customer notifier
+    // (`OnRiderAssigned`) subscribes to — without it a reassignment was silent to the customer.
+    this.addDomainEvent(
+      new RiderAssigned({
+        fulfillmentId: this.id.toString(),
+        riderId: newRiderId,
+        assignedAt: now,
       })
     );
 
@@ -620,12 +649,37 @@ export class Fulfillment extends AggregateRoot<FulfillmentProps> {
       return Result.fail<void>(new ValidationError('Offer has not yet expired'));
     }
 
-    const expired = assignment.expire(new Date());
+    const now = new Date();
+    const expired = assignment.expire(now);
     if (expired.isFailure) return Result.fail<void>(expired.getError());
 
     this.props.assignmentHistory.push(assignment);
     this.props.currentAssignment = null;
-    this.props.updatedAt = new Date();
+    this.props.updatedAt = now;
+    this.props.version += 1;
+
+    return Result.ok<void>(undefined);
+  }
+
+  /**
+   * Phase 10.4: pull back a live offer that has not been answered. OFFERED → EXPIRED into history,
+   * freeing the active slot for a fresh offer. The mirror of `expireCurrentOffer` **without** the
+   * TTL precondition: an admin reassigning an unanswered offer is not waiting for it to lapse.
+   * Raises no domain event — `assignmentHistory` is the record, exactly as for an expiry.
+   */
+  public withdrawCurrentOffer(): Result<void> {
+    const assignment = this.props.currentAssignment;
+    if (!assignment || assignment.status.value !== RIDER_ASSIGNMENT_STATUS.OFFERED) {
+      return Result.fail<void>(new ValidationError('No live offer to withdraw for this fulfillment'));
+    }
+
+    const now = new Date();
+    const expired = assignment.expire(now);
+    if (expired.isFailure) return Result.fail<void>(expired.getError());
+
+    this.props.assignmentHistory.push(assignment);
+    this.props.currentAssignment = null;
+    this.props.updatedAt = now;
     this.props.version += 1;
 
     return Result.ok<void>(undefined);

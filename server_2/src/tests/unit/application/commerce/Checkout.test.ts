@@ -34,6 +34,12 @@ import {
 } from '../../../../domain/commerce/types/CatalogGatewayRead';
 import { CartMenuItemView } from '../../../../domain/commerce/types/CatalogGatewayRead';
 import { CheckoutRequestDto } from '../../../../application/commerce/dtos/CheckoutRequestDto';
+import { makeAddressResolver } from '../../../mocks/commerce.mocks';
+import { DeliveryAddressResolver } from '../../../../application/commerce/services/DeliveryAddressResolver';
+import { Address } from '../../../../domain/identity/value-objects/Address.vo';
+import { GeoPoint } from '../../../../domain/identity/value-objects/GeoPoint.vo';
+import { NotFoundError } from '../../../../domain/shared/errors/NotFoundError';
+import { ValidationError } from '../../../../domain/shared/errors/ValidationError';
 
 const money = (amount: number, currency = 'INR') => Money.create(amount, currency).getValue();
 
@@ -228,6 +234,7 @@ function buildHarness(opts: {
   existingOrder?: OrderRequest | null;
   gateway?: ICatalogGateway;
   promotionService?: PromotionService;
+  addressResolver?: DeliveryAddressResolver;
 } = {}): Harness {
   const promotionService = opts.promotionService ?? new PromotionService(buildDefaultCommerceCoupons());
   const assembler = new CheckoutContextAssembler(
@@ -244,6 +251,7 @@ function buildHarness(opts: {
     cartRepo.repo,
     orderRepo.repo,
     assembler,
+    opts.addressResolver ?? makeAddressResolver().resolver,
     new PricingCalculator(),
     fakeUnitOfWork(),
     outbox.store,
@@ -418,6 +426,67 @@ describe('Checkout', () => {
       const result = await h.useCase.execute(dto());
       expect(result.isFailure).toBe(true);
     });
+  });
+});
+
+// Phase 10.3: the delivery fee is computed from the delivery coordinates, so a
+// client-supplied address lets the caller understate the distance. `addressId` resolves the
+// address from the customer's own saved address book instead.
+describe('Checkout — delivery address resolution', () => {
+  const SAVED_ADDRESS = Address.create({
+    label: 'Work',
+    street: '42 Residency Road',
+    city: 'Bengaluru',
+    state: 'Karnataka',
+    pinCode: '560025',
+    coordinates: GeoPoint.create(12.97, 77.59).getValue(),
+  }).getValue();
+
+  it("resolves the delivery address from the customer's saved addresses when addressId is given", async () => {
+    const { resolver } = makeAddressResolver([
+      { customerId: 'cust-1', addressId: 'addr-1', address: SAVED_ADDRESS },
+    ]);
+    const h = buildHarness({ addressResolver: resolver });
+
+    const result = await h.useCase.execute(dto({ addressId: 'addr-1', deliveryAddress: undefined }));
+
+    expect(result.isSuccess).toBe(true);
+    expect(result.getValue().deliveryAddress.pinCode).toBe('560025');
+    expect(result.getValue().deliveryAddress.street).toBe('42 Residency Road');
+  });
+
+  it('ignores a client-supplied address when addressId is also present', async () => {
+    const { resolver } = makeAddressResolver([
+      { customerId: 'cust-1', addressId: 'addr-1', address: SAVED_ADDRESS },
+    ]);
+    const h = buildHarness({ addressResolver: resolver });
+
+    const result = await h.useCase.execute(dto({ addressId: 'addr-1' }));
+
+    expect(result.isSuccess).toBe(true);
+    expect(result.getValue().deliveryAddress.pinCode).toBe('560025');
+  });
+
+  it('fails with NotFoundError when the addressId belongs to another customer', async () => {
+    const { resolver } = makeAddressResolver([
+      { customerId: 'someone-else', addressId: 'addr-1', address: SAVED_ADDRESS },
+    ]);
+    const h = buildHarness({ addressResolver: resolver });
+
+    const result = await h.useCase.execute(dto({ addressId: 'addr-1', deliveryAddress: undefined }));
+
+    expect(result.isFailure).toBe(true);
+    expect(result.getError()).toBeInstanceOf(NotFoundError);
+    expect(h.orderRepo.saved).toHaveLength(0);
+  });
+
+  it('fails when neither addressId nor an inline address is supplied', async () => {
+    const h = buildHarness();
+
+    const result = await h.useCase.execute(dto({ deliveryAddress: undefined }));
+
+    expect(result.isFailure).toBe(true);
+    expect(result.getError()).toBeInstanceOf(ValidationError);
   });
 });
 

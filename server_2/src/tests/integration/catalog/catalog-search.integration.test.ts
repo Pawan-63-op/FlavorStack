@@ -9,6 +9,8 @@ import { WEEKDAY } from '../../../domain/catalog/enums/weekday.enum';
 import { TransactionContext } from '../../../infrastructure/database/TransactionContext';
 import { MongoRestaurantRepository } from '../../../infrastructure/repositories/RestaurantRepository';
 import { MongoMenuItemRepository } from '../../../infrastructure/repositories/MenuItemRepository';
+import { MongoDeliveryZoneRepository } from '../../../infrastructure/repositories/DeliveryZoneRepository';
+import { MongoCatalogQueryRepository } from '../../../infrastructure/repositories/CatalogQueryRepository';
 import { MongoSearchService } from '../../../infrastructure/search/MongoSearchService';
 import { CatalogProjectionWriter } from '../../../infrastructure/database/projections/CatalogProjectionWriter';
 import { RestaurantModel } from '../../../infrastructure/database/models/RestaurantModel';
@@ -45,6 +47,8 @@ describe('Catalog search & discovery (MongoSearchService)', () => {
   let restaurantRepo: MongoRestaurantRepository;
   let menuItemRepo: MongoMenuItemRepository;
   let searchService: MongoSearchService;
+  let deliveryZoneRepo: MongoDeliveryZoneRepository;
+  let queryRepo: MongoCatalogQueryRepository;
   let projector: CatalogProjector;
   let bus: InMemoryEventBus;
 
@@ -57,6 +61,8 @@ describe('Catalog search & discovery (MongoSearchService)', () => {
     txContext = new TransactionContext();
     restaurantRepo = new MongoRestaurantRepository(txContext);
     menuItemRepo = new MongoMenuItemRepository(txContext);
+    deliveryZoneRepo = new MongoDeliveryZoneRepository(txContext);
+    queryRepo = new MongoCatalogQueryRepository();
     searchService = new MongoSearchService();
     projector = new CatalogProjector(restaurantRepo, menuItemRepo, new CatalogProjectionWriter());
     bus = new InMemoryEventBus();
@@ -333,7 +339,7 @@ describe('Catalog search & discovery (MongoSearchService)', () => {
       await seed({ name: 'Near B', centerLat: 19.01, centerLng: 73.0 });
       await seed({ name: 'Far Away', centerLat: 20.0, centerLng: 73.0 });
 
-      const result = await new GetNearbyRestaurants(searchService).execute({
+      const result = await new GetNearbyRestaurants(searchService, deliveryZoneRepo, queryRepo).execute({
         lat: 19.0,
         lng: 73.0,
         radiusMeters: 5000,
@@ -348,7 +354,7 @@ describe('Catalog search & discovery (MongoSearchService)', () => {
       await seed({ name: 'Near Public', centerLat: 19.0, centerLng: 73.0 });
       await seed({ name: 'Near Hidden', visibility: CATALOG_VISIBILITY.HIDDEN, centerLat: 19.0, centerLng: 73.0 });
 
-      const result = await new GetNearbyRestaurants(searchService).execute({
+      const result = await new GetNearbyRestaurants(searchService, deliveryZoneRepo, queryRepo).execute({
         lat: 19.0,
         lng: 73.0,
         radiusMeters: 5000,
@@ -362,7 +368,7 @@ describe('Catalog search & discovery (MongoSearchService)', () => {
       await seed({ name: 'Near Italian', cuisineTypes: ['ITALIAN'], centerLat: 19.0, centerLng: 73.0 });
       await seed({ name: 'Near Indian', cuisineTypes: ['NORTH_INDIAN'], centerLat: 19.001, centerLng: 73.0 });
 
-      const result = await new GetNearbyRestaurants(searchService).execute({
+      const result = await new GetNearbyRestaurants(searchService, deliveryZoneRepo, queryRepo).execute({
         lat: 19.0,
         lng: 73.0,
         radiusMeters: 5000,
@@ -374,7 +380,7 @@ describe('Catalog search & discovery (MongoSearchService)', () => {
     });
 
     it('rejects invalid coordinates', async () => {
-      const result = await new GetNearbyRestaurants(searchService).execute({
+      const result = await new GetNearbyRestaurants(searchService, deliveryZoneRepo, queryRepo).execute({
         lat: 999,
         lng: 73.0,
         radiusMeters: 5000,

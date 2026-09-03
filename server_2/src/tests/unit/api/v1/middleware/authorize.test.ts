@@ -27,38 +27,110 @@ const ADMIN_INPUT = {
 };
 
 describe('requireRole middleware', () => {
-  it('calls next() when req.user.role is in the allowed set', () => {
-    const req = mockReq({ userId: 'u1', role: USER_ROLE.ADMIN, sessionId: 's1', jti: 'j1', tokenVersion: 0 });
-    const res = mockRes();
+  let userRepository: InMemoryUserRepository;
+
+  beforeEach(() => {
+    userRepository = new InMemoryUserRepository();
+  });
+
+  function deps() {
+    return { userRepository, rbacService: new RbacService() };
+  }
+
+  async function seedAdmin(overrides: Partial<typeof ADMIN_INPUT> = {}): Promise<Admin> {
+    const admin = Admin.createSuperAdmin({ ...ADMIN_INPUT, ...overrides });
+    admin.pullDomainEvents();
+    await userRepository.save(admin);
+    return admin;
+  }
+
+  async function seedCustomer(email = 'customer@example.com'): Promise<Customer> {
+    const customer = Customer.create({
+      name: 'Test User',
+      email,
+      phone: '+919876543210',
+      passwordHash: 'hashed:Password1!',
+      referralCode: 'REF00001',
+    });
+    customer.pullDomainEvents();
+    await userRepository.save(customer);
+    return customer;
+  }
+
+  it('calls next() when req.user.role is in the allowed set and the actor is live', async () => {
+    const admin = await seedAdmin();
+    const req = mockReq({ userId: admin._id, role: USER_ROLE.ADMIN, sessionId: 's1', jti: 'j1', tokenVersion: admin.tokenVersion });
     const next = jest.fn();
 
-    requireRole(USER_ROLE.ADMIN)(req, res, next as NextFunction);
+    await requireRole(deps(), USER_ROLE.ADMIN)(req, mockRes(), next as NextFunction);
 
     expect(next).toHaveBeenCalledWith();
   });
 
-  it('calls next with ForbiddenError("invalid_token") when req.user is missing', () => {
+  it('calls next with ForbiddenError("invalid_token") when req.user is missing', async () => {
     const req = mockReq(undefined);
-    const res = mockRes();
     const next = jest.fn();
 
-    requireRole(USER_ROLE.ADMIN)(req, res, next as NextFunction);
+    await requireRole(deps(), USER_ROLE.ADMIN)(req, mockRes(), next as NextFunction);
 
     expect(next).toHaveBeenCalledWith(expect.any(ForbiddenError));
     expect((next.mock.calls[0][0] as ForbiddenError).message).toBe('invalid_token');
   });
 
-  it('calls next with a 403 ForbiddenError when the role is not allowed', () => {
-    const req = mockReq({ userId: 'u1', role: USER_ROLE.CUSTOMER, sessionId: 's1', jti: 'j1', tokenVersion: 0 });
-    const res = mockRes();
+  it('denies a CUSTOMER on a DRIVER route with "insufficient_role" naming the required role', async () => {
+    const customer = await seedCustomer();
+    const req = mockReq({ userId: customer._id, role: USER_ROLE.CUSTOMER, sessionId: 's1', jti: 'j1', tokenVersion: 0 });
     const next = jest.fn();
 
-    requireRole(USER_ROLE.ADMIN)(req, res, next as NextFunction);
+    await requireRole(deps(), USER_ROLE.DRIVER)(req, mockRes(), next as NextFunction);
 
     expect(next).toHaveBeenCalledWith(expect.any(ForbiddenError));
     const err = next.mock.calls[0][0] as ForbiddenError;
     expect(err.code).toBe('FORBIDDEN');
-    expect(err.message).toBe('actor_not_admin');
+    expect(err.message).toContain('insufficient_role');
+    expect(err.message).toContain(USER_ROLE.DRIVER);
+    expect(err.message).not.toBe('actor_not_admin');
+  });
+
+  it('denies a banned actor holding a valid token with "account_locked_or_banned"', async () => {
+    const admin = Admin.createSuperAdmin({ ...ADMIN_INPUT, email: 'banned-role@example.com' });
+    admin.pullDomainEvents();
+    const tokenVersion = admin.tokenVersion;
+    admin.ban('policy violation');
+    admin.pullDomainEvents();
+    await userRepository.save(admin);
+
+    const req = mockReq({ userId: admin._id, role: USER_ROLE.ADMIN, sessionId: 's1', jti: 'j1', tokenVersion });
+    const next = jest.fn();
+
+    await requireRole(deps(), USER_ROLE.ADMIN)(req, mockRes(), next as NextFunction);
+
+    expect((next.mock.calls[0][0] as ForbiddenError).message).toBe('account_locked_or_banned');
+  });
+
+  it('denies an actor that no longer exists with "account_locked_or_banned"', async () => {
+    const req = mockReq({ userId: 'missing-user', role: USER_ROLE.ADMIN, sessionId: 's1', jti: 'j1', tokenVersion: 0 });
+    const next = jest.fn();
+
+    await requireRole(deps(), USER_ROLE.ADMIN)(req, mockRes(), next as NextFunction);
+
+    expect((next.mock.calls[0][0] as ForbiddenError).message).toBe('account_locked_or_banned');
+  });
+
+  it('denies a stale tokenVersion with "token_version_mismatch" (mapped to 401)', async () => {
+    const admin = await seedAdmin({ email: 'stale@example.com' });
+    const req = mockReq({
+      userId: admin._id,
+      role: USER_ROLE.ADMIN,
+      sessionId: 's1',
+      jti: 'j1',
+      tokenVersion: admin.tokenVersion - 1,
+    });
+    const next = jest.fn();
+
+    await requireRole(deps(), USER_ROLE.ADMIN)(req, mockRes(), next as NextFunction);
+
+    expect((next.mock.calls[0][0] as ForbiddenError).message).toBe('token_version_mismatch');
   });
 });
 

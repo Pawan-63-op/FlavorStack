@@ -28,7 +28,6 @@ import { useCart } from "@/lib/api/hooks/useCart";
 import { usePlaceOrder, usePreviewCheckout } from "@/lib/api/hooks/useCheckout";
 import { PAYMENT_METHODS, type FeeType, type PaymentMethod } from "@/lib/api/adapters/checkout";
 import { ApiError } from "@/lib/api/errors/ApiError";
-import { toDeliveryAddress } from "@/lib/address/toDeliveryAddress";
 import { useAddressStore } from "@/store/addressStore";
 import { useHydrateAddresses } from "@/lib/api/hooks/useHydrateAddresses";
 import { useAuthStore } from "@/store/authStore";
@@ -87,10 +86,9 @@ export function Checkout() {
   // retried network call) replays the same logical order instead of duplicating.
   const [idempotencyKey] = useState(() => crypto.randomUUID());
 
-  const deliveryPoint = selectedAddress
-    ? { lat: selectedAddress.lat, lng: selectedAddress.lng }
-    : null;
-  const previewQuery = usePreviewCheckout(deliveryPoint);
+  // The server resolves the address (and its coordinates) from the customer's saved
+  // address book, so preview and checkout price the same point.
+  const previewQuery = usePreviewCheckout(selectedAddress ? selectedAddress.id : null);
   const preview = previewQuery.data;
 
   const placeOrder = usePlaceOrder();
@@ -118,7 +116,7 @@ export function Checkout() {
     try {
       const result = await placeOrder.mutateAsync({
         paymentMethod,
-        deliveryAddress: toDeliveryAddress(selectedAddress),
+        addressId: selectedAddress.id,
         idempotencyKey,
       });
       toast.success("Order placed successfully!");

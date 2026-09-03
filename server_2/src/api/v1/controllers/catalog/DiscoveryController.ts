@@ -5,6 +5,7 @@ import { GetRestaurantMenu } from '../../../../application/catalog/use-cases/Get
 import { GetMenuItem } from '../../../../application/catalog/use-cases/GetMenuItem';
 import { GetItemsSnapshot } from '../../../../application/catalog/use-cases/GetItemsSnapshot';
 import { CheckServiceability } from '../../../../application/catalog/use-cases/CheckServiceability';
+import { ListDeliverableRestaurants } from '../../../../application/catalog/use-cases/ListDeliverableRestaurants';
 import { SearchRestaurants } from '../../../../application/catalog/use-cases/SearchRestaurants';
 import { SearchMenuItems } from '../../../../application/catalog/use-cases/SearchMenuItems';
 import { GetNearbyRestaurants } from '../../../../application/catalog/use-cases/GetNearbyRestaurants';
@@ -18,6 +19,7 @@ export interface DiscoveryControllerDeps {
   getMenuItem: GetMenuItem;
   getItemsSnapshot: GetItemsSnapshot;
   checkServiceability: CheckServiceability;
+  listDeliverableRestaurants: ListDeliverableRestaurants;
   searchRestaurants: SearchRestaurants;
   searchMenuItems: SearchMenuItems;
   getNearbyRestaurants: GetNearbyRestaurants;
@@ -33,6 +35,9 @@ export class DiscoveryController {
       isOpen: q.isOpen as boolean | undefined,
       cursor: q.cursor as string | undefined,
       limit: q.limit as number | undefined,
+      deliverableOnly: q.deliverableOnly as boolean | undefined,
+      lat: q.lat as number | undefined,
+      lng: q.lng as number | undefined,
     });
     if (result.isFailure) return next(result.getError());
     res.status(200).json(result.getValue());
@@ -100,6 +105,7 @@ export class DiscoveryController {
       isOpenNow: q.isOpenNow as boolean | undefined,
       cursor: q.cursor as string | undefined,
       limit: q.limit as number | undefined,
+      deliverableOnly: q.deliverableOnly as boolean | undefined,
     });
     if (result.isFailure) return next(result.getError());
     res.status(200).json(result.getValue());
@@ -112,6 +118,20 @@ export class DiscoveryController {
       lng: q.lng as number,
       subtotalAmount: q.subtotalAmount as number | undefined,
       currency: q.currency as string | undefined,
+    });
+    if (result.isFailure) return next(result.getError());
+    res.status(200).json(result.getValue());
+  };
+
+  /**
+   * "Who delivers to this point?" — the reachability half of serviceability, without
+   * the fee computation `/serviceability` performs. Used to filter browse client-side.
+   */
+  deliverable = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const q = req.query as Record<string, unknown>;
+    const result = await this.deps.listDeliverableRestaurants.execute({
+      lat: q.lat as number,
+      lng: q.lng as number,
     });
     if (result.isFailure) return next(result.getError());
     res.status(200).json(result.getValue());

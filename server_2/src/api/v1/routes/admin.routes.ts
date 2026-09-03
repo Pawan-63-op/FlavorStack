@@ -21,7 +21,7 @@ export function createAdminRoutes(deps: AdminRoutesDeps): Router {
   const router = Router();
   const c = deps.controller;
   const auth = authenticate(deps.tokenService);
-  const requireAdmin = requireRole(USER_ROLE.ADMIN);
+  const requireAdmin = requireRole(deps.permissionDeps, USER_ROLE.ADMIN);
   const requireUserUpdate = requirePermission(deps.permissionDeps, PERMISSION_RESOURCE.USER, PERMISSION_ACTION.UPDATE);
   const requireUserRead = requirePermission(deps.permissionDeps, PERMISSION_RESOURCE.USER, PERMISSION_ACTION.READ);
 

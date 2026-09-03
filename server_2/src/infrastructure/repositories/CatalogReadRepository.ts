@@ -4,6 +4,8 @@ import {
 } from '../../domain/catalog/repositories/ICatalogReadRepository';
 import { CursorPage, CursorPaginationParams } from '../../domain/catalog/types/CursorPagination';
 import {
+  MenuItemDetailView,
+  MenuItemVariantGroupView,
   MenuItemView,
   RestaurantMenuView,
   RestaurantMenuCategoryView,
@@ -15,7 +17,7 @@ import { RestaurantStatus } from '../../domain/catalog/enums/restaurant-status.e
 import { RESTAURANT_STATUS } from '../../domain/catalog/enums/restaurant-status.enum';
 import { CATALOG_VISIBILITY } from '../../domain/catalog/enums/catalog-visibility.enum';
 import { ICatalogQueryRepository } from '../../domain/catalog/repositories/ICatalogQueryRepository';
-import { CatalogQueryMenuItem } from '../../domain/catalog/types/QueryModels';
+import { CatalogQueryMenuItem, CatalogQueryVariantGroup } from '../../domain/catalog/types/QueryModels';
 import { RestaurantSummaryModel, RestaurantSummaryDocument } from '../database/models/RestaurantSummaryModel';
 import { MenuItemSearchModel, MenuItemSearchDocument } from '../database/models/MenuItemSearchModel';
 import { deriveIsOpen } from '../database/projections/openState';
@@ -79,13 +81,17 @@ export class MongoCatalogReadRepository implements ICatalogReadRepository {
     params: CursorPaginationParams
   ): Promise<CursorPage<RestaurantSummaryView>> {
     const limit = normalizeLimit(params.limit);
+    if (filter.restaurantIds && filter.restaurantIds.length === 0) return { items: [] };
+
     const query: Record<string, unknown> = { ...PUBLIC_RESTAURANT_FILTER };
     if (filter.cuisineTypes && filter.cuisineTypes.length > 0) {
       query.cuisineTypes = { $in: filter.cuisineTypes };
     }
-    if (params.cursor) {
-      query._id = { $gt: params.cursor };
-    }
+    // The id restriction and the cursor share the `_id` operator object, so they are
+    // merged rather than assigned — assigning would silently drop one of them.
+    const idFilter: Record<string, unknown> = filter.restaurantIds
+      ? { $in: filter.restaurantIds }
+      : {};
 
     const now = new Date();
     const wantsOpenFilter = filter.isOpen !== undefined;
@@ -95,7 +101,8 @@ export class MongoCatalogReadRepository implements ICatalogReadRepository {
 
     while (items.length <= limit && !exhausted) {
       const pageQuery: Record<string, unknown> = { ...query };
-      if (cursor) pageQuery._id = { $gt: cursor };
+      const idQuery = { ...idFilter, ...(cursor ? { $gt: cursor } : {}) };
+      if (Object.keys(idQuery).length > 0) pageQuery._id = idQuery;
 
       const docs = await RestaurantSummaryModel.find(pageQuery)
         .sort({ _id: 1 })
@@ -200,10 +207,43 @@ export class MongoCatalogReadRepository implements ICatalogReadRepository {
       tags: item.tags,
       dietary: item.dietary as DietaryTag[],
       isAvailable: item.isAvailable && restaurantOpen,
+      hasVariants: item.variantGroups.length > 0,
     };
   }
 
-  async getMenuItemView(itemId: string): Promise<MenuItemView | null> {
+  /**
+   * `CatalogQueryVariantGroup` carries `priceDelta` as a `{amount, currency}` pair;
+   * the read model flattens it the way it flattens `basePrice`, so a client sees one
+   * currency convention across the whole item.
+   */
+  private toVariantGroupViews(groups: CatalogQueryVariantGroup[]): MenuItemVariantGroupView[] {
+    return groups.map((group) => ({
+      id: group.id,
+      label: group.label,
+      selectionType: group.selectionType,
+      required: group.required,
+      minSelect: group.minSelect,
+      maxSelect: group.maxSelect,
+      options: group.options.map((option) => ({
+        id: option.id,
+        label: option.label,
+        priceDeltaAmount: option.priceDelta.amount,
+        currency: option.priceDelta.currency,
+        isDefault: option.isDefault,
+        isAvailable: option.isAvailable,
+      })),
+    }));
+  }
+
+  /**
+   * The publish gate and open-state derivation stay on the `menu_item_search`
+   * projection (unchanged), but variant groups are not projected — they are read from
+   * the catalog source of truth, the same place `getRestaurantMenu` reads items from.
+   * The customer picker needs option ids and price deltas that are correct *now*, and
+   * a stale projected option would be rejected by `CheckoutContextAssembler.resolveOptions`
+   * at checkout anyway.
+   */
+  async getMenuItemView(itemId: string): Promise<MenuItemDetailView | null> {
     const doc = await MenuItemSearchModel.findOne({
       _id: itemId,
       restaurantVisibility: CATALOG_VISIBILITY.PUBLIC,
@@ -220,7 +260,12 @@ export class MongoCatalogReadRepository implements ICatalogReadRepository {
         )
       : false;
 
-    return this.searchDocToView(doc, doc.isAvailable && restaurantOpen);
+    const [sourceItem] = await this.queryRepo.findMenuItemsByIds([itemId]);
+    return {
+      ...this.searchDocToView(doc, doc.isAvailable && restaurantOpen),
+      hasVariants: (sourceItem?.variantGroups.length ?? 0) > 0,
+      variantGroups: this.toVariantGroupViews(sourceItem?.variantGroups ?? []),
+    };
   }
 
   async getItemsSnapshot(itemIds: string[]): Promise<MenuItemView[]> {
@@ -245,6 +290,7 @@ export class MongoCatalogReadRepository implements ICatalogReadRepository {
       tags: doc.tags,
       dietary: doc.dietary as DietaryTag[],
       isAvailable,
+      hasVariants: doc.hasVariants ?? false,
     };
   }
 }

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { IdentityController } from '../controllers/IdentityController';
 import { authenticate } from '../middleware/authenticate';
-import { requireRole } from '../middleware/authorize';
+import { requireRole, PermissionDeps } from '../middleware/authorize';
 import { audit } from '../middleware/audit';
 import { validate } from '../middleware/validate';
 import { ITokenService } from '../../../domain/identity/services/ITokenService';
@@ -11,6 +11,7 @@ import { updateMeSchema, setAvailabilitySchema, addressBodySchema } from '../val
 export interface UserRoutesDeps {
   controller: IdentityController;
   tokenService: ITokenService;
+  permissionDeps: PermissionDeps;
 }
 
 export function createUserRoutes(deps: UserRoutesDeps): Router {
@@ -25,13 +26,13 @@ export function createUserRoutes(deps: UserRoutesDeps): Router {
   router.patch(
     '/me/availability',
     auth,
-    requireRole(USER_ROLE.DRIVER),
+    requireRole(deps.permissionDeps, USER_ROLE.DRIVER),
     audit('identity.set-availability'),
     validate(setAvailabilitySchema),
     c.setAvailability,
   );
 
-  const customerOnly = requireRole(USER_ROLE.CUSTOMER);
+  const customerOnly = requireRole(deps.permissionDeps, USER_ROLE.CUSTOMER);
 
   router.get('/me/addresses', auth, customerOnly, c.listAddresses);
 

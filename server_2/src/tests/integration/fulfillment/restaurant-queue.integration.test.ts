@@ -94,7 +94,7 @@ describe('Restaurant fulfillment queue (GET /restaurants/:restaurantId/fulfillme
     createFulfillment = new CreateFulfillment(repo, uow, bus);
     const restaurantDirectory = makeStubRestaurantDirectory(RESTAURANT_ID, OWNER_ID);
     markPreparing = new MarkPreparing(repo, restaurantDirectory, uow, bus);
-    cancelFulfillment = new CancelFulfillment(repo, uow, bus);
+    cancelFulfillment = new CancelFulfillment(repo, restaurantDirectory, uow, bus);
     getRestaurantFulfillments = new GetRestaurantFulfillments(repo);
 
     const onOrderRequested = new OnOrderRequested(createFulfillment);

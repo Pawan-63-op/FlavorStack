@@ -1,6 +1,9 @@
 import { Cart } from '../../domain/commerce/entities/Cart';
 import { ICartRepository } from '../../domain/commerce/repositories/ICartRepository';
 import { ConflictError } from '../../domain/shared/errors/ConflictError';
+import { Address } from '../../domain/identity/value-objects/Address.vo';
+import { ICustomerAddressDirectory } from '../../application/commerce/ports/ICustomerAddressDirectory';
+import { DeliveryAddressResolver } from '../../application/commerce/services/DeliveryAddressResolver';
 
 /**
  * In-memory ICartRepository for unit tests. Mirrors MongoCartRepository's
@@ -58,4 +61,32 @@ export class InMemoryCartRepository implements ICartRepository {
     this.byId.delete(id);
     this.storedVersion.delete(id);
   }
+}
+
+/**
+ * In-memory `ICustomerAddressDirectory` for unit tests. Seeded with
+ * `customerId → addressId → Address`, so a lookup for the wrong customer resolves
+ * `null` exactly as the real directory does.
+ */
+export class InMemoryCustomerAddressDirectory implements ICustomerAddressDirectory {
+  private byCustomer = new Map<string, Map<string, Address>>();
+
+  seed(customerId: string, addressId: string, address: Address): void {
+    const forCustomer = this.byCustomer.get(customerId) ?? new Map<string, Address>();
+    forCustomer.set(addressId, address);
+    this.byCustomer.set(customerId, forCustomer);
+  }
+
+  async getAddress(customerId: string, addressId: string): Promise<Address | null> {
+    return this.byCustomer.get(customerId)?.get(addressId) ?? null;
+  }
+}
+
+/** A `DeliveryAddressResolver` over a directory holding `addressId → address` for one customer. */
+export function makeAddressResolver(
+  seeds: Array<{ customerId: string; addressId: string; address: Address }> = []
+): { resolver: DeliveryAddressResolver; directory: InMemoryCustomerAddressDirectory } {
+  const directory = new InMemoryCustomerAddressDirectory();
+  for (const seed of seeds) directory.seed(seed.customerId, seed.addressId, seed.address);
+  return { resolver: new DeliveryAddressResolver(directory), directory };
 }

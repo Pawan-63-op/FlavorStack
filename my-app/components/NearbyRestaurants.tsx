@@ -93,8 +93,11 @@ function NearbyResults({
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-  } = useNearbyRestaurants({ lat, lng, radiusMeters });
+  } = useNearbyRestaurants({ lat, lng, radiusMeters, deliverableOnly: true });
 
+  // `deliverableOnly` is applied by the server, not here: a restaurant can be 800m away
+  // and still not deliver to this point (its zone is a polygon, not a circle), and
+  // filtering the returned page in the client would shrink pages and break the cursor.
   const restaurants = data?.pages.flatMap((page) => page.items) ?? [];
 
   if (isLoading) {
@@ -125,7 +128,7 @@ function NearbyResults({
     return (
       <Card className="border-2 border-dashed">
         <CardContent className="py-8 text-center text-muted-foreground">
-          No restaurants found within this radius. Try widening it.
+          No restaurants delivering to you within this radius. Try widening it.
         </CardContent>
       </Card>
     );

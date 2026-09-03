@@ -1,5 +1,8 @@
 import { type APIRequestContext } from "@playwright/test";
 
+const SEED_LAT = 12.9716;
+const SEED_LNG = 77.5946;
+
 export interface SeededRestaurant {
   id: string;
   name: string;
@@ -7,8 +10,8 @@ export interface SeededRestaurant {
 }
 
 /**
- * Seeds one published (ACTIVE + PUBLIC) restaurant with a category and an
- * available menu item, via the same public catalog write API a restaurant
+ * Seeds one published (ACTIVE + PUBLIC) restaurant with a category, an available
+ * menu item and a delivery zone, via the same public catalog write API a restaurant
  * owner would use. server_2 has no `RESTAURANT_OWNER` role — any authenticated
  * user owns whatever restaurant they create (ownership is enforced via
  * `restaurant.ownerId`, not a role check) — so this registers a disposable
@@ -86,6 +89,27 @@ export async function seedRestaurant(
       description: "Classic",
       basePrice: { amount: 29999, currency: "INR" },
       dietary: ["VEG"],
+    },
+  });
+
+  // A delivery zone covering the seed point. Without one the restaurant is published but
+  // undeliverable, and surfaces that filter on serviceability — "Near You", and browse
+  // with `deliverableOnly` — correctly hide it. A real restaurant always has a zone.
+  const half = 0.05;
+  await request.post(`/api/v1/catalog/restaurants/${restaurant.id}/zones`, {
+    headers,
+    data: {
+      action: "ADD",
+      polygon: [
+        { lat: SEED_LAT - half, lng: SEED_LNG - half },
+        { lat: SEED_LAT - half, lng: SEED_LNG + half },
+        { lat: SEED_LAT + half, lng: SEED_LNG + half },
+        { lat: SEED_LAT + half, lng: SEED_LNG - half },
+      ],
+      feeMatrix: {
+        tiers: [{ maxDistanceMeters: 50000, fee: { amount: 4000, currency: "INR" } }],
+      },
+      minOrder: { amount: 10000, currency: "INR" },
     },
   });
 

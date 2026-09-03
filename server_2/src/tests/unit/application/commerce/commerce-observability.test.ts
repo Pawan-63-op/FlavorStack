@@ -30,6 +30,7 @@ import { PAYMENT_METHOD } from '../../../../domain/commerce/enums/payment-method
 import { CartMenuItemView } from '../../../../domain/commerce/types/CatalogGatewayRead';
 import { CheckoutRequestDto } from '../../../../application/commerce/dtos/CheckoutRequestDto';
 import { IdempotencyKey } from '../../../../domain/commerce/value-objects/IdempotencyKey';
+import { makeAddressResolver } from '../../../mocks/commerce.mocks';
 
 const money = (amount: number) => Money.create(amount, 'INR').getValue();
 
@@ -155,6 +156,7 @@ describe('Checkout observability', () => {
       cartRepo(opts.cart === undefined ? buildCart() : opts.cart),
       orderRepo(opts.existing ?? null),
       assembler,
+      makeAddressResolver().resolver,
       new PricingCalculator(),
       uow,
       outbox,

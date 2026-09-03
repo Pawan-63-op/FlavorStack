@@ -33,6 +33,7 @@ import {
   searchMenuItemsQuery,
   nearbyQuery,
   serviceabilityQuery,
+  deliverableQuery,
   itemsSnapshotQuery,
 } from '../../validators/catalog/discovery.catalog.validator';
 
@@ -61,7 +62,8 @@ export function createCatalogRoutes(deps: CatalogRoutesDeps): Router {
   router.get('/search/restaurants', search, validate(searchRestaurantsQuery, 'query'), d.searchRestaurants);
   router.get('/search/items', search, validate(searchMenuItemsQuery, 'query'), d.searchItems);
   router.get('/nearby', search, validate(nearbyQuery, 'query'), d.nearby);
-  router.get('/serviceability', validate(serviceabilityQuery, 'query'), d.serviceability);
+  router.get('/serviceability', search, validate(serviceabilityQuery, 'query'), d.serviceability);
+  router.get('/deliverable', search, validate(deliverableQuery, 'query'), d.deliverable);
   router.get('/items/snapshot', validate(itemsSnapshotQuery, 'query'), d.itemsSnapshot);
   router.get('/items/:id', validate(itemIdParam, 'params'), d.getItem);
   router.get('/restaurants/:id', validate(restaurantIdParam, 'params'), d.getOne);

@@ -1,5 +1,6 @@
 import { IRestaurantDirectory } from '../../application/fulfillment/ports/IRestaurantDirectory';
 import { IRestaurantRepository } from '../../domain/catalog/repositories/IRestaurantRepository';
+import { GeoPoint } from '../../domain/identity/value-objects/GeoPoint.vo';
 
 export class CatalogRestaurantDirectory implements IRestaurantDirectory {
   constructor(private readonly restaurantRepo: IRestaurantRepository) {}
@@ -7,6 +8,11 @@ export class CatalogRestaurantDirectory implements IRestaurantDirectory {
   async getOwnerId(restaurantId: string): Promise<string | null> {
     const restaurant = await this.restaurantRepo.findById(restaurantId);
     return restaurant ? restaurant.ownerId : null;
+  }
+
+  async getLocation(restaurantId: string): Promise<GeoPoint | null> {
+    const restaurant = await this.restaurantRepo.findById(restaurantId);
+    return restaurant ? restaurant.location : null;
   }
 
   async listRestaurantIdsByOwner(ownerId: string): Promise<string[]> {

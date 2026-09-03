@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   useGuestCartStore,
   guestCartRestaurantId,
+  guestLineKey,
   type GuestCartLine,
 } from "./guestCartStore";
 
@@ -83,5 +84,60 @@ describe("guestCartStore", () => {
   it("guestCartRestaurantId returns the buffer's restaurant or null", () => {
     expect(guestCartRestaurantId([])).toBeNull();
     expect(guestCartRestaurantId([line()])).toBe("r1");
+  });
+});
+
+/**
+ * Variant lines (Phase 10-4.3). The server cart keys a line on menu item + option set
+ * (`LineItemSelection.hasSameSelection`); the guest buffer must agree, or replaying it
+ * on login would collapse two different configurations into one.
+ */
+describe("guestCartStore variant lines", () => {
+  beforeEach(() => {
+    useGuestCartStore.setState({ lines: [] });
+    localStorage.clear();
+  });
+
+  it("keys a line on menu item + option set, order-insensitively", () => {
+    expect(guestLineKey({ menuItemId: "m1", selectedOptionIds: [] })).toBe("m1");
+    expect(guestLineKey({ menuItemId: "m1" })).toBe("m1");
+    expect(guestLineKey({ menuItemId: "m1", selectedOptionIds: ["b", "a"] })).toBe(
+      guestLineKey({ menuItemId: "m1", selectedOptionIds: ["a", "b"] }),
+    );
+    expect(guestLineKey({ menuItemId: "m1", selectedOptionIds: ["a"] })).not.toBe("m1");
+  });
+
+  it("keeps two option sets of the same item as separate lines", () => {
+    const add = useGuestCartStore.getState().addLine;
+    add(line({ selectedOptionIds: ["small"], quantity: 1 }));
+    add(line({ selectedOptionIds: ["large"], quantity: 2 }));
+
+    const lines = useGuestCartStore.getState().lines;
+    expect(lines).toHaveLength(2);
+    expect(useGuestCartStore.getState().getCount()).toBe(3);
+  });
+
+  it("merges quantity only when the option set matches", () => {
+    const add = useGuestCartStore.getState().addLine;
+    add(line({ selectedOptionIds: ["a", "b"], quantity: 1 }));
+    add(line({ selectedOptionIds: ["b", "a"], quantity: 2 }));
+
+    const lines = useGuestCartStore.getState().lines;
+    expect(lines).toHaveLength(1);
+    expect(lines[0].quantity).toBe(3);
+  });
+
+  it("removes only the addressed variant line", () => {
+    const add = useGuestCartStore.getState().addLine;
+    add(line({ selectedOptionIds: ["small"] }));
+    add(line({ selectedOptionIds: ["large"] }));
+
+    useGuestCartStore.getState().removeLine(
+      guestLineKey({ menuItemId: "m1", selectedOptionIds: ["small"] }),
+    );
+
+    const lines = useGuestCartStore.getState().lines;
+    expect(lines).toHaveLength(1);
+    expect(lines[0].selectedOptionIds).toEqual(["large"]);
   });
 });

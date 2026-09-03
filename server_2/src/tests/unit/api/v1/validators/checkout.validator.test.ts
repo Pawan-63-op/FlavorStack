@@ -27,8 +27,18 @@ describe('checkout.validator', () => {
       expect(result.success).toBe(false);
     });
 
-    it('rejects a missing delivery address', () => {
+    it('accepts addressId instead of an inline delivery address', () => {
+      const result = checkoutSchema.safeParse({ paymentMethod: 'UPI', addressId: 'addr-1' });
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects a body with neither addressId nor a delivery address', () => {
       const result = checkoutSchema.safeParse({ paymentMethod: 'UPI' });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects a blank addressId', () => {
+      const result = checkoutSchema.safeParse({ paymentMethod: 'UPI', addressId: '   ' });
       expect(result.success).toBe(false);
     });
 
@@ -55,7 +65,12 @@ describe('checkout.validator', () => {
       expect(result.success).toBe(true);
     });
 
-    it('rejects a missing delivery point', () => {
+    it('accepts addressId instead of a delivery point', () => {
+      const result = previewCheckoutSchema.safeParse({ addressId: 'addr-1' });
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects a body with neither addressId nor a delivery point', () => {
       const result = previewCheckoutSchema.safeParse({});
       expect(result.success).toBe(false);
     });

@@ -21,13 +21,18 @@ import { OutboxEventModel } from '../../../infrastructure/database/models/Outbox
 import { createEventBusSpy, EventBusSpy, countPublished } from '../../mocks/shared.mocks';
 
 import { AcceptDelivery } from '../../../application/fulfillment/use-cases/AcceptDelivery';
-import { OfferRiderAssignment } from '../../../application/fulfillment/use-cases/OfferRiderAssignment';
+import { AssignRider } from '../../../application/fulfillment/use-cases/AssignRider';
 import { CancelFulfillment } from '../../../application/fulfillment/use-cases/CancelFulfillment';
+import { makeStubRestaurantDirectory } from '../../mocks/fulfillment.mocks';
 import { HandleAssignmentTimeout } from '../../../application/fulfillment/use-cases/HandleAssignmentTimeout';
 import { HandleSlaTimeout } from '../../../application/fulfillment/use-cases/HandleSlaTimeout';
 
+/** Assignment-attempt cap, enforced by AssignRider/ReassignRider since Phase 10.4. */
+const MAX_ATTEMPTS = 3;
+
 const CUSTOMER_ID = 'cust-1';
 const RESTAURANT_ID = 'rest-1';
+const OWNER_ID = 'owner-1';
 const RIDER_1 = 'rider-1';
 const RIDER_2 = 'rider-2';
 
@@ -291,8 +296,8 @@ describe('Fulfillment concurrency hardening (Phase 9.3)', () => {
   describe('replay safety — assignment-timeout job (HandleAssignmentTimeout)', () => {
     function buildTimeoutHandler(): HandleAssignmentTimeout {
       const service = new SimpleDeliveryAssignmentService(async () => []);
-      const offer = new OfferRiderAssignment(repo, service, uow, bus, 60);
-      const cancel = new CancelFulfillment(repo, uow, bus);
+      const offer = new AssignRider(repo, service, uow, bus, 60, MAX_ATTEMPTS);
+      const cancel = new CancelFulfillment(repo, makeStubRestaurantDirectory(RESTAURANT_ID, OWNER_ID), uow, bus);
       return new HandleAssignmentTimeout(repo, uow, bus, offer, cancel, 1);
     }
 
@@ -345,7 +350,7 @@ describe('Fulfillment concurrency hardening (Phase 9.3)', () => {
   describe('replay safety — SLA-timeout job (HandleSlaTimeout)', () => {
     it('first run auto-cancels at the armed stage; a replay is a guarded no-op', async () => {
       const id = await seed([(f) => f.startPreparation(RESTAURANT_ID)]);
-      const cancel = new CancelFulfillment(repo, uow, bus);
+      const cancel = new CancelFulfillment(repo, makeStubRestaurantDirectory(RESTAURANT_ID, OWNER_ID), uow, bus);
       const handler = new HandleSlaTimeout(repo, cancel);
 
       const first = await handler.execute({ fulfillmentId: id, stage: FULFILLMENT_STATUS.PREPARING });
@@ -368,7 +373,7 @@ describe('Fulfillment concurrency hardening (Phase 9.3)', () => {
         (f) => f.markReadyForPickup(RESTAURANT_ID),
       ]);
       const baseVersion = await storedVersion(id);
-      const cancel = new CancelFulfillment(repo, uow, bus);
+      const cancel = new CancelFulfillment(repo, makeStubRestaurantDirectory(RESTAURANT_ID, OWNER_ID), uow, bus);
       const handler = new HandleSlaTimeout(repo, cancel);
 
       const result = await handler.execute({ fulfillmentId: id, stage: FULFILLMENT_STATUS.PREPARING });

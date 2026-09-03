@@ -1,11 +1,11 @@
 import {
   menuAdapter,
-  menuItemAdapter,
+  menuItemDetailAdapter,
   menuItemSearchAdapter,
-  type MenuItemResponse,
+  type MenuItemDetailResponse,
+  type MenuItemDetailViewModel,
   type MenuItemSearchResponse,
   type MenuItemSearchViewModel,
-  type MenuItemViewModel,
   type MenuViewModel,
   type RestaurantMenuResponse,
 } from "../adapters/menu";
@@ -24,6 +24,20 @@ export interface RestaurantListParams {
   limit?: number;
   cuisineTypes?: CuisineType[];
   isOpen?: boolean;
+  /** Server-side intersection with `/catalog/deliverable`; requires `lat`/`lng`. */
+  deliverableOnly?: boolean;
+  lat?: number;
+  lng?: number;
+}
+
+export interface DeliverablePointParams {
+  lat: number;
+  lng: number;
+}
+
+/** server_2 `DeliverableRestaurantsView` (`GET /catalog/deliverable`). */
+export interface DeliverableRestaurantsResponse {
+  restaurantIds: string[];
 }
 
 export interface SearchRestaurantsParams {
@@ -51,6 +65,8 @@ export interface NearbyParams {
   isOpenNow?: boolean;
   cursor?: string;
   limit?: number;
+  /** Server-side intersection with the delivery zones covering `lat`/`lng`. */
+  deliverableOnly?: boolean;
 }
 
 export interface ServiceabilityParams {
@@ -149,6 +165,9 @@ class CatalogService {
       limit: params.limit,
       cuisineTypes: params.cuisineTypes,
       isOpen: params.isOpen,
+      deliverableOnly: params.deliverableOnly,
+      lat: params.lat,
+      lng: params.lng,
     });
     const raw = await this.http.get<RawPage<RestaurantSummaryResponse>>(
       `/catalog/restaurants${qs}`,
@@ -171,17 +190,13 @@ class CatalogService {
     return menuAdapter(dto);
   }
 
-  /** GET /catalog/items/:id → menuItemAdapter. */
-  async getItem(id: string): Promise<MenuItemViewModel> {
-    const dto = await this.http.get<MenuItemResponse>(`/catalog/items/${id}`);
-    return menuItemAdapter(dto);
-  }
-
-  /** GET /catalog/items/snapshot?ids= → menuItemAdapter per item. */
-  async getItemsSnapshot(ids: string[]): Promise<MenuItemViewModel[]> {
-    const qs = buildQuery({ ids });
-    const dtos = await this.http.get<MenuItemResponse[]>(`/catalog/items/snapshot${qs}`);
-    return dtos.map(menuItemAdapter);
+  /**
+   * GET /catalog/items/:id → `menuItemDetailAdapter`. The only read that carries
+   * `variantGroups`; the variant picker calls it for the one item it opens.
+   */
+  async getItem(id: string): Promise<MenuItemDetailViewModel> {
+    const dto = await this.http.get<MenuItemDetailResponse>(`/catalog/items/${id}`);
+    return menuItemDetailAdapter(dto);
   }
 
   /** GET /catalog/search/restaurants → normalizePage + restaurantAdapter. */
@@ -231,6 +246,7 @@ class CatalogService {
       isOpenNow: params.isOpenNow,
       cursor: params.cursor,
       limit: params.limit,
+      deliverableOnly: params.deliverableOnly,
     });
     const raw = await this.http.get<RawPage<RestaurantSummaryResponse>>(
       `/catalog/nearby${qs}`,
@@ -251,6 +267,16 @@ class CatalogService {
       `/catalog/serviceability${qs}`,
     );
     return dtos.map(serviceabilityAdapter);
+  }
+
+  /**
+   * GET /catalog/deliverable → the ids of restaurants that deliver to a point.
+   * The reachability half of serviceability, without the fee computation.
+   */
+  async deliverable(params: DeliverablePointParams): Promise<string[]> {
+    const qs = buildQuery({ lat: params.lat, lng: params.lng });
+    const dto = await this.http.get<DeliverableRestaurantsResponse>(`/catalog/deliverable${qs}`);
+    return dto.restaurantIds;
   }
 
   /** GET /restaurants/:id/rating (review router, NOT /catalog) → raw shape. */

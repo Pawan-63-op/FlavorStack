@@ -3,10 +3,15 @@ import { GeoPoint } from '../../../domain/identity/value-objects/GeoPoint.vo';
 import { Money } from '../../../domain/shared/Money';
 import { IDeliveryZoneRepository } from '../../../domain/catalog/repositories/IDeliveryZoneRepository';
 import { ICatalogQueryRepository } from '../../../domain/catalog/repositories/ICatalogQueryRepository';
-import { CatalogQueryRestaurant } from '../../../domain/catalog/types/QueryModels';
 import { ServiceableRestaurantView } from '../../../domain/catalog/types/ReadModels';
 import { CheckServiceabilityDto } from '../dtos/QueryDtos';
+import { findServiceableZones } from './serviceability-helpers';
 
+/**
+ * Answers "given this point and subtotal, what does delivery cost?". The reachability
+ * half lives in `findServiceableZones`, shared with `ListDeliverableRestaurants`, which
+ * answers the cheaper "who delivers here at all?" question.
+ */
 export class CheckServiceability {
   constructor(
     private readonly deliveryZoneRepo: IDeliveryZoneRepository,
@@ -26,23 +31,10 @@ export class CheckServiceability {
   }
 
   private async resolve(point: GeoPoint, subtotal: Money): Promise<ServiceableRestaurantView[]> {
-    const zones = await this.deliveryZoneRepo.findZoneContaining(point);
-    if (zones.length === 0) return [];
-
-    // One batched lookup instead of a sequential read per zone. `findPublicRestaurantsByIds`
-    // applies the {visibility: PUBLIC, status: ACTIVE, deletedAt: null} filter, which is the
-    // publish gate the old `getRestaurantSummary(...)` read enforced implicitly by returning
-    // null for anything unpublished — an unpublished restaurant is simply absent here.
-    const restaurantIds = [...new Set(zones.map((zone) => zone.restaurantId))];
-    const restaurants = await this.queryRepo.findPublicRestaurantsByIds(restaurantIds);
-    const byId = new Map<string, CatalogQueryRestaurant>(restaurants.map((r) => [r.id, r]));
-
+    const matches = await findServiceableZones(this.deliveryZoneRepo, this.queryRepo, point);
     const byRestaurant = new Map<string, ServiceableRestaurantView>();
 
-    for (const zone of zones) {
-      const restaurant = byId.get(zone.restaurantId);
-      if (!restaurant) continue; // not public/active → not serviceable
-
+    for (const { zone, restaurant } of matches) {
       const restaurantLocation = GeoPoint.create(restaurant.location.lat, restaurant.location.lng);
       if (restaurantLocation.isFailure) continue;
       const distanceMeters = restaurantLocation.getValue().distanceTo(point);

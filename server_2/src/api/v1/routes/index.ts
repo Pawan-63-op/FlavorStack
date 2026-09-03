@@ -82,6 +82,7 @@ export function createApiRouter(app: AppContainer): Router {
     createUserRoutes({
       controller: identityController,
       tokenService: app.auth.tokenService,
+      permissionDeps,
     }),
   );
 
@@ -218,6 +219,7 @@ export function createApiRouter(app: AppContainer): Router {
       adminFulfillmentController,
       dashboardAnalyticsController,
       tokenService: app.auth.tokenService,
+      permissionDeps,
     }),
   );
 
@@ -251,6 +253,7 @@ export function createApiRouter(app: AppContainer): Router {
     createReviewRoutes({
       controller: reviewController,
       tokenService: app.auth.tokenService,
+      permissionDeps,
     }),
   );
 

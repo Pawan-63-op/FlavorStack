@@ -24,6 +24,7 @@ interface ProjectedMenuItem {
   tags: string[];
   dietary: string[];
   isAvailable: boolean;
+  hasVariants: boolean;
 }
 
 function menuItemToViewDoc(item: MenuItem): ProjectedMenuItem {
@@ -39,6 +40,7 @@ function menuItemToViewDoc(item: MenuItem): ProjectedMenuItem {
     tags: item.tags,
     dietary: item.dietary,
     isAvailable: item.availability.isAvailable,
+    hasVariants: item.variantGroups.length > 0,
   };
 }
 
@@ -79,6 +81,7 @@ export class CatalogProjectionWriter implements ICatalogProjectionWriter {
         tags: view.tags,
         dietary: view.dietary,
         isAvailable: view.isAvailable,
+        hasVariants: view.hasVariants,
         restaurantName: restaurant.name,
         restaurantSlug: restaurant.slug,
         restaurantStatus: status,

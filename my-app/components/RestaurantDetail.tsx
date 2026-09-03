@@ -27,6 +27,10 @@ import {
   useRestaurantRating as useReviewsRating,
 } from "@/lib/api/hooks/useReviews";
 import { type MenuItemViewModel } from "@/lib/api/adapters/menu";
+import {
+  VariantPickerDialog,
+  type VariantPickerResult,
+} from "@/components/menu/VariantPickerDialog";
 import { ApiError } from "@/lib/api/errors/ApiError";
 
 interface RestaurantDetailProps {
@@ -107,6 +111,9 @@ export default function RestaurantDetail({ restaurantId, onNavigate }: Restauran
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>("All");
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [activeTab, setActiveTab] = useState("menu");
+  // The item whose variant picker is open, or null. The menu list carries only
+  // `hasVariants`; the dialog fetches the groups for this one item.
+  const [pickerItem, setPickerItem] = useState<MenuItemViewModel | null>(null);
 
   const addToCart = useAddToCart();
   const clearCart = useClearCart();
@@ -137,17 +144,25 @@ export default function RestaurantDetail({ restaurantId, onNavigate }: Restauran
     return categories.find((category) => category.id === selectedCategoryId)?.items ?? [];
   }, [categories, selectedCategoryId]);
 
-  const handleAddToCart = async (item: MenuItemViewModel) => {
+  /**
+   * Adds one configured line. `unitPrice` is the server wire shape ({amount: integer
+   * minor units, currency}); for a variant item the picker has already summed the
+   * selected option deltas onto the base price, which is what checkout recomputes from
+   * the catalog — so the cart total and the charged total agree.
+   */
+  const addLine = async (
+    item: MenuItemViewModel,
+    unitPriceMinor: { amount: number; currency: string },
+    selectedOptionIds?: string[],
+  ) => {
     if (!item.isAvailable || !restaurant) return;
     const quantity = quantities[item.id] || 1;
-    // `unitPriceMinor` is the server wire shape ({amount: integer minor units,
-    // currency}); the server trusts this client-supplied price (no catalog ACL
-    // yet) and re-prices on read via its own projection.
     const input: AddCartItemInput = {
       restaurantId: restaurant.id,
       menuItemId: item.id,
       quantity,
-      unitPrice: item.unitPriceMinor,
+      unitPrice: unitPriceMinor,
+      ...(selectedOptionIds && selectedOptionIds.length > 0 ? { selectedOptionIds } : {}),
     };
 
     const succeed = () => {
@@ -162,8 +177,9 @@ export default function RestaurantDetail({ restaurantId, onNavigate }: Restauran
         restaurantId: restaurant.id,
         restaurantName: restaurant.name,
         menuItemId: item.id,
+        selectedOptionIds,
         quantity,
-        unitPrice: item.unitPriceMinor,
+        unitPrice: unitPriceMinor,
         name: item.name,
         image: item.imageUrl,
       };
@@ -202,6 +218,26 @@ export default function RestaurantDetail({ restaurantId, onNavigate }: Restauran
       }
       toast.error(err instanceof ApiError ? err.message : "Could not add to cart");
     }
+  };
+
+  /**
+   * An item with variant groups cannot be added straight from the list — required
+   * groups have to be answered first, and the deltas change the line price.
+   */
+  const handleAddToCart = (item: MenuItemViewModel) => {
+    if (!item.isAvailable) return;
+    if (item.hasVariants) {
+      setPickerItem(item);
+      return;
+    }
+    void addLine(item, item.unitPriceMinor);
+  };
+
+  const handlePickerConfirm = async (result: VariantPickerResult) => {
+    const item = pickerItem;
+    if (!item) return;
+    setPickerItem(null);
+    await addLine(item, result.unitPriceMinor, result.selectedOptionIds);
   };
 
   const updateQuantity = (itemId: string, delta: number) => {
@@ -369,6 +405,11 @@ export default function RestaurantDetail({ restaurantId, onNavigate }: Restauran
                                     Unavailable
                                   </Badge>
                                 )}
+                                {item.hasVariants && (
+                                  <Badge variant="outline" className="text-xs">
+                                    Customisable
+                                  </Badge>
+                                )}
                               </div>
                               {item.description && (
                                 <p className="text-sm text-muted-foreground mb-2">
@@ -411,7 +452,7 @@ export default function RestaurantDetail({ restaurantId, onNavigate }: Restauran
                               className="gap-2"
                             >
                               <ShoppingCart className="h-4 w-4" />
-                              Add to Cart
+                              {item.hasVariants ? "Choose options" : "Add to Cart"}
                             </Button>
                           </div>
                         </div>
@@ -467,6 +508,14 @@ export default function RestaurantDetail({ restaurantId, onNavigate }: Restauran
           )}
         </TabsContent>
       </Tabs>
+
+      <VariantPickerDialog
+        item={pickerItem}
+        quantity={pickerItem ? quantities[pickerItem.id] || 1 : 1}
+        isSubmitting={addToCart.isPending}
+        onClose={() => setPickerItem(null)}
+        onConfirm={handlePickerConfirm}
+      />
     </div>
   );
 }

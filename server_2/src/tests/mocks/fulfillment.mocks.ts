@@ -1,4 +1,5 @@
 import { IRestaurantDirectory } from '../../application/fulfillment/ports/IRestaurantDirectory';
+import { GeoPoint } from '../../domain/identity/value-objects/GeoPoint.vo';
 import { IFulfillmentQueryRepository } from '../../domain/fulfillment/repositories/IFulfillmentQueryRepository';
 
 /**
@@ -8,10 +9,12 @@ import { IFulfillmentQueryRepository } from '../../domain/fulfillment/repositori
  */
 export function makeStubRestaurantDirectory(
   restaurantId: string,
-  ownerId: string
+  ownerId: string,
+  location: GeoPoint | null = null
 ): IRestaurantDirectory {
   return {
     getOwnerId: async (id: string) => (id === restaurantId ? ownerId : null),
+    getLocation: async (id: string) => (id === restaurantId ? location : null),
     listRestaurantIdsByOwner: async (id: string) => (id === ownerId ? [restaurantId] : []),
     getRestaurantNames: async (ids: string[]) =>
       ids.reduce<Record<string, string>>((acc, id) => {

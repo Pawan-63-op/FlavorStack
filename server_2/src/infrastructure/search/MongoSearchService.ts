@@ -230,10 +230,17 @@ export class MongoSearchService implements ISearchService {
     params: CursorPaginationParams = {}
   ): Promise<CursorPage<RestaurantSummaryView>> {
     const limit = normalizeLimit(params.limit);
+    if (filters.restaurantIds && filters.restaurantIds.length === 0) return { items: [] };
+
     const geoJson = point.toGeoJson();
     const queryFilter: Record<string, unknown> = { ...PUBLIC_RESTAURANT_FILTER };
     if (filters.cuisineTypes && filters.cuisineTypes.length > 0) {
       queryFilter.cuisineTypes = { $in: filters.cuisineTypes };
+    }
+    // Inside `$geoNear.query` rather than a later `$match`, so the id restriction is
+    // applied before the distance limit and a full page can still be filled.
+    if (filters.restaurantIds) {
+      queryFilter._id = { $in: filters.restaurantIds };
     }
 
     const now = new Date();
@@ -328,6 +335,7 @@ export class MongoSearchService implements ISearchService {
       imageUrl: doc.imageUrl ?? undefined,
       basePriceAmount: doc.basePriceAmount,
       currency: doc.currency,
+      hasVariants: doc.hasVariants ?? false,
       tags: doc.tags,
       dietary: doc.dietary as DietaryTag[],
       isAvailable: doc.isAvailable,

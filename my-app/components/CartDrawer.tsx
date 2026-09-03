@@ -16,7 +16,7 @@ import { Minus, Plus, Trash2, ShoppingBag, Loader2, LogIn } from "lucide-react";
 import { useCart, useUpdateCartItem, useRemoveCartItem } from "@/lib/api/hooks/useCart";
 import { formatMoney } from "@/lib/api/format/money";
 import { useAuthStore } from "@/store/authStore";
-import { useGuestCartStore } from "@/store/guestCartStore";
+import { guestLineKey, useGuestCartStore } from "@/store/guestCartStore";
 import { ImageWithFallback } from "../admin_new/src/components/figma/ImageWithFallback";
 
 interface CartDrawerProps {
@@ -58,7 +58,7 @@ function GuestCartDrawerBody({ onClose }: { onClose: () => void }) {
         <ScrollArea className="h-full px-3">
           <div className="space-y-4 py-4">
             {lines.map((line) => (
-              <div key={line.menuItemId} className="flex gap-4 p-3 rounded-xl border bg-card shadow-sm">
+              <div key={guestLineKey(line)} className="flex gap-4 p-3 rounded-xl border bg-card shadow-sm">
                 <div className="w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden">
                   <ImageWithFallback src={line.image} alt={line.name} className="w-full h-full object-cover" />
                 </div>
@@ -71,7 +71,7 @@ function GuestCartDrawerBody({ onClose }: { onClose: () => void }) {
                         size="icon"
                         className="h-7 w-7"
                         aria-label="Decrease quantity"
-                        onClick={() => setQuantity(line.menuItemId, line.quantity - 1)}
+                        onClick={() => setQuantity(guestLineKey(line), line.quantity - 1)}
                       >
                         <Minus className="h-3 w-3" />
                       </Button>
@@ -81,7 +81,7 @@ function GuestCartDrawerBody({ onClose }: { onClose: () => void }) {
                         size="icon"
                         className="h-7 w-7"
                         aria-label="Increase quantity"
-                        onClick={() => setQuantity(line.menuItemId, line.quantity + 1)}
+                        onClick={() => setQuantity(guestLineKey(line), line.quantity + 1)}
                       >
                         <Plus className="h-3 w-3" />
                       </Button>
@@ -91,7 +91,7 @@ function GuestCartDrawerBody({ onClose }: { onClose: () => void }) {
                       size="icon"
                       className="h-7 w-7 text-destructive"
                       aria-label="Remove item"
-                      onClick={() => removeLine(line.menuItemId)}
+                      onClick={() => removeLine(guestLineKey(line))}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>

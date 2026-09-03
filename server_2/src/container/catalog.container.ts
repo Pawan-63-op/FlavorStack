@@ -20,6 +20,7 @@ import { GetRestaurantMenu } from '../application/catalog/use-cases/GetRestauran
 import { GetMenuItem } from '../application/catalog/use-cases/GetMenuItem';
 import { GetItemsSnapshot } from '../application/catalog/use-cases/GetItemsSnapshot';
 import { CheckServiceability } from '../application/catalog/use-cases/CheckServiceability';
+import { ListDeliverableRestaurants } from '../application/catalog/use-cases/ListDeliverableRestaurants';
 import { SearchRestaurants } from '../application/catalog/use-cases/SearchRestaurants';
 import { SearchMenuItems } from '../application/catalog/use-cases/SearchMenuItems';
 import { GetNearbyRestaurants } from '../application/catalog/use-cases/GetNearbyRestaurants';
@@ -37,6 +38,7 @@ export interface CatalogReadContainer {
     getMenuItem: GetMenuItem;
     getItemsSnapshot: GetItemsSnapshot;
     checkServiceability: CheckServiceability;
+    listDeliverableRestaurants: ListDeliverableRestaurants;
     searchRestaurants: SearchRestaurants;
     searchMenuItems: SearchMenuItems;
     getNearbyRestaurants: GetNearbyRestaurants;
@@ -70,14 +72,15 @@ export function createCatalogReadContainer(
     projector,
     queries: {
       getRestaurant: new GetRestaurant(readRepository),
-      listRestaurants: new ListRestaurants(readRepository),
+      listRestaurants: new ListRestaurants(readRepository, deliveryZoneRepo, queryRepository),
       getRestaurantMenu: new GetRestaurantMenu(readRepository),
       getMenuItem: new GetMenuItem(readRepository),
       getItemsSnapshot: new GetItemsSnapshot(readRepository),
       checkServiceability: new CheckServiceability(deliveryZoneRepo, queryRepository),
+      listDeliverableRestaurants: new ListDeliverableRestaurants(deliveryZoneRepo, queryRepository),
       searchRestaurants: new SearchRestaurants(searchService),
       searchMenuItems: new SearchMenuItems(searchService),
-      getNearbyRestaurants: new GetNearbyRestaurants(searchService),
+      getNearbyRestaurants: new GetNearbyRestaurants(searchService, deliveryZoneRepo, queryRepository),
     },
   };
 }

@@ -17,13 +17,16 @@ import { CreateFulfillment } from '../../../application/fulfillment/use-cases/Cr
 import { MarkPreparing } from '../../../application/fulfillment/use-cases/MarkPreparing';
 import { MarkReadyForPickup } from '../../../application/fulfillment/use-cases/MarkReadyForPickup';
 import { makeStubRestaurantDirectory } from '../../mocks/fulfillment.mocks';
-import { OfferRiderAssignment } from '../../../application/fulfillment/use-cases/OfferRiderAssignment';
+import { AssignRider } from '../../../application/fulfillment/use-cases/AssignRider';
 import { AcceptDelivery } from '../../../application/fulfillment/use-cases/AcceptDelivery';
 import { ConfirmPickup } from '../../../application/fulfillment/use-cases/ConfirmPickup';
 import { StartDelivery } from '../../../application/fulfillment/use-cases/StartDelivery';
 import { CompleteDelivery } from '../../../application/fulfillment/use-cases/CompleteDelivery';
 import { OnOrderRequested } from '../../../application/fulfillment/event-handlers/OnOrderRequested';
 import { OnReadyForPickup } from '../../../application/fulfillment/event-handlers/OnReadyForPickup';
+
+/** Assignment-attempt cap, enforced by AssignRider/ReassignRider since Phase 10.4. */
+const MAX_ATTEMPTS = 3;
 
 const RESTAURANT_ID = 'rest-1';
 const OWNER_ID = 'owner-1';
@@ -79,7 +82,7 @@ describe('Fulfillment delivery lifecycle e2e (Phase 4): OrderRequested → Deliv
     const restaurantDirectory = makeStubRestaurantDirectory(RESTAURANT_ID, OWNER_ID);
     markPreparing = new MarkPreparing(repo, restaurantDirectory, uow, bus);
     markReady = new MarkReadyForPickup(repo, restaurantDirectory, uow, bus);
-    const offer = new OfferRiderAssignment(repo, service, uow, bus, 60);
+    const offer = new AssignRider(repo, service, uow, bus, 60, MAX_ATTEMPTS);
     accept = new AcceptDelivery(repo, uow, bus);
     confirmPickup = new ConfirmPickup(repo, uow, bus);
     startDelivery = new StartDelivery(repo, uow, bus);

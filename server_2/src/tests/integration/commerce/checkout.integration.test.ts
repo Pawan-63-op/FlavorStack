@@ -36,6 +36,7 @@ import { OrderRequestModel } from '../../../infrastructure/database/models/Order
 import { CartModel } from '../../../infrastructure/database/models/CartModel';
 import { OutboxEventModel } from '../../../infrastructure/database/models/OutboxEventModel';
 import { getConnection } from '../../../infrastructure/database/connection';
+import { makeAddressResolver } from '../../mocks/commerce.mocks';
 
 const money = (amount: number, currency = 'INR') => Money.create(amount, currency).getValue();
 
@@ -174,7 +175,7 @@ describe('Checkout (integration)', () => {
     await cartRepo.save(buildCart(customerId));
 
     const eventBus = fakeEventBus();
-    const checkout = new Checkout(cartRepo, orderRepo, buildAssembler(), new PricingCalculator(), unitOfWork, outboxStore);
+    const checkout = new Checkout(cartRepo, orderRepo, buildAssembler(), makeAddressResolver().resolver, new PricingCalculator(), unitOfWork, outboxStore);
 
     const result = await checkout.execute(dto(customerId));
     expect(result.isSuccess).toBe(true);
@@ -202,7 +203,7 @@ describe('Checkout (integration)', () => {
     const customerId = uniqueCustomerId();
     await cartRepo.save(buildCart(customerId));
 
-    const checkout = new Checkout(cartRepo, orderRepo, buildAssembler(), new PricingCalculator(), unitOfWork, outboxStore);
+    const checkout = new Checkout(cartRepo, orderRepo, buildAssembler(), makeAddressResolver().resolver, new PricingCalculator(), unitOfWork, outboxStore);
 
     const key = randomUUID();
     const first = await checkout.execute(dto(customerId, key));
@@ -225,7 +226,7 @@ describe('Checkout (integration)', () => {
     };
 
     const eventBus = fakeEventBus();
-    const checkout = new Checkout(failingCartRepo, orderRepo, buildAssembler(), new PricingCalculator(), unitOfWork, outboxStore);
+    const checkout = new Checkout(failingCartRepo, orderRepo, buildAssembler(), makeAddressResolver().resolver, new PricingCalculator(), unitOfWork, outboxStore);
 
     await expect(checkout.execute(dto(customerId))).rejects.toThrow('forced commit failure');
 

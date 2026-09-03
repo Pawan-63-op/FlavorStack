@@ -1,5 +1,5 @@
 import { HandleAssignmentTimeout } from '../../../../application/fulfillment/use-cases/HandleAssignmentTimeout';
-import { OfferRiderAssignment } from '../../../../application/fulfillment/use-cases/OfferRiderAssignment';
+import { AssignRider } from '../../../../application/fulfillment/use-cases/AssignRider';
 import { CancelFulfillment } from '../../../../application/fulfillment/use-cases/CancelFulfillment';
 import { Result } from '../../../../domain/shared/Result';
 import { Fulfillment } from '../../../../domain/fulfillment/entities/Fulfillment';
@@ -20,8 +20,8 @@ function buildExpiredOffer(): Fulfillment {
   return f;
 }
 
-function mockOffer(): jest.Mocked<OfferRiderAssignment> {
-  return { execute: jest.fn().mockResolvedValue(Result.ok({})) } as unknown as jest.Mocked<OfferRiderAssignment>;
+function mockOffer(): jest.Mocked<AssignRider> {
+  return { execute: jest.fn().mockResolvedValue(Result.ok({})) } as unknown as jest.Mocked<AssignRider>;
 }
 function mockCancel(): jest.Mocked<CancelFulfillment> {
   return { execute: jest.fn().mockResolvedValue(Result.ok({})) } as unknown as jest.Mocked<CancelFulfillment>;

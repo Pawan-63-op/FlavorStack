@@ -1,17 +1,18 @@
 import { Result } from '../../../domain/shared/Result';
 import { NotFoundError } from '../../../domain/shared/errors/NotFoundError';
-import { GeoPoint } from '../../../domain/identity/value-objects/GeoPoint.vo';
 import { ICartRepository } from '../../../domain/commerce/repositories/ICartRepository';
 import { IPricingCalculator } from '../../../domain/commerce/services/IPricingCalculator';
 import { PreviewCheckoutDto } from '../dtos/PreviewCheckoutDto';
 import { CheckoutViewResponse, toCheckoutViewResponse } from '../responses/CheckoutViewResponse';
 import { CheckoutContextAssembler } from '../services/CheckoutContextAssembler';
+import { DeliveryAddressResolver } from '../services/DeliveryAddressResolver';
 import { CommerceTelemetry } from '../observability/CommerceTelemetry';
 
 export class PreviewCheckout {
   constructor(
     private readonly cartRepo: ICartRepository,
     private readonly assembler: CheckoutContextAssembler,
+    private readonly addressResolver: DeliveryAddressResolver,
     private readonly pricingCalculator: IPricingCalculator,
     private readonly telemetry: CommerceTelemetry = new CommerceTelemetry()
   ) {}
@@ -20,7 +21,13 @@ export class PreviewCheckout {
     const cart = await this.cartRepo.findByCustomerId(dto.customerId);
     if (!cart) return Result.fail<CheckoutViewResponse>(new NotFoundError('cart_not_found'));
 
-    const pointResult = GeoPoint.create(dto.deliveryPoint.lat, dto.deliveryPoint.lng);
+    // Same resolution as `Checkout`, so the previewed delivery fee and the charged one
+    // are computed from the same point.
+    const pointResult = await this.addressResolver.resolvePoint({
+      customerId: dto.customerId,
+      addressId: dto.addressId,
+      point: dto.deliveryPoint,
+    });
     if (pointResult.isFailure) return Result.fail<CheckoutViewResponse>(pointResult.getError());
 
     const assemblyResult = await this.assembler.assemble(cart, pointResult.getValue());

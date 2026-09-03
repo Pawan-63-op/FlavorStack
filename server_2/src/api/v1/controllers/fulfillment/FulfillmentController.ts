@@ -5,8 +5,6 @@ import { GetRestaurantFulfillments } from '../../../../application/fulfillment/u
 import { CancelFulfillment } from '../../../../application/fulfillment/use-cases/CancelFulfillment';
 import { GetLiveTracking } from '../../../../application/fulfillment/use-cases/GetLiveTracking';
 import { ListCustomerOrders } from '../../../../application/fulfillment/use-cases/ListCustomerOrders';
-import { CANCELLED_BY } from '../../../../domain/fulfillment/enums/cancelled-by.enum';
-import { USER_ROLE } from '../../../../domain/identity/enums/user-role.enum';
 
 export interface FulfillmentControllerDeps {
   markPreparing: MarkPreparing;
@@ -53,17 +51,17 @@ export class FulfillmentController {
 
   /**
    * POST /fulfillments/:id/cancel — customer or restaurant cancels (Phase 5A).
-   * The actor is resolved from the authenticated role: a CUSTOMER cancels as CUSTOMER, anyone else
-   * (restaurant owner, whose userId is the restaurantId) cancels as RESTAURANT. The aggregate
-   * enforces ownership and the cancellation window.
+   * The route is open to any authenticated user; `CancelFulfillment` decides whether the actor is
+   * this order's customer or the owner of its restaurant, and refuses anyone else. The role claim
+   * is deliberately not consulted here — an owner's `userId` is not the `restaurantId`, so it
+   * cannot answer the ownership question. The aggregate enforces the state machine; there is no
+   * cancellation window.
    */
   cancel = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    const isCustomer = req.user!.role === USER_ROLE.CUSTOMER;
     const result = await this.deps.cancelFulfillment.execute({
       fulfillmentId: req.params.id as string,
-      cancelledBy: isCustomer ? CANCELLED_BY.CUSTOMER : CANCELLED_BY.RESTAURANT,
+      actorUserId: req.user!.userId,
       reason: req.body.reason,
-      actorId: req.user!.userId,
     });
     if (result.isFailure) return next(result.getError());
     res.status(200).json(result.getValue());

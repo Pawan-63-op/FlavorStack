@@ -1,5 +1,5 @@
 import { RejectDelivery } from '../../../../application/fulfillment/use-cases/RejectDelivery';
-import { OfferRiderAssignment } from '../../../../application/fulfillment/use-cases/OfferRiderAssignment';
+import { AssignRider } from '../../../../application/fulfillment/use-cases/AssignRider';
 import { NotFoundError } from '../../../../domain/shared/errors/NotFoundError';
 import { ForbiddenError } from '../../../../domain/shared/errors/ForbiddenError';
 import { ConflictError } from '../../../../domain/shared/errors/ConflictError';
@@ -14,8 +14,8 @@ function offered(riderId = 'rider-1') {
   return f;
 }
 
-function makeOffer(result = Result.ok({} as never)): jest.Mocked<Pick<OfferRiderAssignment, 'execute'>> {
-  return { execute: jest.fn().mockResolvedValue(result) } as jest.Mocked<Pick<OfferRiderAssignment, 'execute'>>;
+function makeOffer(result = Result.ok({} as never)): jest.Mocked<Pick<AssignRider, 'execute'>> {
+  return { execute: jest.fn().mockResolvedValue(result) } as jest.Mocked<Pick<AssignRider, 'execute'>>;
 }
 
 describe('RejectDelivery', () => {
@@ -23,7 +23,7 @@ describe('RejectDelivery', () => {
     const f = offered('rider-1');
     const repo = makeRepo({ findById: jest.fn().mockResolvedValue(f) });
     const offer = makeOffer();
-    const uc = new RejectDelivery(repo, makeUnitOfWork(), makeEventBus(), offer as unknown as OfferRiderAssignment);
+    const uc = new RejectDelivery(repo, makeUnitOfWork(), makeEventBus(), offer as unknown as AssignRider);
 
     const result = await uc.execute({ fulfillmentId: f.id.toString(), riderId: 'rider-1' });
 
@@ -39,7 +39,7 @@ describe('RejectDelivery', () => {
     const f = offered('rider-1');
     const repo = makeRepo({ findById: jest.fn().mockResolvedValue(f) });
     const offer = makeOffer(Result.fail(new ConflictError('no_available_rider')));
-    const uc = new RejectDelivery(repo, makeUnitOfWork(), makeEventBus(), offer as unknown as OfferRiderAssignment);
+    const uc = new RejectDelivery(repo, makeUnitOfWork(), makeEventBus(), offer as unknown as AssignRider);
 
     const result = await uc.execute({ fulfillmentId: f.id.toString(), riderId: 'rider-1' });
 
@@ -51,7 +51,7 @@ describe('RejectDelivery', () => {
     const f = offered('rider-1');
     const repo = makeRepo({ findById: jest.fn().mockResolvedValue(f) });
     const offer = makeOffer();
-    const uc = new RejectDelivery(repo, makeUnitOfWork(), makeEventBus(), offer as unknown as OfferRiderAssignment);
+    const uc = new RejectDelivery(repo, makeUnitOfWork(), makeEventBus(), offer as unknown as AssignRider);
 
     const result = await uc.execute({ fulfillmentId: f.id.toString(), riderId: 'rider-2' });
 
@@ -64,7 +64,7 @@ describe('RejectDelivery', () => {
   it('returns NotFoundError for an unknown fulfillment', async () => {
     const repo = makeRepo({ findById: jest.fn().mockResolvedValue(null) });
     const offer = makeOffer();
-    const uc = new RejectDelivery(repo, makeUnitOfWork(), makeEventBus(), offer as unknown as OfferRiderAssignment);
+    const uc = new RejectDelivery(repo, makeUnitOfWork(), makeEventBus(), offer as unknown as AssignRider);
 
     const result = await uc.execute({ fulfillmentId: 'nope', riderId: 'r' });
 

@@ -38,6 +38,13 @@ export class MongoDriverRepository implements IDriverRepository {
     return docs.map((doc) => DriverMapper.toDomain(doc));
   }
 
+  async findByActiveOrder(fulfillmentId: string): Promise<Driver | null> {
+    const doc = await DriverModel.findOne({ activeOrderId: fulfillmentId, deletedAt: null }, null, {
+      session: this.session,
+    }).lean<DriverDocument>();
+    return doc ? DriverMapper.toDomain(doc) : null;
+  }
+
   async findByStatus(status?: DriverStatus): Promise<Driver[]> {
     const filter: Record<string, unknown> = { deletedAt: null };
     if (status) filter.driverStatus = status;

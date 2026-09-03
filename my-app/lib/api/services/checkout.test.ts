@@ -78,20 +78,20 @@ describe("checkoutService", () => {
   });
 
   describe("preview", () => {
-    it("POSTs /checkout/preview with deliveryPoint and no Idempotency-Key header", async () => {
+    it("POSTs /checkout/preview with the saved addressId and no Idempotency-Key header", async () => {
       vi.mocked(client.post).mockResolvedValue(makePreviewDto());
 
-      await checkoutService.preview({ lat: 12.97, lng: 77.59 });
+      await checkoutService.preview("addr-1");
 
       expect(client.post).toHaveBeenCalledWith("/checkout/preview", {
-        body: { deliveryPoint: { lat: 12.97, lng: 77.59 } },
+        body: { addressId: "addr-1" },
       });
     });
 
     it("adapts the returned preview", async () => {
       vi.mocked(client.post).mockResolvedValue(makePreviewDto({ serviceable: false }));
 
-      const vm = await checkoutService.preview({ lat: 12.97, lng: 77.59 });
+      const vm = await checkoutService.preview("addr-1");
 
       expect(vm.serviceable).toBe(false);
     });
@@ -103,25 +103,13 @@ describe("checkoutService", () => {
 
       const result = await checkoutService.checkout({
         paymentMethod: "UPI",
-        deliveryAddress: {
-          street: "12 MG Road",
-          city: "Bengaluru",
-          state: "KA",
-          pinCode: "560001",
-          coordinates: { lat: 12.97, lng: 77.59 },
-        },
+        addressId: "addr-1",
       });
 
       expect(client.post).toHaveBeenCalledWith("/checkout", {
         body: {
           paymentMethod: "UPI",
-          deliveryAddress: {
-            street: "12 MG Road",
-            city: "Bengaluru",
-            state: "KA",
-            pinCode: "560001",
-            coordinates: { lat: 12.97, lng: 77.59 },
-          },
+          addressId: "addr-1",
         },
         headers: { "Idempotency-Key": "generated-uuid" },
       });
@@ -133,13 +121,7 @@ describe("checkoutService", () => {
 
       const result = await checkoutService.checkout({
         paymentMethod: "COD",
-        deliveryAddress: {
-          street: "12 MG Road",
-          city: "Bengaluru",
-          state: "KA",
-          pinCode: "560001",
-          coordinates: { lat: 12.97, lng: 77.59 },
-        },
+        addressId: "addr-1",
         idempotencyKey: "caller-key",
       });
 
@@ -155,13 +137,7 @@ describe("checkoutService", () => {
 
       const result = await checkoutService.checkout({
         paymentMethod: "CARD",
-        deliveryAddress: {
-          street: "12 MG Road",
-          city: "Bengaluru",
-          state: "KA",
-          pinCode: "560001",
-          coordinates: { lat: 12.97, lng: 77.59 },
-        },
+        addressId: "addr-1",
       });
 
       expect(result.order.restaurantName).toBe("Spice Hub");
@@ -203,7 +179,7 @@ describe("checkoutService", () => {
       });
       vi.mocked(client.post).mockRejectedValue(err);
 
-      await expect(checkoutService.preview({ lat: 1, lng: 2 })).rejects.toBe(err);
+      await expect(checkoutService.preview("addr-1")).rejects.toBe(err);
 
       expect(spy.errors).toContain(err);
       expect(spy.metrics).toContain("checkout.failure");
@@ -223,13 +199,7 @@ describe("checkoutService", () => {
       await expect(
         checkoutService.checkout({
           paymentMethod: "UPI",
-          deliveryAddress: {
-            street: "12 MG Road",
-            city: "Bengaluru",
-            state: "KA",
-            pinCode: "560001",
-            coordinates: { lat: 12.97, lng: 77.59 },
-          },
+          addressId: "addr-1",
         }),
       ).rejects.toBe(err);
 

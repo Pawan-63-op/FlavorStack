@@ -16,7 +16,7 @@ import { CreateFulfillment } from '../../../application/fulfillment/use-cases/Cr
 import { MarkPreparing } from '../../../application/fulfillment/use-cases/MarkPreparing';
 import { MarkReadyForPickup } from '../../../application/fulfillment/use-cases/MarkReadyForPickup';
 import { makeStubRestaurantDirectory } from '../../mocks/fulfillment.mocks';
-import { OfferRiderAssignment } from '../../../application/fulfillment/use-cases/OfferRiderAssignment';
+import { AssignRider } from '../../../application/fulfillment/use-cases/AssignRider';
 import { AcceptDelivery } from '../../../application/fulfillment/use-cases/AcceptDelivery';
 import { ConfirmPickup } from '../../../application/fulfillment/use-cases/ConfirmPickup';
 import { StartDelivery } from '../../../application/fulfillment/use-cases/StartDelivery';
@@ -27,6 +27,9 @@ import { OnReadyForPickup } from '../../../application/fulfillment/event-handler
 import { FulfillmentProjector } from '../../../application/fulfillment/projector/FulfillmentProjector';
 import { registerFulfillmentProjector } from '../../../application/fulfillment/projector/FulfillmentProjectionRegistry';
 import { CANCELLED_BY } from '../../../domain/fulfillment/enums/cancelled-by.enum';
+
+/** Assignment-attempt cap, enforced by AssignRider/ReassignRider since Phase 10.4. */
+const MAX_ATTEMPTS = 3;
 
 const RESTAURANT_ID = 'proj-rest-1';
 const OWNER_ID = 'owner-1';
@@ -85,7 +88,7 @@ describe('FulfillmentProjector integration (Phase 6)', () => {
   let createFulfillment: CreateFulfillment;
   let markPreparing: MarkPreparing;
   let markReadyForPickup: MarkReadyForPickup;
-  let offerRiderAssignment: OfferRiderAssignment;
+  let assignRider: AssignRider;
   let acceptDelivery: AcceptDelivery;
   let confirmPickup: ConfirmPickup;
   let startDelivery: StartDelivery;
@@ -106,15 +109,15 @@ describe('FulfillmentProjector integration (Phase 6)', () => {
     const restaurantDirectory = makeStubRestaurantDirectory(RESTAURANT_ID, OWNER_ID);
     markPreparing = new MarkPreparing(repo, restaurantDirectory, uow, bus);
     markReadyForPickup = new MarkReadyForPickup(repo, restaurantDirectory, uow, bus);
-    offerRiderAssignment = new OfferRiderAssignment(repo, assignmentService, uow, bus, OFFER_TTL);
+    assignRider = new AssignRider(repo, assignmentService, uow, bus, OFFER_TTL, MAX_ATTEMPTS);
     acceptDelivery = new AcceptDelivery(repo, uow, bus);
     confirmPickup = new ConfirmPickup(repo, uow, bus);
     startDelivery = new StartDelivery(repo, uow, bus);
     completeDelivery = new CompleteDelivery(repo, uow, bus);
-    cancelFulfillment = new CancelFulfillment(repo, uow, bus);
+    cancelFulfillment = new CancelFulfillment(repo, restaurantDirectory, uow, bus);
 
     const onOrderRequested = new OnOrderRequested(createFulfillment);
-    const onReadyForPickup = new OnReadyForPickup(offerRiderAssignment);
+    const onReadyForPickup = new OnReadyForPickup(assignRider);
     bus.subscribe('OrderRequested', (e) => onOrderRequested.handle(e));
     bus.subscribe('ReadyForPickup', (e) => onReadyForPickup.handle(e));
 

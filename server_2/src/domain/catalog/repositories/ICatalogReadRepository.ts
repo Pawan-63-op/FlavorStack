@@ -1,10 +1,17 @@
 import { CuisineType } from '../enums/cuisine-type.enum';
 import { CursorPage, CursorPaginationParams } from '../types/CursorPagination';
-import { MenuItemView, RestaurantMenuView, RestaurantSummaryView } from '../types/ReadModels';
+import {
+  MenuItemDetailView,
+  MenuItemView,
+  RestaurantMenuView,
+  RestaurantSummaryView,
+} from '../types/ReadModels';
 
 export interface ListRestaurantsFilter {
   cuisineTypes?: CuisineType[];
   isOpen?: boolean;
+  /** Restrict the page to these ids (browse's `deliverableOnly` intersection). */
+  restaurantIds?: string[];
 }
 
 export interface ICatalogReadRepository {
@@ -15,6 +22,7 @@ export interface ICatalogReadRepository {
     params: CursorPaginationParams
   ): Promise<CursorPage<RestaurantSummaryView>>;
   getRestaurantMenu(restaurantId: string): Promise<RestaurantMenuView | null>;
-  getMenuItemView(itemId: string): Promise<MenuItemView | null>;
+  /** The single-item read: `MenuItemView` plus its variant groups. */
+  getMenuItemView(itemId: string): Promise<MenuItemDetailView | null>;
   getItemsSnapshot(itemIds: string[]): Promise<MenuItemView[]>;
 }

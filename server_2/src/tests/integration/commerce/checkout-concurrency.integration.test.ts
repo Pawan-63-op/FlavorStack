@@ -33,6 +33,7 @@ import { OrderRequestModel } from '../../../infrastructure/database/models/Order
 import { CartModel } from '../../../infrastructure/database/models/CartModel';
 import { OutboxEventModel } from '../../../infrastructure/database/models/OutboxEventModel';
 import { getConnection } from '../../../infrastructure/database/connection';
+import { makeAddressResolver } from '../../mocks/commerce.mocks';
 
 const money = (amount: number, currency = 'INR') => Money.create(amount, currency).getValue();
 
@@ -155,7 +156,7 @@ describe('Checkout — simultaneous double-submit (concurrency)', () => {
   }
 
   function newCheckout(): Checkout {
-    return new Checkout(cartRepo, orderRepo, buildAssembler(), new PricingCalculator(), unitOfWork, outboxStore);
+    return new Checkout(cartRepo, orderRepo, buildAssembler(), makeAddressResolver().resolver, new PricingCalculator(), unitOfWork, outboxStore);
   }
 
   it('N concurrent submits with the SAME idempotency key create exactly one OrderRequest', async () => {

@@ -4,7 +4,7 @@ import { CANCELLED_BY } from '../../../domain/fulfillment/enums/cancelled-by.enu
 import { IFulfillmentRepository } from '../../../domain/fulfillment/repositories/IFulfillmentRepository';
 import { IUnitOfWork } from '../../shared/ports/IUnitOfWork';
 import { IEventBus } from '../../shared/events/IEventBus';
-import { OfferRiderAssignment } from './OfferRiderAssignment';
+import { AssignRider } from './AssignRider';
 import { CancelFulfillment } from './CancelFulfillment';
 import { logger } from '../../../infrastructure/observability/logger';
 
@@ -18,7 +18,7 @@ export class HandleAssignmentTimeout {
     private readonly fulfillmentRepo: IFulfillmentRepository,
     private readonly unitOfWork: IUnitOfWork,
     private readonly eventBus: IEventBus,
-    private readonly offerRiderAssignment: OfferRiderAssignment,
+    private readonly assignRider: AssignRider,
     private readonly cancelFulfillment: CancelFulfillment,
     private readonly maxAssignmentAttempts: number
   ) {}
@@ -61,7 +61,7 @@ export class HandleAssignmentTimeout {
       return Result.ok<void>(undefined);
     }
 
-    const reoffer = await this.offerRiderAssignment.execute({ fulfillmentId: dto.fulfillmentId });
+    const reoffer = await this.assignRider.execute({ fulfillmentId: dto.fulfillmentId });
     if (reoffer.isFailure) {
       logger.info(
         { fulfillmentId: dto.fulfillmentId, reason: String(reoffer.getError()) },

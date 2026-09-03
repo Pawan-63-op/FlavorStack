@@ -1,5 +1,5 @@
 import { OnReadyForPickup } from '../../../../application/fulfillment/event-handlers/OnReadyForPickup';
-import { OfferRiderAssignment } from '../../../../application/fulfillment/use-cases/OfferRiderAssignment';
+import { AssignRider } from '../../../../application/fulfillment/use-cases/AssignRider';
 import { Result } from '../../../../domain/shared/Result';
 import { ConflictError } from '../../../../domain/shared/errors/ConflictError';
 import { DomainEvent } from '../../../../domain/shared/DomainEvent';
@@ -14,11 +14,11 @@ function readyEvent(fulfillmentId = 'ful-1', eventId = 'evt-1'): DomainEvent {
 }
 
 function makeOffer(result = Result.ok({} as never)) {
-  return { execute: jest.fn().mockResolvedValue(result) } as unknown as jest.Mocked<OfferRiderAssignment>;
+  return { execute: jest.fn().mockResolvedValue(result) } as unknown as jest.Mocked<AssignRider>;
 }
 
 describe('OnReadyForPickup (auto-offer)', () => {
-  it('invokes OfferRiderAssignment with the fulfillmentId from the event', async () => {
+  it('invokes AssignRider with the fulfillmentId from the event', async () => {
     const offer = makeOffer();
     const handler = new OnReadyForPickup(offer);
 

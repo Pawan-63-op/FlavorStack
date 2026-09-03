@@ -5,7 +5,7 @@ import { IUnitOfWork } from '../../shared/ports/IUnitOfWork';
 import { IEventBus } from '../../shared/events/IEventBus';
 import { RejectDeliveryDto } from '../dtos/RejectDeliveryDto';
 import { FulfillmentResponse, toFulfillmentResponse } from '../responses/FulfillmentResponse';
-import { OfferRiderAssignment } from './OfferRiderAssignment';
+import { AssignRider } from './AssignRider';
 import { logger } from '../../../infrastructure/observability/logger';
 
 export class RejectDelivery {
@@ -13,7 +13,7 @@ export class RejectDelivery {
     private readonly fulfillmentRepo: IFulfillmentRepository,
     private readonly unitOfWork: IUnitOfWork,
     private readonly eventBus: IEventBus,
-    private readonly offerRiderAssignment: OfferRiderAssignment
+    private readonly assignRider: AssignRider
   ) {}
 
   async execute(dto: RejectDeliveryDto): Promise<Result<FulfillmentResponse>> {
@@ -31,7 +31,7 @@ export class RejectDelivery {
 
     if (events.length > 0) await this.eventBus.publishAll(events);
 
-    const reoffer = await this.offerRiderAssignment.execute({ fulfillmentId: dto.fulfillmentId });
+    const reoffer = await this.assignRider.execute({ fulfillmentId: dto.fulfillmentId });
     if (reoffer.isFailure) {
       logger.info(
         { fulfillmentId: dto.fulfillmentId, reason: String(reoffer.getError()) },

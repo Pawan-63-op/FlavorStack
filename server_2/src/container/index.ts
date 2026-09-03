@@ -11,7 +11,12 @@ import { OutboxDispatcher } from '../application/shared/outbox/OutboxDispatcher'
 
 import { createIdentityContainer, IdentityContainer } from './identity.container';
 import { createAuthContainer, AuthContainer } from './auth.container';
-import { createEventContainer, wireIdentityEventHandlers, EventContainer } from './event.container';
+import {
+  createEventContainer,
+  wireIdentityEventHandlers,
+  wireDriverAssignmentHandlers,
+  EventContainer,
+} from './event.container';
 import { createCatalogReadContainer, CatalogReadContainer } from './catalog.container';
 import { createCatalogWriteContainer, CatalogWriteContainer } from './catalog-write.container';
 import { createCommerceContainer, CommerceContainer } from './commerce.container';
@@ -190,7 +195,11 @@ async function buildWorkerCore(profile: BootstrapProfile): Promise<WorkerContain
       dashboardSeconds: dashboardCacheTtlSeconds,
     });
     const restaurantDirectory = new CatalogRestaurantDirectory(new MongoRestaurantRepository(new TransactionContext()));
-    const availableRidersProvider = createAvailableDriversProvider(identity.driverRepository);
+    const availableRidersProvider = createAvailableDriversProvider(
+      identity.driverRepository,
+      (restaurantId) => restaurantDirectory.getLocation(restaurantId),
+      getFulfillmentConfig().assignmentRadiusMeters
+    );
 
     const fulfillment = createFulfillmentContainer(
       connection,
@@ -272,12 +281,17 @@ export async function bootstrap(opts: BootstrapOptions = {}): Promise<AppContain
     const catalogRead = createCatalogReadContainer(event.eventBus, new TransactionContext());
     const catalogWrite = createCatalogWriteContainer(connection, event.eventBus);
 
-    const commerce = createCommerceContainer(connection, event.eventBus, {
-      readRepository: catalogRead.readRepository,
-      serviceabilityQuery: catalogRead.queries.checkServiceability,
-      openingHoursService: catalogRead.openingHoursService,
-      queryRepository: catalogRead.queryRepository,
-    });
+    const commerce = createCommerceContainer(
+      connection,
+      event.eventBus,
+      {
+        readRepository: catalogRead.readRepository,
+        serviceabilityQuery: catalogRead.queries.checkServiceability,
+        openingHoursService: catalogRead.openingHoursService,
+        queryRepository: catalogRead.queryRepository,
+      },
+      identity.userRepository
+    );
 
     try {
       const { notificationTemplatesCreated } = await runSeeds({
@@ -303,6 +317,11 @@ export async function bootstrap(opts: BootstrapOptions = {}): Promise<AppContain
       emailQueue,
       emailComposer,
       userRepository: identity.userRepository,
+    });
+
+    wireDriverAssignmentHandlers(event.eventBus, {
+      userRepository: identity.userRepository,
+      driverRepository: identity.driverRepository,
     });
 
     if (startOutboxProcessor) {

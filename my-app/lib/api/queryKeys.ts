@@ -14,14 +14,23 @@ export const queryKeys = {
       ["catalog", "restaurants", { cursor }] as const,
     restaurant: (id: string) => ["catalog", "restaurant", id] as const,
     menu: (restaurantId: string) => ["catalog", "menu", restaurantId] as const,
+    item: (itemId: string) => ["catalog", "item", itemId] as const,
     search: (query: string, cursor?: string) =>
       ["catalog", "search", { query, cursor }] as const,
     searchItems: (query: string, cursor?: string) =>
       ["catalog", "searchItems", { query, cursor }] as const,
-    nearby: (lat: number, lng: number, radiusMeters?: number) =>
-      ["catalog", "nearby", { lat, lng, radiusMeters }] as const,
-    serviceability: (lat: number, lng: number) =>
-      ["catalog", "serviceability", { lat, lng }] as const,
+    nearby: (lat: number, lng: number, radiusMeters?: number, deliverableOnly?: boolean) =>
+      ["catalog", "nearby", { lat, lng, radiusMeters, deliverableOnly }] as const,
+    // `subtotalAmount`/`currency` are part of the key: the fee they resolve to changes
+    // across a free-delivery threshold, so two subtotals must not share a cache entry.
+    serviceability: (
+      lat: number,
+      lng: number,
+      subtotalAmount?: number,
+      currency?: string,
+    ) => ["catalog", "serviceability", { lat, lng, subtotalAmount, currency }] as const,
+    deliverable: (lat: number, lng: number) =>
+      ["catalog", "deliverable", { lat, lng }] as const,
     rating: (restaurantId: string) => ["catalog", "rating", restaurantId] as const,
   },
   cart: {
@@ -29,7 +38,7 @@ export const queryKeys = {
     summary: () => ["cart", "summary"] as const,
   },
   checkout: {
-    preview: (lat: number, lng: number) => ["checkout", "preview", { lat, lng }] as const,
+    preview: (addressId: string) => ["checkout", "preview", addressId] as const,
   },
   orderRequests: {
     detail: (id: string) => ["orderRequests", id] as const,

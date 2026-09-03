@@ -6,7 +6,6 @@ import { addTrackedOrder } from "../../orders/trackedOrders";
 import { queryKeys } from "../queryKeys";
 import {
   checkoutService,
-  type DeliveryPoint,
   type PlaceOrderInput,
   type PlaceOrderResult,
 } from "../services/checkout";
@@ -20,18 +19,17 @@ import {
  */
 
 /**
- * Live pricing preview for the chosen delivery point. Re-runs automatically when
- * the coordinates change (the key is derived from them); disabled until an
- * address is selected, so there is no preview request without coordinates.
+ * Live pricing preview for the chosen saved address. Re-runs when the selection
+ * changes (the key is the address id); disabled until an address is selected, so
+ * there is no preview request without one. The server resolves the address, so the
+ * previewed delivery fee is the one `usePlaceOrder` will be charged.
  */
-export function usePreviewCheckout(deliveryPoint: DeliveryPoint | null) {
+export function usePreviewCheckout(addressId: string | null) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   return useQuery({
-    queryKey: deliveryPoint
-      ? queryKeys.checkout.preview(deliveryPoint.lat, deliveryPoint.lng)
-      : queryKeys.checkout.preview(0, 0),
-    queryFn: () => checkoutService.preview(deliveryPoint as DeliveryPoint),
-    enabled: isAuthenticated && deliveryPoint !== null,
+    queryKey: queryKeys.checkout.preview(addressId ?? ""),
+    queryFn: () => checkoutService.preview(addressId as string),
+    enabled: isAuthenticated && addressId !== null,
   });
 }
 

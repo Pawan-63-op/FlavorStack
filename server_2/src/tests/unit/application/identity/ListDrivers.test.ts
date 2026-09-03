@@ -34,6 +34,9 @@ class FakeDriverRepository implements IDriverRepository {
   findAvailable(): Promise<Driver[]> {
     return Promise.resolve([]);
   }
+  findByActiveOrder(): Promise<Driver | null> {
+    return Promise.resolve(null);
+  }
   findByStatus(status?: DriverStatus): Promise<Driver[]> {
     this.lastStatus = status;
     const list = status ? this.drivers.filter((d) => d.driverStatus === status) : this.drivers;

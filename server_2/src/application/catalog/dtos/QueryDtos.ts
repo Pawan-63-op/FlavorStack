@@ -14,6 +14,10 @@ export interface ListRestaurantsDto {
   isOpen?: boolean;
   cursor?: string;
   limit?: number;
+  /** When set, `lat`/`lng` are required and only restaurants that deliver there are returned. */
+  deliverableOnly?: boolean;
+  lat?: number;
+  lng?: number;
 }
 
 export interface GetRestaurantMenuDto {
@@ -26,6 +30,11 @@ export interface GetMenuItemDto {
 
 export interface GetItemsSnapshotDto {
   itemIds: string[];
+}
+
+export interface ListDeliverableRestaurantsDto {
+  lat: number;
+  lng: number;
 }
 
 export interface CheckServiceabilityDto {
@@ -61,4 +70,6 @@ export interface GetNearbyRestaurantsDto {
   isOpenNow?: boolean;
   cursor?: string;
   limit?: number;
+  /** Return only restaurants whose delivery zone covers `lat`/`lng`. */
+  deliverableOnly?: boolean;
 }

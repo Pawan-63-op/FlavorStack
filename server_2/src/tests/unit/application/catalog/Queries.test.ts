@@ -7,6 +7,8 @@ import { SearchRestaurants } from '../../../../application/catalog/use-cases/Sea
 import { SearchMenuItems } from '../../../../application/catalog/use-cases/SearchMenuItems';
 import { GetNearbyRestaurants } from '../../../../application/catalog/use-cases/GetNearbyRestaurants';
 import { ICatalogReadRepository } from '../../../../domain/catalog/repositories/ICatalogReadRepository';
+import { IDeliveryZoneRepository } from '../../../../domain/catalog/repositories/IDeliveryZoneRepository';
+import { ICatalogQueryRepository } from '../../../../domain/catalog/repositories/ICatalogQueryRepository';
 import { ISearchService } from '../../../../domain/catalog/services/ISearchService';
 import { NotFoundError } from '../../../../domain/shared/errors/NotFoundError';
 import { ValidationError } from '../../../../domain/shared/errors/ValidationError';
@@ -23,6 +25,23 @@ function makeReadRepo(over: Partial<Record<keyof ICatalogReadRepository, jest.Mo
     getItemsSnapshot: jest.fn(async () => []),
     ...over,
   } as unknown as ICatalogReadRepository;
+}
+
+function makeZoneRepo(zones: unknown[] = []): IDeliveryZoneRepository {
+  return { findZoneContaining: jest.fn(async () => zones) } as unknown as IDeliveryZoneRepository;
+}
+
+function makeQueryRepo(
+  over: Partial<Record<keyof ICatalogQueryRepository, jest.Mock>> = {}
+): ICatalogQueryRepository {
+  return {
+    findRestaurantById: jest.fn(async () => null),
+    findPublicRestaurantById: jest.fn(async () => null),
+    findPublicRestaurantsByIds: jest.fn(async () => []),
+    findMenuItemsByIds: jest.fn(async () => []),
+    findMenuItemsByRestaurant: jest.fn(async () => []),
+    ...over,
+  } as unknown as ICatalogQueryRepository;
 }
 
 function makeSearch(over: Partial<Record<keyof ISearchService, jest.Mock>> = {}): ISearchService {
@@ -83,9 +102,59 @@ describe('ListRestaurants', () => {
   it('delegates filter + pagination to the read repo', async () => {
     const list = jest.fn(async () => ({ items: [{ id: 'r1' }], nextCursor: 'c2' }));
     const repo = makeReadRepo({ listRestaurantSummaries: list });
-    const res = await new ListRestaurants(repo).execute({ isOpen: true, cursor: 'c1', limit: 10 });
+    const res = await new ListRestaurants(repo, makeZoneRepo(), makeQueryRepo()).execute({
+      isOpen: true,
+      cursor: 'c1',
+      limit: 10,
+    });
     expect(res.getValue().items).toHaveLength(1);
-    expect(list).toHaveBeenCalledWith({ cuisineTypes: undefined, isOpen: true }, { cursor: 'c1', limit: 10 });
+    expect(list).toHaveBeenCalledWith(
+      { cuisineTypes: undefined, isOpen: true, restaurantIds: undefined },
+      { cursor: 'c1', limit: 10 }
+    );
+  });
+
+  it('restricts the page to the deliverable ids when deliverableOnly is set', async () => {
+    const list = jest.fn(async () => ({ items: [{ id: 'r1' }] }));
+    const repo = makeReadRepo({ listRestaurantSummaries: list });
+    const zones = makeZoneRepo([{ restaurantId: 'r1' }, { restaurantId: 'r2' }, { restaurantId: 'r1' }]);
+    const queryRepo = makeQueryRepo({
+      findPublicRestaurantsByIds: jest.fn(async () => [{ id: 'r1' }]),
+    });
+
+    const res = await new ListRestaurants(repo, zones, queryRepo).execute({
+      deliverableOnly: true,
+      lat: 0.5,
+      lng: 0.5,
+    });
+
+    expect(res.isSuccess).toBe(true);
+    // 'r2' is unpublished (absent from findPublicRestaurantsByIds), so it is not deliverable.
+    expect(list).toHaveBeenCalledWith(
+      { cuisineTypes: undefined, isOpen: undefined, restaurantIds: ['r1'] },
+      { cursor: undefined, limit: undefined }
+    );
+  });
+
+  it('returns an empty page without querying when nothing delivers to the point', async () => {
+    const list = jest.fn(async () => ({ items: [{ id: 'r1' }] }));
+    const repo = makeReadRepo({ listRestaurantSummaries: list });
+
+    const res = await new ListRestaurants(repo, makeZoneRepo(), makeQueryRepo()).execute({
+      deliverableOnly: true,
+      lat: 0.5,
+      lng: 0.5,
+    });
+
+    expect(res.getValue().items).toEqual([]);
+    expect(list).not.toHaveBeenCalled();
+  });
+
+  it('rejects deliverableOnly without coordinates', async () => {
+    const res = await new ListRestaurants(makeReadRepo(), makeZoneRepo(), makeQueryRepo()).execute({
+      deliverableOnly: true,
+    });
+    expect(res.getError()).toBeInstanceOf(ValidationError);
   });
 });
 
@@ -115,19 +184,19 @@ describe('SearchMenuItems', () => {
 
 describe('GetNearbyRestaurants', () => {
   it('fails with ValidationError on invalid coordinates', async () => {
-    const res = await new GetNearbyRestaurants(makeSearch()).execute({ lat: 999, lng: 0, radiusMeters: 1000 });
+    const res = await new GetNearbyRestaurants(makeSearch(), makeZoneRepo(), makeQueryRepo()).execute({ lat: 999, lng: 0, radiusMeters: 1000 });
     expect(res.getError()).toBeInstanceOf(ValidationError);
   });
 
   it('defaults the radius when missing or below 1m', async () => {
     const search = makeSearch();
-    await new GetNearbyRestaurants(search).execute({ lat: 12.9, lng: 77.5, radiusMeters: 0 });
+    await new GetNearbyRestaurants(search, makeZoneRepo(), makeQueryRepo()).execute({ lat: 12.9, lng: 77.5, radiusMeters: 0 });
     expect((search.nearby as jest.Mock).mock.calls[0][1]).toBe(5000); // DEFAULT_RADIUS_METERS
   });
 
   it('clamps the radius to the maximum', async () => {
     const search = makeSearch();
-    await new GetNearbyRestaurants(search).execute({ lat: 12.9, lng: 77.5, radiusMeters: 999999 });
+    await new GetNearbyRestaurants(search, makeZoneRepo(), makeQueryRepo()).execute({ lat: 12.9, lng: 77.5, radiusMeters: 999999 });
     expect((search.nearby as jest.Mock).mock.calls[0][1]).toBe(50000); // MAX_RADIUS_METERS
   });
 });

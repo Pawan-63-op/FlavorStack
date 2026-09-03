@@ -32,19 +32,30 @@ export interface GuestCartLine {
 
 export type GuestAddResult = { ok: true } | { ok: false; reason: "cross-restaurant" };
 
+/**
+ * A guest line's identity. Two lines are the same line only when they are the same menu
+ * item **with the same set of selected options** — the rule the server cart applies in
+ * `LineItemSelection.hasSameSelection`. Keying on `menuItemId` alone would merge a
+ * "Pizza (Large)" into a "Pizza (Small)" once the variant picker exists.
+ */
+export function guestLineKey(line: Pick<GuestCartLine, "menuItemId" | "selectedOptionIds">): string {
+  const options = [...(line.selectedOptionIds ?? [])].sort().join(",");
+  return options ? `${line.menuItemId}|${options}` : line.menuItemId;
+}
+
 interface GuestCartState {
   lines: GuestCartLine[];
   /**
-   * Stage a line. Same-restaurant adds merge by `menuItemId`; a line from a
+   * Stage a line. Same-restaurant adds merge by {@link guestLineKey}; a line from a
    * different restaurant is refused (single-restaurant rule) and the caller
    * decides whether to {@link replaceWith}.
    */
   addLine: (line: GuestCartLine) => GuestAddResult;
   /** Replace the whole buffer with a single line ("start a new cart"). */
   replaceWith: (line: GuestCartLine) => void;
-  /** Set an absolute quantity; `<= 0` removes the line. */
-  setQuantity: (menuItemId: string, quantity: number) => void;
-  removeLine: (menuItemId: string) => void;
+  /** Set an absolute quantity by {@link guestLineKey}; `<= 0` removes the line. */
+  setQuantity: (lineKey: string, quantity: number) => void;
+  removeLine: (lineKey: string) => void;
   clear: () => void;
   getCount: () => number;
 }
@@ -59,13 +70,12 @@ export const useGuestCartStore = create<GuestCartState>()(
         if (lines.length > 0 && lines[0].restaurantId !== line.restaurantId) {
           return { ok: false, reason: "cross-restaurant" };
         }
-        const existing = lines.find((l) => l.menuItemId === line.menuItemId);
+        const key = guestLineKey(line);
+        const existing = lines.find((l) => guestLineKey(l) === key);
         if (existing) {
           set({
             lines: lines.map((l) =>
-              l.menuItemId === line.menuItemId
-                ? { ...l, quantity: l.quantity + line.quantity }
-                : l,
+              guestLineKey(l) === key ? { ...l, quantity: l.quantity + line.quantity } : l,
             ),
           });
         } else {
@@ -76,21 +86,21 @@ export const useGuestCartStore = create<GuestCartState>()(
 
       replaceWith: (line) => set({ lines: [line] }),
 
-      setQuantity: (menuItemId, quantity) =>
+      setQuantity: (lineKey, quantity) =>
         set((state) => {
           if (quantity <= 0) {
-            return { lines: state.lines.filter((l) => l.menuItemId !== menuItemId) };
+            return { lines: state.lines.filter((l) => guestLineKey(l) !== lineKey) };
           }
           return {
             lines: state.lines.map((l) =>
-              l.menuItemId === menuItemId ? { ...l, quantity } : l,
+              guestLineKey(l) === lineKey ? { ...l, quantity } : l,
             ),
           };
         }),
 
-      removeLine: (menuItemId) =>
+      removeLine: (lineKey) =>
         set((state) => ({
-          lines: state.lines.filter((l) => l.menuItemId !== menuItemId),
+          lines: state.lines.filter((l) => guestLineKey(l) !== lineKey),
         })),
 
       clear: () => set({ lines: [] }),

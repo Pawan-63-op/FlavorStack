@@ -4,9 +4,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { motion, AnimatePresence } from "framer-motion";
-import { MapPin, Filter, Loader2 } from "lucide-react";
+import { MapPin, Filter, Loader2, Navigation } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useRestaurantList } from "@/lib/api/hooks/useCatalog";
+import { useGeolocation } from "@/lib/geo/useGeolocation";
 import { cuisineLabel, type CuisineType } from "@/lib/api/adapters/restaurant";
 import { ApiError } from "@/lib/api/errors/ApiError";
 
@@ -46,6 +47,17 @@ const CUISINE_TYPES: CuisineType[] = [
 
 export default function RestaurantList({ searchData, onNavigate }: RestaurantListProps) {
   const [selectedCuisine, setSelectedCuisine] = useState<CuisineType | "All">("All");
+  const [deliverableOnly, setDeliverableOnly] = useState(false);
+  const { coords, status: geoStatus, error: geoError, request: requestLocation } = useGeolocation();
+
+  // The intersection happens server-side (`deliverableOnly` on GET /catalog/restaurants),
+  // so paging stays correct — a client-side filter would drop items out of a page and
+  // leave the cursor pointing past them. Until a position is available the filter is
+  // inert, so the list is never silently empty while the permission prompt is open.
+  const deliverableFilter =
+    deliverableOnly && coords
+      ? { deliverableOnly: true, lat: coords.lat, lng: coords.lng }
+      : {};
 
   const {
     data,
@@ -56,9 +68,16 @@ export default function RestaurantList({ searchData, onNavigate }: RestaurantLis
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-  } = useRestaurantList(
-    selectedCuisine === "All" ? {} : { cuisineTypes: [selectedCuisine] },
-  );
+  } = useRestaurantList({
+    ...(selectedCuisine === "All" ? {} : { cuisineTypes: [selectedCuisine] }),
+    ...deliverableFilter,
+  });
+
+  const toggleDeliverable = () => {
+    const next = !deliverableOnly;
+    setDeliverableOnly(next);
+    if (next && !coords) requestLocation();
+  };
 
   const restaurants = useMemo(
     () => data?.pages.flatMap((page) => page.items) ?? [],
@@ -139,6 +158,28 @@ export default function RestaurantList({ searchData, onNavigate }: RestaurantLis
                   {cuisineLabel(cuisine)}
                 </Button>
               ))}
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-center gap-3 border-t pt-4">
+              <Button
+                variant={deliverableOnly ? "default" : "outline"}
+                size="sm"
+                onClick={toggleDeliverable}
+                disabled={geoStatus === "prompting"}
+                className="gap-2"
+              >
+                {geoStatus === "prompting" ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Navigation className="h-4 w-4" />
+                )}
+                Delivers to me
+              </Button>
+              {deliverableOnly && !coords && geoStatus !== "prompting" && (
+                <span className="text-sm text-muted-foreground">
+                  {geoError ?? "Waiting for your location..."}
+                </span>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -221,9 +262,17 @@ export default function RestaurantList({ searchData, onNavigate }: RestaurantLis
       {filteredRestaurants.length === 0 && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-12">
           <p className="text-muted-foreground text-lg mb-4">
-            No restaurants found with the selected filters.
+            {deliverableOnly && coords
+              ? "No restaurants deliver to your location with the selected filters."
+              : "No restaurants found with the selected filters."}
           </p>
-          <Button variant="outline" onClick={() => setSelectedCuisine("All")}>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setSelectedCuisine("All");
+              setDeliverableOnly(false);
+            }}
+          >
             Clear Filters
           </Button>
         </motion.div>

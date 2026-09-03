@@ -12,6 +12,7 @@ export interface MenuItemSearchDocument {
   tags: string[];
   dietary: string[];
   isAvailable: boolean;
+  hasVariants: boolean;
   restaurantName: string;
   restaurantSlug: string;
   restaurantStatus: string;
@@ -32,6 +33,9 @@ const MenuItemSearchSchema = new Schema<MenuItemSearchDocument>(
     tags: { type: [String], default: [] },
     dietary: { type: [String], default: [] },
     isAvailable: { type: Boolean, required: true },
+    // Documents projected before this field existed read back `undefined`; every
+    // consumer coerces with `?? false`, and `ops/backfill-has-variants.sh` fills them.
+    hasVariants: { type: Boolean, default: false },
     restaurantName: { type: String, required: true },
     restaurantSlug: { type: String, required: true },
     restaurantStatus: { type: String, required: true },

@@ -1,37 +1,40 @@
 import { Result } from '../../../domain/shared/Result';
 import { NotFoundError } from '../../../domain/shared/errors/NotFoundError';
-import { ConflictError } from '../../../domain/shared/errors/ConflictError';
 import { IFulfillmentRepository } from '../../../domain/fulfillment/repositories/IFulfillmentRepository';
 import { IDeliveryAssignmentService } from '../../../domain/fulfillment/services/IDeliveryAssignmentService';
 import { IUnitOfWork } from '../../shared/ports/IUnitOfWork';
 import { IEventBus } from '../../shared/events/IEventBus';
 import { AssignRiderDto } from '../dtos/AssignRiderDto';
 import { FulfillmentResponse, toFulfillmentResponse } from '../responses/FulfillmentResponse';
-import { triedRiderIds, offerExpiry } from './assignment-helpers';
+import { chooseRider, offerExpiry } from './assignment-helpers';
 
+/**
+ * Offer a fulfillment to a rider — the next available candidate, or the one an admin named.
+ * The sole entry point for making an offer: the auto-offer on `ReadyForPickup`, the re-offer after
+ * a rejection, and the re-offer after an expiry all land here.
+ */
 export class AssignRider {
   constructor(
     private readonly fulfillmentRepo: IFulfillmentRepository,
     private readonly assignmentService: IDeliveryAssignmentService,
     private readonly unitOfWork: IUnitOfWork,
     private readonly eventBus: IEventBus,
-    private readonly offerTtlSeconds: number
+    private readonly offerTtlSeconds: number,
+    private readonly maxAssignmentAttempts: number
   ) {}
 
   async execute(dto: AssignRiderDto): Promise<Result<FulfillmentResponse>> {
     const fulfillment = await this.fulfillmentRepo.findById(dto.fulfillmentId);
     if (!fulfillment) return Result.fail(new NotFoundError('fulfillment_not_found'));
 
-    const riderId =
-      dto.riderId ??
-      (await this.assignmentService.pickNextRider({
-        restaurantId: fulfillment.restaurantId,
-        address: fulfillment.deliveryAddress,
-        excludeRiderIds: triedRiderIds(fulfillment),
-      }));
-    if (!riderId) return Result.fail(new ConflictError('no_available_rider'));
+    const rider = await chooseRider(
+      fulfillment,
+      { assignmentService: this.assignmentService, maxAssignmentAttempts: this.maxAssignmentAttempts },
+      dto.riderId
+    );
+    if (rider.isFailure) return Result.fail(rider.getError());
 
-    const result = fulfillment.offerToRider(riderId, offerExpiry(this.offerTtlSeconds));
+    const result = fulfillment.offerToRider(rider.getValue(), offerExpiry(this.offerTtlSeconds));
     if (result.isFailure) return Result.fail(result.getError());
 
     const events = fulfillment.pullDomainEvents();

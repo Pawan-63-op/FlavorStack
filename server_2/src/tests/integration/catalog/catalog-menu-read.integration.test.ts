@@ -114,7 +114,22 @@ describe('getRestaurantMenu (source-of-truth assembly)', () => {
       tags: ['spicy', 'popular'],
       dietary: ['VEG'],
       isAvailable: true,
+      // Added in Phase 10-4.3 so the customer menu knows to open the variant picker.
+      hasVariants: false,
     });
+  });
+
+  it('flags hasVariants on the item view when the item has variant groups', async () => {
+    const restaurant = makeActivePublic();
+    const id = restaurant.id.toString();
+    const categoryId = restaurant.categories[0].id.toString();
+    await restaurantRepo.save(restaurant);
+
+    const item = buildMenuItem({ restaurantId: id, categoryId, withVariants: true });
+    await menuItemRepo.save(item);
+
+    const menu = await readRepo.getRestaurantMenu(id);
+    expect(menu?.categories[0].items[0].hasVariants).toBe(true);
   });
 
   it('ANDs item availability with the restaurant open state, as the projected view did', async () => {

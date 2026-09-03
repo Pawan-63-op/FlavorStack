@@ -3,7 +3,9 @@ import type { RestaurantSummaryResponse } from "./restaurant";
 import {
   menuAdapter,
   menuItemAdapter,
+  menuItemDetailAdapter,
   menuItemSearchAdapter,
+  type MenuItemDetailResponse,
   type MenuItemResponse,
   type MenuItemSearchResponse,
   type RestaurantMenuResponse,
@@ -146,5 +148,114 @@ describe("menuAdapter", () => {
     const menu = menuAdapter(dto);
 
     expect(menu.categories).toEqual([]);
+  });
+});
+
+describe("menuItemDetailAdapter", () => {
+  const detail = (over: Partial<MenuItemDetailResponse> = {}): MenuItemDetailResponse => ({
+    id: "i1",
+    restaurantId: "r1",
+    categoryId: "c1",
+    name: "Paneer Tikka",
+    basePriceAmount: 29999,
+    currency: "INR",
+    tags: [],
+    dietary: ["VEG"],
+    isAvailable: true,
+    variantGroups: [
+      {
+        id: "g1",
+        label: "Size",
+        selectionType: "SINGLE",
+        required: true,
+        minSelect: 1,
+        maxSelect: 1,
+        options: [
+          {
+            id: "o1",
+            label: "Half",
+            priceDeltaAmount: 0,
+            currency: "INR",
+            isDefault: true,
+            isAvailable: true,
+          },
+          {
+            id: "o2",
+            label: "Full",
+            priceDeltaAmount: 10000,
+            currency: "INR",
+            isDefault: false,
+            isAvailable: true,
+          },
+        ],
+      },
+    ],
+    ...over,
+  });
+
+  it("keeps the base item mapping and adds the variant groups", () => {
+    const vm = menuItemDetailAdapter(detail());
+
+    expect(vm.formattedPrice).toBe("₹299.99");
+    expect(vm.hasVariants).toBe(true);
+    expect(vm.variantGroups).toHaveLength(1);
+    expect(vm.variantGroups[0]).toMatchObject({
+      id: "g1",
+      label: "Size",
+      selectionType: "SINGLE",
+      required: true,
+      minSelect: 1,
+      maxSelect: 1,
+    });
+  });
+
+  it("keeps the minor-unit delta and formats a zero delta as Free", () => {
+    const [half, full] = menuItemDetailAdapter(detail()).variantGroups[0].options;
+
+    expect(half.priceDeltaMinor).toBe(0);
+    expect(half.formattedPriceDelta).toBe("Free");
+    expect(half.isDefault).toBe(true);
+    expect(full.priceDeltaMinor).toBe(10000);
+    expect(full.priceDelta).toEqual({ amount: 100, currency: "INR" });
+    expect(full.formattedPriceDelta).toBe("+₹100.00");
+  });
+
+  it("reports hasVariants=false for an item with no groups, overriding a stale list flag", () => {
+    const vm = menuItemDetailAdapter(detail({ variantGroups: [], hasVariants: true }));
+    expect(vm.hasVariants).toBe(false);
+    expect(vm.variantGroups).toEqual([]);
+  });
+});
+
+describe("menuItemAdapter hasVariants", () => {
+  it("defaults to false when the list read omits the flag", () => {
+    const vm = menuItemAdapter({
+      id: "i1",
+      restaurantId: "r1",
+      categoryId: "c1",
+      name: "Paneer Tikka",
+      basePriceAmount: 100,
+      currency: "INR",
+      tags: [],
+      dietary: [],
+      isAvailable: true,
+    });
+    expect(vm.hasVariants).toBe(false);
+  });
+
+  it("passes the flag through when present", () => {
+    const vm = menuItemAdapter({
+      id: "i1",
+      restaurantId: "r1",
+      categoryId: "c1",
+      name: "Paneer Tikka",
+      basePriceAmount: 100,
+      currency: "INR",
+      tags: [],
+      dietary: [],
+      isAvailable: true,
+      hasVariants: true,
+    });
+    expect(vm.hasVariants).toBe(true);
   });
 });

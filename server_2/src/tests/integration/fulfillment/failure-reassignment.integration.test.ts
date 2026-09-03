@@ -19,13 +19,15 @@ import { CreateFulfillment } from '../../../application/fulfillment/use-cases/Cr
 import { MarkPreparing } from '../../../application/fulfillment/use-cases/MarkPreparing';
 import { MarkReadyForPickup } from '../../../application/fulfillment/use-cases/MarkReadyForPickup';
 import { makeStubRestaurantDirectory } from '../../mocks/fulfillment.mocks';
-import { OfferRiderAssignment } from '../../../application/fulfillment/use-cases/OfferRiderAssignment';
 import { AssignRider } from '../../../application/fulfillment/use-cases/AssignRider';
 import { AcceptDelivery } from '../../../application/fulfillment/use-cases/AcceptDelivery';
 import { ConfirmPickup } from '../../../application/fulfillment/use-cases/ConfirmPickup';
 import { ReassignRider } from '../../../application/fulfillment/use-cases/ReassignRider';
 import { FailDelivery } from '../../../application/fulfillment/use-cases/FailDelivery';
 import { OnOrderRequested } from '../../../application/fulfillment/event-handlers/OnOrderRequested';
+
+/** Assignment-attempt cap, enforced by AssignRider/ReassignRider since Phase 10.4. */
+const MAX_ATTEMPTS = 3;
 
 const CUSTOMER_ID = 'cust-1';
 const RESTAURANT_ID = 'rest-1';
@@ -63,7 +65,7 @@ describe('Fulfillment failure & reassignment integration (Phase 5B)', () => {
   let createFulfillment: CreateFulfillment;
   let markPreparing: MarkPreparing;
   let markReady: MarkReadyForPickup;
-  let offer: OfferRiderAssignment;
+  let offer: AssignRider;
   let accept: AcceptDelivery;
   let confirmPickup: ConfirmPickup;
   let reassign: ReassignRider;
@@ -82,11 +84,10 @@ describe('Fulfillment failure & reassignment integration (Phase 5B)', () => {
     const restaurantDirectory = makeStubRestaurantDirectory(RESTAURANT_ID, OWNER_ID);
     markPreparing = new MarkPreparing(repo, restaurantDirectory, uow, bus);
     markReady = new MarkReadyForPickup(repo, restaurantDirectory, uow, bus);
-    offer = new OfferRiderAssignment(repo, service, uow, bus, 60);
-    const assignRider = new AssignRider(repo, service, uow, bus, 60);
+    offer = new AssignRider(repo, service, uow, bus, 60, MAX_ATTEMPTS);
     accept = new AcceptDelivery(repo, uow, bus);
     confirmPickup = new ConfirmPickup(repo, uow, bus);
-    reassign = new ReassignRider(repo, service, uow, bus, 60, assignRider);
+    reassign = new ReassignRider(repo, service, uow, bus, 60, MAX_ATTEMPTS);
     fail = new FailDelivery(repo, uow, bus);
 
     onOrderRequested = new OnOrderRequested(createFulfillment);

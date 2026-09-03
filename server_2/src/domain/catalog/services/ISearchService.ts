@@ -7,6 +7,8 @@ import { MenuItemSearchView, RestaurantSummaryView } from '../types/ReadModels';
 export interface RestaurantSearchFilters {
   cuisineTypes?: CuisineType[];
   isOpenNow?: boolean;
+  /** Restrict results to these ids — how `deliverableOnly` intersects with `nearby`. */
+  restaurantIds?: string[];
 }
 
 export interface MenuItemSearchFilters {

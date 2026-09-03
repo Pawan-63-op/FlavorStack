@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { ReviewController } from '../controllers/ReviewController';
 import { authenticate } from '../middleware/authenticate';
-import { requireRole } from '../middleware/authorize';
+import { requireRole, PermissionDeps } from '../middleware/authorize';
 import { validate } from '../middleware/validate';
 import { USER_ROLE } from '../../../domain/identity/enums/user-role.enum';
 import { ITokenService } from '../../../domain/identity/services/ITokenService';
@@ -18,6 +18,7 @@ import {
 export interface ReviewRoutesDeps {
   controller: ReviewController;
   tokenService: ITokenService;
+  permissionDeps: PermissionDeps;
 }
 
 export function createReviewRoutes(deps: ReviewRoutesDeps): Router {
@@ -28,7 +29,7 @@ export function createReviewRoutes(deps: ReviewRoutesDeps): Router {
   router.post(
     '/restaurants/:restaurantId/reviews',
     auth,
-    requireRole(USER_ROLE.CUSTOMER),
+    requireRole(deps.permissionDeps, USER_ROLE.CUSTOMER),
     validate(restaurantIdParam, 'params'),
     validate(submitReviewSchema, 'body'),
     ctrl.submit
@@ -48,7 +49,7 @@ export function createReviewRoutes(deps: ReviewRoutesDeps): Router {
   router.get(
     '/admin/reviews',
     auth,
-    requireRole(USER_ROLE.ADMIN),
+    requireRole(deps.permissionDeps, USER_ROLE.ADMIN),
     validate(pendingReviewsQuery, 'query'),
     ctrl.listPending
   );
@@ -56,7 +57,7 @@ export function createReviewRoutes(deps: ReviewRoutesDeps): Router {
   router.post(
     '/admin/reviews/:id/approve',
     auth,
-    requireRole(USER_ROLE.ADMIN),
+    requireRole(deps.permissionDeps, USER_ROLE.ADMIN),
     validate(reviewIdParam, 'params'),
     validate(moderateReviewSchema, 'body'),
     ctrl.approve
@@ -65,7 +66,7 @@ export function createReviewRoutes(deps: ReviewRoutesDeps): Router {
   router.post(
     '/admin/reviews/:id/reject',
     auth,
-    requireRole(USER_ROLE.ADMIN),
+    requireRole(deps.permissionDeps, USER_ROLE.ADMIN),
     validate(reviewIdParam, 'params'),
     validate(moderateReviewSchema, 'body'),
     ctrl.reject

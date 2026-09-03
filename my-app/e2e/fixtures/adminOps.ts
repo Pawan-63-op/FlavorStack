@@ -167,25 +167,55 @@ export async function placeCodOrder(
     throw new Error(`add to cart failed: ${addRes.status()} ${await addRes.text()}`);
   }
 
+  const addressId = await ensureSavedAddress(request, bearer);
+
   const checkoutRes = await request.post("/api/v1/checkout", {
     headers: { ...headers, "Idempotency-Key": randomUUID() },
-    data: {
-      paymentMethod: "COD",
-      deliveryAddress: {
-        label: "Home",
-        street: "123 MG Road",
-        city: "Bengaluru",
-        state: "Karnataka",
-        pinCode: "560001",
-        coordinates: { lat: SEED_LAT, lng: SEED_LNG },
-      },
-    },
+    data: { paymentMethod: "COD", addressId },
   });
   if (!checkoutRes.ok()) {
     throw new Error(`checkout failed: ${checkoutRes.status()} ${await checkoutRes.text()}`);
   }
   const body = (await checkoutRes.json()) as { orderRequestId: string };
   return body.orderRequestId;
+}
+
+/**
+ * Resolve the customer's saved delivery address id, creating one when the account has
+ * none. `/checkout` takes an `addressId` and resolves the address (and so the delivery
+ * fee) server-side, so a client-supplied address is no longer the contract.
+ */
+export async function ensureSavedAddress(
+  request: APIRequestContext,
+  bearer: string,
+): Promise<string> {
+  const headers = { Authorization: `Bearer ${bearer}` };
+
+  const listRes = await request.get("/api/v1/users/me/addresses", { headers });
+  if (!listRes.ok()) {
+    throw new Error(`list addresses failed: ${listRes.status()} ${await listRes.text()}`);
+  }
+  const existing = (await listRes.json()) as Array<{ id: string; isDefault: boolean }>;
+  if (existing.length > 0) {
+    return (existing.find((a) => a.isDefault) ?? existing[0]).id;
+  }
+
+  const createRes = await request.post("/api/v1/users/me/addresses", {
+    headers,
+    data: {
+      label: "Home",
+      street: "123 MG Road",
+      city: "Bengaluru",
+      state: "Karnataka",
+      pinCode: "560001",
+      coordinates: { lat: SEED_LAT, lng: SEED_LNG },
+    },
+  });
+  if (!createRes.ok()) {
+    throw new Error(`create address failed: ${createRes.status()} ${await createRes.text()}`);
+  }
+  const created = (await createRes.json()) as { id: string };
+  return created.id;
 }
 
 /**

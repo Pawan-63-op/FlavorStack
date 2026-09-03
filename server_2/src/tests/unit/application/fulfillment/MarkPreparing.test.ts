@@ -44,6 +44,7 @@ function makeRepo(overrides: Partial<IFulfillmentRepository> = {}): jest.Mocked<
 function makeDirectory(ownerId: string | null = OWNER_ID): jest.Mocked<IRestaurantDirectory> {
   return {
     getOwnerId: jest.fn().mockResolvedValue(ownerId),
+    getLocation: jest.fn().mockResolvedValue(null),
     listRestaurantIdsByOwner: jest.fn().mockResolvedValue([]),
     getRestaurantNames: jest.fn().mockResolvedValue({}),
     countAll: jest.fn().mockResolvedValue(0),

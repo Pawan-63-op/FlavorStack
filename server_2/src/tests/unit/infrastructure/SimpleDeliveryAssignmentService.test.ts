@@ -1,22 +1,10 @@
 import { SimpleDeliveryAssignmentService } from '../../../infrastructure/services/SimpleDeliveryAssignmentService';
-import { DeliveryAddress } from '../../../domain/fulfillment/value-objects/DeliveryAddress';
-import { GeoPoint } from '../../../domain/identity/value-objects/GeoPoint.vo';
-
-function address(): DeliveryAddress {
-  return DeliveryAddress.create({
-    street: '12 MG Road',
-    city: 'Bengaluru',
-    state: 'Karnataka',
-    pinCode: '560001',
-    coordinates: GeoPoint.create(12.97, 77.59).getValue(),
-  }).getValue();
-}
 
 describe('SimpleDeliveryAssignmentService', () => {
   it('returns the first available rider for the restaurant', async () => {
     const service = new SimpleDeliveryAssignmentService(async () => ['rider-1', 'rider-2']);
 
-    const next = await service.pickNextRider({ restaurantId: 'rest-1', address: address(), excludeRiderIds: [] });
+    const next = await service.pickNextRider({ restaurantId: 'rest-1', excludeRiderIds: [] });
 
     expect(next).toBe('rider-1');
   });
@@ -26,7 +14,6 @@ describe('SimpleDeliveryAssignmentService', () => {
 
     const next = await service.pickNextRider({
       restaurantId: 'rest-1',
-      address: address(),
       excludeRiderIds: ['rider-1', 'rider-2'],
     });
 
@@ -36,7 +23,7 @@ describe('SimpleDeliveryAssignmentService', () => {
   it('returns null when no candidates are available', async () => {
     const service = new SimpleDeliveryAssignmentService(async () => []);
 
-    const next = await service.pickNextRider({ restaurantId: 'rest-1', address: address(), excludeRiderIds: [] });
+    const next = await service.pickNextRider({ restaurantId: 'rest-1', excludeRiderIds: [] });
 
     expect(next).toBeNull();
   });
@@ -46,7 +33,6 @@ describe('SimpleDeliveryAssignmentService', () => {
 
     const next = await service.pickNextRider({
       restaurantId: 'rest-1',
-      address: address(),
       excludeRiderIds: ['rider-1'],
     });
 
@@ -57,8 +43,22 @@ describe('SimpleDeliveryAssignmentService', () => {
     const provider = jest.fn(async () => ['rider-1']);
     const service = new SimpleDeliveryAssignmentService(provider);
 
-    await service.pickNextRider({ restaurantId: 'rest-42', address: address(), excludeRiderIds: [] });
+    await service.pickNextRider({ restaurantId: 'rest-42', excludeRiderIds: [] });
 
     expect(provider).toHaveBeenCalledWith('rest-42');
+  });
+
+  describe('isRiderAssignable', () => {
+    it('accepts a rider the provider currently lists for that restaurant', async () => {
+      const service = new SimpleDeliveryAssignmentService(async () => ['rider-1', 'rider-2']);
+
+      expect(await service.isRiderAssignable('rider-2', 'rest-1')).toBe(true);
+    });
+
+    it('rejects an id the provider does not list — an offline rider, a busy one, or a non-rider', async () => {
+      const service = new SimpleDeliveryAssignmentService(async () => ['rider-1']);
+
+      expect(await service.isRiderAssignable('cust-9', 'rest-1')).toBe(false);
+    });
   });
 });

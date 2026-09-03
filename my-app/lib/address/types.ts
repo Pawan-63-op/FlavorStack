@@ -1,7 +1,8 @@
 /**
- * Local address-book view-model (Batch 6.1). The server has no address-book
- * API, so this is the richer FE shape; `toDeliveryAddress` strips it down to
- * what `/checkout` actually accepts.
+ * Address-book view-model. Server-backed since G12 (`/users/me/addresses`), with
+ * the store as a cache. `id` is the server's address id — checkout sends it as
+ * `addressId` and the server resolves the address, so the client never supplies
+ * the coordinates the delivery fee is computed from.
  */
 export interface Address {
   id: string;

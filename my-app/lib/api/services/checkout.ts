@@ -3,7 +3,6 @@ import {
   orderConfirmationAdapter,
   type CheckoutPreviewResponseDto,
   type CheckoutPreviewVM,
-  type DeliveryAddressResponse,
   type OrderConfirmationVM,
   type OrderRequestSummaryDto,
   type PaymentMethod,
@@ -12,14 +11,10 @@ import { client } from "../client/http";
 import { recordCheckoutFailure } from "../../observability/metrics";
 import { getReporter } from "../../observability/reporter";
 
-export interface DeliveryPoint {
-  lat: number;
-  lng: number;
-}
-
 export interface PlaceOrderInput {
   paymentMethod: PaymentMethod;
-  deliveryAddress: DeliveryAddressResponse;
+  /** Id of one of the customer's saved addresses (`GET /users/me/addresses`). */
+  addressId: string;
   /** Caller-supplied idempotency key; a UUID is generated if omitted. */
   idempotencyKey?: string;
 }
@@ -48,11 +43,17 @@ class CheckoutService {
     throw error;
   }
 
-  /** POST /checkout/preview → checkoutPreviewAdapter. No Idempotency-Key. */
-  async preview(deliveryPoint: DeliveryPoint): Promise<CheckoutPreviewVM> {
+  /**
+   * POST /checkout/preview → checkoutPreviewAdapter. No Idempotency-Key.
+   *
+   * Sends the saved `addressId`, not coordinates: the server resolves the address (and so
+   * the delivery fee) from the customer's own address book, and `checkout` resolves it the
+   * same way — so the previewed total is the total that gets charged.
+   */
+  async preview(addressId: string): Promise<CheckoutPreviewVM> {
     try {
       const dto = await this.http.post<CheckoutPreviewResponseDto>("/checkout/preview", {
-        body: { deliveryPoint },
+        body: { addressId },
       });
       return checkoutPreviewAdapter(dto);
     } catch (error) {
@@ -67,7 +68,7 @@ class CheckoutService {
       const dto = await this.http.post<OrderRequestSummaryDto>("/checkout", {
         body: {
           paymentMethod: input.paymentMethod,
-          deliveryAddress: input.deliveryAddress,
+          addressId: input.addressId,
         },
         headers: { "Idempotency-Key": idempotencyKeyUsed },
       });

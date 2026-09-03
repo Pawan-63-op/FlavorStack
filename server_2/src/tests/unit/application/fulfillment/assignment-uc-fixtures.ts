@@ -65,8 +65,16 @@ export function makeEventBus(): jest.Mocked<IEventBus> {
   } as jest.Mocked<IEventBus>;
 }
 
-export function makeAssignmentService(riderId: string | null): jest.Mocked<IDeliveryAssignmentService> {
+/**
+ * `assignable` controls the explicit-riderId path: `AssignRider`/`ReassignRider` now verify an
+ * admin-named rider through `isRiderAssignable` before offering to them.
+ */
+export function makeAssignmentService(
+  riderId: string | null,
+  assignable = true
+): jest.Mocked<IDeliveryAssignmentService> {
   return {
     pickNextRider: jest.fn().mockResolvedValue(riderId),
+    isRiderAssignable: jest.fn().mockResolvedValue(assignable),
   } as jest.Mocked<IDeliveryAssignmentService>;
 }

@@ -15,7 +15,7 @@ import { promotionAdapter } from "@/lib/api/adapters/cart";
 import { ApiError } from "@/lib/api/errors/ApiError";
 import { formatMoney } from "@/lib/api/format/money";
 import { useAuthStore } from "@/store/authStore";
-import { useGuestCartStore } from "@/store/guestCartStore";
+import { guestLineKey, useGuestCartStore } from "@/store/guestCartStore";
 import { ImageWithFallback } from "../figma/ImageWithFallback";
 
 /**
@@ -68,7 +68,7 @@ function GuestCartView() {
             <div className="space-y-4">
               {lines.map((line) => (
                 <div
-                  key={line.menuItemId}
+                  key={guestLineKey(line)}
                   className="flex items-center gap-4 p-4 rounded-xl border bg-card"
                 >
                   <div className="w-24 h-24 flex-shrink-0 overflow-hidden rounded-lg border">
@@ -90,7 +90,7 @@ function GuestCartView() {
                           size="icon"
                           className="h-8 w-8"
                           aria-label="Decrease quantity"
-                          onClick={() => setQuantity(line.menuItemId, line.quantity - 1)}
+                          onClick={() => setQuantity(guestLineKey(line), line.quantity - 1)}
                         >
                           <Minus className="h-4 w-4" />
                         </Button>
@@ -100,7 +100,7 @@ function GuestCartView() {
                           size="icon"
                           className="h-8 w-8"
                           aria-label="Increase quantity"
-                          onClick={() => setQuantity(line.menuItemId, line.quantity + 1)}
+                          onClick={() => setQuantity(guestLineKey(line), line.quantity + 1)}
                         >
                           <Plus className="h-4 w-4" />
                         </Button>
@@ -110,7 +110,7 @@ function GuestCartView() {
                         size="icon"
                         className="h-8 w-8 text-destructive hover:text-destructive/90"
                         aria-label="Remove item"
-                        onClick={() => removeLine(line.menuItemId)}
+                        onClick={() => removeLine(guestLineKey(line))}
                       >
                         <Trash2 className="h-5 w-5" />
                       </Button>

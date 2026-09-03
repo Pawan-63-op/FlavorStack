@@ -4,7 +4,7 @@ import { RiderController } from '../controllers/fulfillment/RiderController';
 import { AdminFulfillmentController } from '../controllers/fulfillment/AdminFulfillmentController';
 import { DashboardAnalyticsController } from '../controllers/fulfillment/DashboardAnalyticsController';
 import { authenticate } from '../middleware/authenticate';
-import { requireRole } from '../middleware/authorize';
+import { requireRole, PermissionDeps } from '../middleware/authorize';
 import { validate } from '../middleware/validate';
 import { USER_ROLE } from '../../../domain/identity/enums/user-role.enum';
 import { ITokenService } from '../../../domain/identity/services/ITokenService';
@@ -30,6 +30,7 @@ export interface FulfillmentRoutesDeps {
   adminFulfillmentController: AdminFulfillmentController;
   dashboardAnalyticsController: DashboardAnalyticsController;
   tokenService: ITokenService;
+  permissionDeps: PermissionDeps;
 }
 
 export function createFulfillmentRoutes(deps: FulfillmentRoutesDeps): Router {
@@ -70,14 +71,14 @@ export function createFulfillmentRoutes(deps: FulfillmentRoutesDeps): Router {
   router.get(
     '/riders/me/queue',
     auth,
-    requireRole(USER_ROLE.DRIVER),
+    requireRole(deps.permissionDeps, USER_ROLE.DRIVER),
     rider.getQueue
   );
 
   router.get(
     '/riders/me/deliveries',
     auth,
-    requireRole(USER_ROLE.DRIVER),
+    requireRole(deps.permissionDeps, USER_ROLE.DRIVER),
     validate(myOrdersQuery, 'query'),
     rider.getDeliveryHistory
   );
@@ -85,7 +86,7 @@ export function createFulfillmentRoutes(deps: FulfillmentRoutesDeps): Router {
   router.post(
     '/fulfillments/:id/accept',
     auth,
-    requireRole(USER_ROLE.DRIVER),
+    requireRole(deps.permissionDeps, USER_ROLE.DRIVER),
     validate(fulfillmentIdParam, 'params'),
     rider.accept
   );
@@ -93,7 +94,7 @@ export function createFulfillmentRoutes(deps: FulfillmentRoutesDeps): Router {
   router.post(
     '/fulfillments/:id/reject',
     auth,
-    requireRole(USER_ROLE.DRIVER),
+    requireRole(deps.permissionDeps, USER_ROLE.DRIVER),
     validate(fulfillmentIdParam, 'params'),
     validate(rejectDeliverySchema, 'body'),
     rider.reject
@@ -102,7 +103,7 @@ export function createFulfillmentRoutes(deps: FulfillmentRoutesDeps): Router {
   router.post(
     '/fulfillments/:id/pickup',
     auth,
-    requireRole(USER_ROLE.DRIVER),
+    requireRole(deps.permissionDeps, USER_ROLE.DRIVER),
     validate(fulfillmentIdParam, 'params'),
     rider.pickup
   );
@@ -110,7 +111,7 @@ export function createFulfillmentRoutes(deps: FulfillmentRoutesDeps): Router {
   router.post(
     '/fulfillments/:id/out-for-delivery',
     auth,
-    requireRole(USER_ROLE.DRIVER),
+    requireRole(deps.permissionDeps, USER_ROLE.DRIVER),
     validate(fulfillmentIdParam, 'params'),
     rider.outForDelivery
   );
@@ -118,7 +119,7 @@ export function createFulfillmentRoutes(deps: FulfillmentRoutesDeps): Router {
   router.post(
     '/fulfillments/:id/deliver',
     auth,
-    requireRole(USER_ROLE.DRIVER),
+    requireRole(deps.permissionDeps, USER_ROLE.DRIVER),
     validate(fulfillmentIdParam, 'params'),
     validate(deliverSchema, 'body'),
     rider.deliver
@@ -127,7 +128,7 @@ export function createFulfillmentRoutes(deps: FulfillmentRoutesDeps): Router {
   router.post(
     '/fulfillments/:id/location',
     auth,
-    requireRole(USER_ROLE.DRIVER),
+    requireRole(deps.permissionDeps, USER_ROLE.DRIVER),
     validate(fulfillmentIdParam, 'params'),
     validate(locationSchema, 'body'),
     rider.location
@@ -136,7 +137,7 @@ export function createFulfillmentRoutes(deps: FulfillmentRoutesDeps): Router {
   router.post(
     '/fulfillments/:id/fail',
     auth,
-    requireRole(USER_ROLE.DRIVER),
+    requireRole(deps.permissionDeps, USER_ROLE.DRIVER),
     validate(fulfillmentIdParam, 'params'),
     validate(failSchema, 'body'),
     rider.fail
@@ -153,7 +154,7 @@ export function createFulfillmentRoutes(deps: FulfillmentRoutesDeps): Router {
   router.get(
     '/admin/fulfillments',
     auth,
-    requireRole(USER_ROLE.ADMIN),
+    requireRole(deps.permissionDeps, USER_ROLE.ADMIN),
     validate(adminDashboardQuery, 'query'),
     admin.getDashboard
   );
@@ -161,7 +162,7 @@ export function createFulfillmentRoutes(deps: FulfillmentRoutesDeps): Router {
   router.post(
     '/admin/fulfillments/:id/reassign',
     auth,
-    requireRole(USER_ROLE.ADMIN),
+    requireRole(deps.permissionDeps, USER_ROLE.ADMIN),
     validate(fulfillmentIdParam, 'params'),
     validate(reassignSchema, 'body'),
     admin.reassign
@@ -170,7 +171,7 @@ export function createFulfillmentRoutes(deps: FulfillmentRoutesDeps): Router {
   router.post(
     '/admin/fulfillments/:id/cancel',
     auth,
-    requireRole(USER_ROLE.ADMIN),
+    requireRole(deps.permissionDeps, USER_ROLE.ADMIN),
     validate(fulfillmentIdParam, 'params'),
     validate(cancelSchema, 'body'),
     admin.cancel
@@ -180,7 +181,7 @@ export function createFulfillmentRoutes(deps: FulfillmentRoutesDeps): Router {
   router.get(
     '/admin/analytics',
     auth,
-    requireRole(USER_ROLE.ADMIN),
+    requireRole(deps.permissionDeps, USER_ROLE.ADMIN),
     validate(analyticsQuery, 'query'),
     analytics.getPlatform
   );

@@ -17,10 +17,13 @@ import { createEventBusSpy, EventBusSpy, countPublished } from '../../mocks/shar
 
 import { MarkReadyForPickup } from '../../../application/fulfillment/use-cases/MarkReadyForPickup';
 import { makeStubRestaurantDirectory } from '../../mocks/fulfillment.mocks';
-import { OfferRiderAssignment } from '../../../application/fulfillment/use-cases/OfferRiderAssignment';
+import { AssignRider } from '../../../application/fulfillment/use-cases/AssignRider';
 import { AcceptDelivery } from '../../../application/fulfillment/use-cases/AcceptDelivery';
 import { RejectDelivery } from '../../../application/fulfillment/use-cases/RejectDelivery';
 import { OnReadyForPickup } from '../../../application/fulfillment/event-handlers/OnReadyForPickup';
+
+/** Assignment-attempt cap, enforced by AssignRider/ReassignRider since Phase 10.4. */
+const MAX_ATTEMPTS = 3;
 
 const RESTAURANT_ID = 'rest-1';
 const OWNER_ID = 'owner-1';
@@ -59,7 +62,7 @@ describe('Fulfillment assignment flow (Phase 3B)', () => {
   let uow: MongoUnitOfWork;
   let bus: EventBusSpy;
   let markReady: MarkReadyForPickup;
-  let offer: OfferRiderAssignment;
+  let offer: AssignRider;
   let accept: AcceptDelivery;
   let reject: RejectDelivery;
 
@@ -71,7 +74,7 @@ describe('Fulfillment assignment flow (Phase 3B)', () => {
 
     const service = new SimpleDeliveryAssignmentService(async () => [...RIDER_POOL]);
 
-    offer = new OfferRiderAssignment(repo, service, uow, bus, 60);
+    offer = new AssignRider(repo, service, uow, bus, 60, MAX_ATTEMPTS);
     accept = new AcceptDelivery(repo, uow, bus);
     reject = new RejectDelivery(repo, uow, bus, offer);
     const restaurantDirectory = makeStubRestaurantDirectory(RESTAURANT_ID, OWNER_ID);

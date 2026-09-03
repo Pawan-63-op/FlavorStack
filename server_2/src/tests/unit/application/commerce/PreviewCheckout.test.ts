@@ -19,6 +19,12 @@ import {
   CheckoutServiceability,
 } from '../../../../domain/commerce/types/CatalogGatewayRead';
 import { CartMenuItemView } from '../../../../domain/commerce/types/CatalogGatewayRead';
+import { makeAddressResolver } from '../../../mocks/commerce.mocks';
+import { DeliveryAddressResolver } from '../../../../application/commerce/services/DeliveryAddressResolver';
+import { Address } from '../../../../domain/identity/value-objects/Address.vo';
+import { GeoPoint } from '../../../../domain/identity/value-objects/GeoPoint.vo';
+import { NotFoundError } from '../../../../domain/shared/errors/NotFoundError';
+import { ValidationError } from '../../../../domain/shared/errors/ValidationError';
 
 const money = (amount: number, currency = 'INR') => Money.create(amount, currency).getValue();
 
@@ -116,6 +122,7 @@ function buildUseCase(opts: {
   cart?: Cart | null;
   gateway?: ICatalogGateway;
   promotionService?: PromotionService;
+  addressResolver?: DeliveryAddressResolver;
 } = {}): PreviewCheckout {
   const promotionService = opts.promotionService ?? new PromotionService(buildDefaultCommerceCoupons());
   const assembler = new CheckoutContextAssembler(
@@ -126,6 +133,7 @@ function buildUseCase(opts: {
   return new PreviewCheckout(
     fakeCartRepo(opts.cart === undefined ? buildCart() : opts.cart),
     assembler,
+    opts.addressResolver ?? makeAddressResolver().resolver,
     new PricingCalculator()
   );
 }
@@ -261,6 +269,62 @@ describe('PreviewCheckout', () => {
         deliveryPoint: DELIVERY_POINT,
       });
       expect(result.isFailure).toBe(true);
+    });
+  });
+
+  // Phase 10.3: preview and checkout resolve the delivery point the same way, so the fee
+  // shown here is the fee `Checkout` will charge.
+  describe('delivery address resolution', () => {
+    const savedAddress = (lat: number, lng: number) =>
+      Address.create({
+        street: '42 Residency Road',
+        city: 'Bengaluru',
+        state: 'Karnataka',
+        pinCode: '560025',
+        coordinates: GeoPoint.create(lat, lng).getValue(),
+      }).getValue();
+
+    it('prices from the saved address when addressId is given', async () => {
+      const { resolver } = makeAddressResolver([
+        {
+          customerId: 'cust-1',
+          addressId: 'addr-1',
+          address: savedAddress(DELIVERY_POINT.lat, DELIVERY_POINT.lng),
+        },
+      ]);
+
+      const fromId = await buildUseCase({ addressResolver: resolver }).execute({
+        customerId: 'cust-1',
+        addressId: 'addr-1',
+      });
+      const fromPoint = await buildUseCase().execute({
+        customerId: 'cust-1',
+        deliveryPoint: DELIVERY_POINT,
+      });
+
+      expect(fromId.isSuccess).toBe(true);
+      expect(fromId.getValue().pricing).toEqual(fromPoint.getValue().pricing);
+    });
+
+    it("fails with NotFoundError for another customer's addressId", async () => {
+      const { resolver } = makeAddressResolver([
+        { customerId: 'someone-else', addressId: 'addr-1', address: savedAddress(12.97, 77.59) },
+      ]);
+
+      const result = await buildUseCase({ addressResolver: resolver }).execute({
+        customerId: 'cust-1',
+        addressId: 'addr-1',
+      });
+
+      expect(result.isFailure).toBe(true);
+      expect(result.getError()).toBeInstanceOf(NotFoundError);
+    });
+
+    it('fails when neither addressId nor deliveryPoint is supplied', async () => {
+      const result = await buildUseCase().execute({ customerId: 'cust-1' });
+
+      expect(result.isFailure).toBe(true);
+      expect(result.getError()).toBeInstanceOf(ValidationError);
     });
   });
 });

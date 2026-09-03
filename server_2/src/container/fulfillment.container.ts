@@ -30,7 +30,6 @@ import { GetRiderQueue } from '../application/fulfillment/use-cases/GetRiderQueu
 import { GetRiderDeliveryHistory } from '../application/fulfillment/use-cases/GetRiderDeliveryHistory';
 import { GetAdminDashboard } from '../application/fulfillment/use-cases/GetAdminDashboard';
 import { GetDashboardAnalytics } from '../application/fulfillment/use-cases/GetDashboardAnalytics';
-import { OfferRiderAssignment } from '../application/fulfillment/use-cases/OfferRiderAssignment';
 import { AssignRider } from '../application/fulfillment/use-cases/AssignRider';
 import { AcceptDelivery } from '../application/fulfillment/use-cases/AcceptDelivery';
 import { RejectDelivery } from '../application/fulfillment/use-cases/RejectDelivery';
@@ -83,7 +82,6 @@ export interface FulfillmentContainer {
   getRiderDeliveryHistory: GetRiderDeliveryHistory;
   getAdminDashboard: GetAdminDashboard;
   getDashboardAnalytics: GetDashboardAnalytics;
-  offerRiderAssignment: OfferRiderAssignment;
   assignRider: AssignRider;
   acceptDelivery: AcceptDelivery;
   rejectDelivery: RejectDelivery;
@@ -118,6 +116,7 @@ export function createFulfillmentContainer(
   cache?: FulfillmentReadCacheDeps,
   restaurantDirectory: IRestaurantDirectory = {
     getOwnerId: async () => null,
+    getLocation: async () => null,
     listRestaurantIdsByOwner: async () => [],
     getRestaurantNames: async () => ({}),
     countAll: async () => 0,
@@ -148,31 +147,30 @@ export function createFulfillmentContainer(
   const getAdminDashboard = new GetAdminDashboard(queryRepository, cache);
   const getDashboardAnalytics = new GetDashboardAnalytics(queryRepository, restaurantDirectory);
 
-  const offerRiderAssignment = new OfferRiderAssignment(
-    fulfillmentRepository,
-    assignmentService,
-    unitOfWork,
-    eventBus,
-    offerTtlSeconds
-  );
   const assignRider = new AssignRider(
     fulfillmentRepository,
     assignmentService,
     unitOfWork,
     eventBus,
-    offerTtlSeconds
+    offerTtlSeconds,
+    maxAssignmentAttempts
   );
   const acceptDelivery = new AcceptDelivery(fulfillmentRepository, unitOfWork, eventBus);
   const rejectDelivery = new RejectDelivery(
     fulfillmentRepository,
     unitOfWork,
     eventBus,
-    offerRiderAssignment
+    assignRider
   );
   const confirmPickup = new ConfirmPickup(fulfillmentRepository, unitOfWork, eventBus);
   const startDelivery = new StartDelivery(fulfillmentRepository, unitOfWork, eventBus);
   const completeDelivery = new CompleteDelivery(fulfillmentRepository, unitOfWork, eventBus);
-  const cancelFulfillment = new CancelFulfillment(fulfillmentRepository, unitOfWork, eventBus);
+  const cancelFulfillment = new CancelFulfillment(
+    fulfillmentRepository,
+    restaurantDirectory,
+    unitOfWork,
+    eventBus
+  );
   const failDelivery = new FailDelivery(fulfillmentRepository, unitOfWork, eventBus);
   const reassignRider = new ReassignRider(
     fulfillmentRepository,
@@ -180,14 +178,14 @@ export function createFulfillmentContainer(
     unitOfWork,
     eventBus,
     offerTtlSeconds,
-    assignRider
+    maxAssignmentAttempts
   );
 
   const handleAssignmentTimeout = new HandleAssignmentTimeout(
     fulfillmentRepository,
     unitOfWork,
     eventBus,
-    offerRiderAssignment,
+    assignRider,
     cancelFulfillment,
     maxAssignmentAttempts
   );
@@ -195,7 +193,7 @@ export function createFulfillmentContainer(
   const fulfillmentJobHandler = new FulfillmentJobHandler(handleAssignmentTimeout, handleSlaTimeout);
 
   const onOrderRequested = new OnOrderRequested(createFulfillment);
-  const onReadyForPickup = new OnReadyForPickup(offerRiderAssignment);
+  const onReadyForPickup = new OnReadyForPickup(assignRider);
 
   const timeoutScheduler = jobScheduler
     ? new FulfillmentTimeoutScheduler(jobScheduler, readyForPickupSlaSeconds, outForDeliverySlaSeconds)
@@ -242,7 +240,6 @@ export function createFulfillmentContainer(
     getRiderDeliveryHistory,
     getAdminDashboard,
     getDashboardAnalytics,
-    offerRiderAssignment,
     assignRider,
     acceptDelivery,
     rejectDelivery,

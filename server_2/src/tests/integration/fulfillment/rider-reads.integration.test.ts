@@ -15,20 +15,22 @@ import { InMemoryEventBus } from '../../../application/shared/events/InMemoryEve
 import { CreateFulfillment } from '../../../application/fulfillment/use-cases/CreateFulfillment';
 import { MarkPreparing } from '../../../application/fulfillment/use-cases/MarkPreparing';
 import { MarkReadyForPickup } from '../../../application/fulfillment/use-cases/MarkReadyForPickup';
-import { OfferRiderAssignment } from '../../../application/fulfillment/use-cases/OfferRiderAssignment';
+import { AssignRider } from '../../../application/fulfillment/use-cases/AssignRider';
 import { AcceptDelivery } from '../../../application/fulfillment/use-cases/AcceptDelivery';
 import { RejectDelivery } from '../../../application/fulfillment/use-cases/RejectDelivery';
 import { ConfirmPickup } from '../../../application/fulfillment/use-cases/ConfirmPickup';
 import { StartDelivery } from '../../../application/fulfillment/use-cases/StartDelivery';
 import { CompleteDelivery } from '../../../application/fulfillment/use-cases/CompleteDelivery';
 import { CancelFulfillment } from '../../../application/fulfillment/use-cases/CancelFulfillment';
-import { AssignRider } from '../../../application/fulfillment/use-cases/AssignRider';
 import { ReassignRider } from '../../../application/fulfillment/use-cases/ReassignRider';
 import { GetRiderQueue } from '../../../application/fulfillment/use-cases/GetRiderQueue';
 import { GetRiderDeliveryHistory } from '../../../application/fulfillment/use-cases/GetRiderDeliveryHistory';
 import { OnOrderRequested } from '../../../application/fulfillment/event-handlers/OnOrderRequested';
 import { makeStubRestaurantDirectory } from '../../mocks/fulfillment.mocks';
 import { CANCELLED_BY } from '../../../domain/fulfillment/enums/cancelled-by.enum';
+
+/** Assignment-attempt cap, enforced by AssignRider/ReassignRider since Phase 10.4. */
+const MAX_ATTEMPTS = 3;
 
 /**
  * Phase 3 / Batch 3 — the rider reads are served from the `fulfillments` aggregate
@@ -93,7 +95,7 @@ describe('Rider reads off the fulfillment aggregate (Phase 3 / Batch 3)', () => 
 
   let markPreparing: MarkPreparing;
   let markReadyForPickup: MarkReadyForPickup;
-  let offerRiderAssignment: OfferRiderAssignment;
+  let assignRider: AssignRider;
   let acceptDelivery: AcceptDelivery;
   let rejectDelivery: RejectDelivery;
   let confirmPickup: ConfirmPickup;
@@ -122,15 +124,14 @@ describe('Rider reads off the fulfillment aggregate (Phase 3 / Batch 3)', () => 
     const createFulfillment = new CreateFulfillment(repo, uow, bus);
     markPreparing = new MarkPreparing(repo, restaurantDirectory, uow, bus);
     markReadyForPickup = new MarkReadyForPickup(repo, restaurantDirectory, uow, bus);
-    offerRiderAssignment = new OfferRiderAssignment(repo, assignmentService, uow, bus, OFFER_TTL);
+    assignRider = new AssignRider(repo, assignmentService, uow, bus, OFFER_TTL, MAX_ATTEMPTS);
     acceptDelivery = new AcceptDelivery(repo, uow, bus);
-    rejectDelivery = new RejectDelivery(repo, uow, bus, offerRiderAssignment);
+    rejectDelivery = new RejectDelivery(repo, uow, bus, assignRider);
     confirmPickup = new ConfirmPickup(repo, uow, bus);
     startDelivery = new StartDelivery(repo, uow, bus);
     completeDelivery = new CompleteDelivery(repo, uow, bus);
-    cancelFulfillment = new CancelFulfillment(repo, uow, bus);
-    const assignRider = new AssignRider(repo, assignmentService, uow, bus, OFFER_TTL);
-    reassignRider = new ReassignRider(repo, assignmentService, uow, bus, OFFER_TTL, assignRider);
+    cancelFulfillment = new CancelFulfillment(repo, restaurantDirectory, uow, bus);
+    reassignRider = new ReassignRider(repo, assignmentService, uow, bus, OFFER_TTL, MAX_ATTEMPTS);
 
     getRiderQueue = new GetRiderQueue(queryRepo);
     getRiderDeliveryHistory = new GetRiderDeliveryHistory(queryRepo);
@@ -150,13 +151,13 @@ describe('Rider reads off the fulfillment aggregate (Phase 3 / Batch 3)', () => 
   });
 
   /**
-   * Offers the fulfillment to a specific rider. `OfferRiderAssignment` picks from the
+   * Offers the fulfillment to a specific rider. `AssignRider` picks from the
    * assignment service rather than taking a rider id, so the candidate pool is narrowed
    * to the one rider we want for the assertion.
    */
   async function offerTo(fulfillmentId: string, riderId: string): Promise<void> {
     availableRiders = [riderId];
-    const result = await offerRiderAssignment.execute({ fulfillmentId });
+    const result = await assignRider.execute({ fulfillmentId });
     expect(result.isSuccess).toBe(true);
   }
 

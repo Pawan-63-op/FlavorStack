@@ -74,6 +74,16 @@ describe("catalogService", () => {
       );
     });
 
+    it("passes deliverableOnly with the point so the server does the intersection", async () => {
+      vi.mocked(client.get).mockResolvedValue({ items: [], nextCursor: null });
+
+      await catalogService.listRestaurants({ deliverableOnly: true, lat: 19, lng: 73 });
+
+      expect(client.get).toHaveBeenCalledWith(
+        "/catalog/restaurants?deliverableOnly=true&lat=19&lng=73",
+      );
+    });
+
     it("normalizes the page and adapts each restaurant", async () => {
       vi.mocked(client.get).mockResolvedValue({
         items: [makeRestaurantSummary()],
@@ -130,23 +140,48 @@ describe("catalogService", () => {
 
   describe("getItem", () => {
     it("GETs /catalog/items/:id and adapts the result", async () => {
-      vi.mocked(client.get).mockResolvedValue(makeMenuItem());
+      vi.mocked(client.get).mockResolvedValue({ ...makeMenuItem(), variantGroups: [] });
 
       const item = await catalogService.getItem("i1");
 
       expect(client.get).toHaveBeenCalledWith("/catalog/items/i1");
       expect(item.id).toBe("i1");
+      expect(item.hasVariants).toBe(false);
     });
-  });
 
-  describe("getItemsSnapshot", () => {
-    it("GETs /catalog/items/snapshot with a CSV-encoded ids param", async () => {
-      vi.mocked(client.get).mockResolvedValue([makeMenuItem({ id: "i1" }), makeMenuItem({ id: "i2" })]);
+    it("maps variantGroups so the picker gets option ids and deltas", async () => {
+      vi.mocked(client.get).mockResolvedValue({
+        ...makeMenuItem(),
+        variantGroups: [
+          {
+            id: "g1",
+            label: "Size",
+            selectionType: "SINGLE",
+            required: true,
+            minSelect: 1,
+            maxSelect: 1,
+            options: [
+              {
+                id: "o1",
+                label: "Full",
+                priceDeltaAmount: 10000,
+                currency: "INR",
+                isDefault: false,
+                isAvailable: true,
+              },
+            ],
+          },
+        ],
+      });
 
-      const items = await catalogService.getItemsSnapshot(["i1", "i2"]);
+      const item = await catalogService.getItem("i1");
 
-      expect(client.get).toHaveBeenCalledWith("/catalog/items/snapshot?ids=i1%2Ci2");
-      expect(items).toHaveLength(2);
+      expect(item.hasVariants).toBe(true);
+      expect(item.variantGroups[0].options[0]).toMatchObject({
+        id: "o1",
+        priceDeltaMinor: 10000,
+        formattedPriceDelta: "+₹100.00",
+      });
     });
   });
 
@@ -188,6 +223,17 @@ describe("catalogService", () => {
         "/catalog/nearby?lat=1.1&lng=2.2&radiusMeters=3000",
       );
       expect(page.items).toHaveLength(1);
+    });
+  });
+
+  describe("deliverable", () => {
+    it("GETs /catalog/deliverable and unwraps restaurantIds", async () => {
+      vi.mocked(client.get).mockResolvedValue({ restaurantIds: ["r1", "r2"] });
+
+      const ids = await catalogService.deliverable({ lat: 1.1, lng: 2.2 });
+
+      expect(client.get).toHaveBeenCalledWith("/catalog/deliverable?lat=1.1&lng=2.2");
+      expect(ids).toEqual(["r1", "r2"]);
     });
   });
 

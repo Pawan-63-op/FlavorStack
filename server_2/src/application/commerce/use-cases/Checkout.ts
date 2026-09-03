@@ -1,8 +1,6 @@
 import { Result } from '../../../domain/shared/Result';
 import { Money } from '../../../domain/shared/Money';
 import { NotFoundError } from '../../../domain/shared/errors/NotFoundError';
-import { GeoPoint } from '../../../domain/identity/value-objects/GeoPoint.vo';
-import { Address } from '../../../domain/identity/value-objects/Address.vo';
 import { ICartRepository } from '../../../domain/commerce/repositories/ICartRepository';
 import { IOrderRequestRepository } from '../../../domain/commerce/repositories/IOrderRequestRepository';
 import { IPricingCalculator } from '../../../domain/commerce/services/IPricingCalculator';
@@ -16,6 +14,7 @@ import { VariantSnapshot } from '../../../domain/commerce/value-objects/snapshot
 import { IUnitOfWork } from '../../shared/ports/IUnitOfWork';
 import { IOutboxStore } from '../../shared/outbox/IOutboxStore';
 import { CheckoutContextAssembler, CheckoutAssembly, ResolvedCheckoutLine } from '../services/CheckoutContextAssembler';
+import { DeliveryAddressResolver } from '../services/DeliveryAddressResolver';
 import { CheckoutRequestDto } from '../dtos/CheckoutRequestDto';
 import { OrderRequestSummaryResponse, toOrderRequestSummaryResponse } from '../responses/OrderRequestSummaryResponse';
 import { CommerceTelemetry } from '../observability/CommerceTelemetry';
@@ -27,6 +26,7 @@ export class Checkout {
     private readonly cartRepo: ICartRepository,
     private readonly orderRequestRepo: IOrderRequestRepository,
     private readonly assembler: CheckoutContextAssembler,
+    private readonly addressResolver: DeliveryAddressResolver,
     private readonly pricingCalculator: IPricingCalculator,
     private readonly unitOfWork: IUnitOfWork,
     private readonly outboxStore: IOutboxStore,
@@ -62,24 +62,18 @@ export class Checkout {
     const paymentIntentResult = PaymentIntent.create({ method: dto.paymentMethod });
     if (paymentIntentResult.isFailure) return fail(paymentIntentResult.getError(), span);
 
-    const coords = dto.deliveryAddress.coordinates;
-    const pointResult = GeoPoint.create(coords.lat, coords.lng);
-    if (pointResult.isFailure) return fail(pointResult.getError(), span);
-
-    const addressResult = Address.create({
-      label: dto.deliveryAddress.label,
-      street: dto.deliveryAddress.street,
-      city: dto.deliveryAddress.city,
-      state: dto.deliveryAddress.state,
-      pinCode: dto.deliveryAddress.pinCode,
-      coordinates: pointResult.getValue(),
+    const addressResult = await this.addressResolver.resolveAddress({
+      customerId: dto.customerId,
+      addressId: dto.addressId,
+      inline: dto.deliveryAddress,
     });
     if (addressResult.isFailure) return fail(addressResult.getError(), span);
+    const deliveryAddress = addressResult.getValue();
 
     const cart = await this.cartRepo.findByCustomerId(dto.customerId);
     if (!cart) return fail(new NotFoundError('cart_not_found'), span);
 
-    const assemblyResult = await this.assembler.assemble(cart, pointResult.getValue());
+    const assemblyResult = await this.assembler.assemble(cart, deliveryAddress.coordinates);
     if (assemblyResult.isFailure) return fail(assemblyResult.getError(), span);
     const assembly = assemblyResult.getValue();
 
@@ -100,7 +94,7 @@ export class Checkout {
       restaurant: restaurantResult.getValue(),
       lines: linesResult.getValue(),
       pricing: breakdownResult.getValue(),
-      deliveryAddress: addressResult.getValue(),
+      deliveryAddress,
       paymentIntent: paymentIntentResult.getValue(),
     });
     if (orderResult.isFailure) return fail(orderResult.getError(), span);

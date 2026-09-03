@@ -13,6 +13,7 @@ import {
   RestaurantSummaryView,
   RestaurantMenuView,
   MenuItemView,
+  MenuItemDetailView,
   ServiceableRestaurantView,
 } from '../../../../domain/catalog/types/ReadModels';
 import { CursorPage, CursorPaginationParams } from '../../../../domain/catalog/types/CursorPagination';
@@ -47,7 +48,7 @@ class FakeCatalogReadRepository implements ICatalogReadRepository {
   async getRestaurantMenu(): Promise<RestaurantMenuView | null> {
     return null;
   }
-  async getMenuItemView(): Promise<MenuItemView | null> {
+  async getMenuItemView(): Promise<MenuItemDetailView | null> {
     return null;
   }
   async getItemsSnapshot(itemIds: string[]): Promise<MenuItemView[]> {
@@ -117,6 +118,7 @@ const itemView = (over: Partial<MenuItemView> = {}): MenuItemView => ({
   tags: [],
   dietary: [],
   isAvailable: true,
+  hasVariants: false,
   ...over,
 });
 

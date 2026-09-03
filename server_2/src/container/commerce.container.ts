@@ -17,6 +17,9 @@ import { PricingCalculator } from '../infrastructure/services/PricingCalculator'
 import { IPromotionService } from '../domain/commerce/services/IPromotionService';
 import { IPricingCalculator } from '../domain/commerce/services/IPricingCalculator';
 import { CheckoutContextAssembler } from '../application/commerce/services/CheckoutContextAssembler';
+import { DeliveryAddressResolver } from '../application/commerce/services/DeliveryAddressResolver';
+import { IdentityCustomerAddressDirectory } from '../infrastructure/services/IdentityCustomerAddressDirectory';
+import { IUserRepository } from '../domain/identity/repositories/IUserRepository';
 import { MongoUnitOfWork } from '../infrastructure/database/MongoUnitOfWork';
 import { MongoOutboxStore } from '../infrastructure/database/MongoOutboxStore';
 import { TransactionContext } from '../infrastructure/database/TransactionContext';
@@ -67,6 +70,7 @@ export interface CommerceContainer {
   catalogGateway: ICatalogGateway;
   pricingCalculator: IPricingCalculator;
   checkoutAssembler: CheckoutContextAssembler;
+  addressResolver: DeliveryAddressResolver;
   telemetry: CommerceTelemetry;
   commands: CommerceCommandUseCases;
 }
@@ -81,7 +85,8 @@ export interface CommerceCatalogGatewayDeps {
 export function createCommerceContainer(
   connection: Connection,
   eventBus: IEventBus,
-  catalogGatewayDeps: CommerceCatalogGatewayDeps
+  catalogGatewayDeps: CommerceCatalogGatewayDeps,
+  userRepository: IUserRepository
 ): CommerceContainer {
   const telemetry = new CommerceTelemetry(new PinoTelemetry());
 
@@ -102,6 +107,10 @@ export function createCommerceContainer(
     catalogGatewayDeps.queryRepository
   );
 
+  const addressResolver = new DeliveryAddressResolver(
+    new IdentityCustomerAddressDirectory(userRepository)
+  );
+
   const pricingCalculator = new PricingCalculator();
   const checkoutAssembler = new CheckoutContextAssembler(
     catalogGateway,
@@ -120,6 +129,7 @@ export function createCommerceContainer(
     catalogGateway,
     pricingCalculator,
     checkoutAssembler,
+    addressResolver,
     telemetry,
     commands: {
       createCart: new CreateCart(cartRepository, unitOfWork),
@@ -132,11 +142,18 @@ export function createCommerceContainer(
       applyPromotion: new ApplyPromotion(cartRepository, promotionService, unitOfWork),
       removePromotion: new RemovePromotion(cartRepository, unitOfWork),
       validatePromotion: new ValidatePromotion(cartRepository, promotionService),
-      previewCheckout: new PreviewCheckout(cartRepository, checkoutAssembler, pricingCalculator, telemetry),
+      previewCheckout: new PreviewCheckout(
+        cartRepository,
+        checkoutAssembler,
+        addressResolver,
+        pricingCalculator,
+        telemetry
+      ),
       checkout: new Checkout(
         cartRepository,
         orderRequestRepository,
         checkoutAssembler,
+        addressResolver,
         pricingCalculator,
         unitOfWork,
         outboxStore,
