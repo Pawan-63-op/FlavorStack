@@ -36,7 +36,7 @@ export default function VerifyEmail() {
   // Email already verified → skip straight to the phone step.
   useEffect(() => {
     if (!isLoading && isAuthenticated && user?.isVerified) {
-      router.replace("/verify-phone");
+      router.replace("/Home");
     }
   }, [isAuthenticated, isLoading, user, router]);
 
@@ -63,7 +63,7 @@ export default function VerifyEmail() {
     setError("");
     try {
       await verifyEmail(code);
-      router.replace("/verify-phone");
+      router.replace("/Home");
     } catch (err: any) {
       setError(err.message || "Verification failed. Please check your code.");
       setCode("");
